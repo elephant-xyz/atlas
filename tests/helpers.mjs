@@ -8,7 +8,6 @@ export const CID_C = 'baguqeerad32anku3fwoiex7gw4se6kybbujphmxmea3g2ztnytaatdpb4
 
 export function run(overrides = {}) {
   return {
-    run: '2026-09-21-a',
     groups: ['county'],
     county_root: CID_A,
     tables_root: CID_B,
@@ -20,12 +19,13 @@ export function run(overrides = {}) {
     node: 'filebase',
     evidence: { car_upload: CID_C },
     status: 'published',
+    published_at: '2026-09-21T12:07:53.177Z',
     ...overrides,
   };
 }
 
 export function page(overrides = {}) {
-  return { county: 'lee', state: 'FL', fips: '12071', latest: '2026-09-21-a', runs: [run()], ...overrides };
+  return { county: 'lee', state: 'FL', fips: '12071', runs: [run()], ...overrides };
 }
 
 /** Write a registry into a temp dir: files is { 'counties/FL/lee.json': obj, 'index.json': obj, 'evidence/x.json': obj }. */

@@ -29,17 +29,13 @@ export function validateRegistry(root, basePages) {
       continue;
     }
     if (path !== `counties/${page.state}/${page.county}.json`) say(`path must be counties/${page.state}/${page.county}.json`);
-    const ids = new Set();
-    let prev = '';
     for (const run of page.runs) {
-      if (ids.has(run.run)) say(`run ${run.run} appears twice`);
-      ids.add(run.run);
-      if (run.run <= prev) say(`run ${run.run} is not after ${prev}; runs must be ascending`);
-      prev = run.run;
+      const dir = `evidence/${page.state}/${page.county}/${run.county_root}/`;
       for (const [kind, ref] of Object.entries(run.evidence)) {
         if (/^b[a-z2-7]{50,}$/.test(ref)) continue;
-        if (isAbsolute(ref) || ref.split('/').includes('..')) say(`run ${run.run} evidence.${kind} must be a CID or a repository-relative path`);
-        else if (!existsSync(join(root, ref))) say(`run ${run.run} evidence.${kind} ${ref} is not in the repository`);
+        if (isAbsolute(ref) || ref.split('/').includes('..')) say(`run ${run.county_root} evidence.${kind} must be a CID or a repository-relative path`);
+        else if (!ref.startsWith(dir)) say(`run ${run.county_root} evidence.${kind} must live under ${dir}`);
+        else if (!existsSync(join(root, ref))) say(`run ${run.county_root} evidence.${kind} ${ref} is not in the repository`);
       }
       for (const key of ['county_root', 'tables_root']) {
         const cid = run[key];
@@ -47,18 +43,12 @@ export function validateRegistry(root, basePages) {
         try {
           CID.parse(cid);
         } catch {
-          say(`run ${run.run} ${key} is not a valid CID`);
+          say(`run ${run.county_root} ${key} is not a valid CID`);
         }
         if (run.status === 'withdrawn') continue; // a withdrawn run releases its roots
-        const where = `${path} run ${run.run} ${key}`;
-        if (roots.has(cid)) say(`run ${run.run} ${key} ${cid} already used by ${roots.get(cid)}`);
-        else roots.set(cid, where);
+        if (roots.has(cid)) say(`${key} ${cid} is already published by ${roots.get(cid)}; the same root is the same publication`);
+        else roots.set(cid, `${path} run ${run.county_root}`);
       }
-    }
-    if (page.latest !== undefined) {
-      const latest = page.runs.find((r) => r.run === page.latest);
-      if (!latest) say(`latest ${page.latest} is not a run on this page`);
-      else if (latest.status === 'withdrawn') say(`latest ${page.latest} is withdrawn`);
     }
   }
   if (basePages) problems.push(...checkAppendOnly(pages, basePages));
@@ -66,7 +56,7 @@ export function validateRegistry(root, basePages) {
   return problems;
 }
 
-/** Runs already on main are history: they may change `status`, nothing else, and never disappear. */
+/** Runs already on main are history: by position, they may change `status`, nothing else, and never disappear. */
 export function checkAppendOnly(pages, basePages) {
   const problems = [];
   const current = new Map(pages.map(({ path, page }) => [path, page]));
@@ -78,11 +68,11 @@ export function checkAppendOnly(pages, basePages) {
       problems.push(`${path}: page was deleted; pages are never removed`);
       continue;
     }
-    for (const baseRun of base.runs) {
-      const run = now.runs?.find((r) => r.run === baseRun.run);
-      if (!run) problems.push(`${path}: run ${baseRun.run} was removed; runs are append-only`);
-      else if (frozen(run) !== frozen(baseRun)) problems.push(`${path}: run ${baseRun.run} was edited in place; only status may change, supersede it instead`);
-    }
+    base.runs.forEach((baseRun, i) => {
+      const run = now.runs?.[i];
+      if (!run) problems.push(`${path}: run ${baseRun.county_root} was removed; runs are append-only`);
+      else if (frozen(run) !== frozen(baseRun)) problems.push(`${path}: run ${i} (${baseRun.county_root}) was edited in place; only status may change, supersede it instead`);
+    });
   }
   return problems;
 }
