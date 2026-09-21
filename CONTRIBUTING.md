@@ -60,8 +60,19 @@ publishable, whatever the upload logs say.
 
 7. The `validate` check runs the unit tests, the entry validator, the gateway spot checks, and
    the index check. A code owner (`.github/CODEOWNERS`) reviews and approves. Merge.
-8. The publish workflow regenerates `index.json` and commits it to `main` if it changed. That
-   commit is the publication; consumers read `index.json`.
+8. The publish workflow pins your roots on the registry's Filebase bucket, waits for `pinned`,
+   regenerates `index.json`, commits it to `main`, and points the `elephant-atlas` IPNS name at
+   it. Consumers read the index through that name.
+
+## When a publication is reverted
+
+If a root cannot be pinned (the pin reports `failed`, or is still not `pinned` after the
+limit), the workflow reverts your merge on `main` with a commit by `github-actions[bot]` and
+opens an issue titled `Publication reverted: <STATE>/<county> <root>` with the status and the
+run link. Your page is gone from `main` again; `index.json` and the IPNS name did not change.
+Re-upload or re-pin the root, confirm `https://ipfs.filebase.io/ipfs/<root>` serves it, then
+open a new pull request with the same run. If instead the run failed after pinning (index
+commit, IPNS), nothing is reverted; a maintainer re-runs the workflow.
 
 ## Rules
 

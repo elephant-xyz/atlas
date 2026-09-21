@@ -1,0 +1,118 @@
+{
+  "removed_at": "2026-09-21",
+  "reason": "unreferenced by the team-kit catalog, overlays, mcp.json, and elephant-mcp; removed to free IPNS quota for elephant-atlas",
+  "names": [
+    {
+      "Id": "k51qzi5uqu5dl0rcf1kaikxcjohit3vbmby2ppcqydosezs2d7rl6musfemwpc",
+      "Name": "oracle-permit-table-lee"
+    },
+    {
+      "Id": "k51qzi5uqu5dkyg50pyo1c1vg1ceytqfgxmwczxhdllhwi5ogdmtyw7pc8ei8x",
+      "Name": "oracle-dataset-coverage-santa-clara"
+    },
+    {
+      "Id": "k51qzi5uqu5dkmvvxp9idpc5x0x1pd1sv901htkwk30j496kik3c9619n2qmp1",
+      "Name": "oracle-open-data-rock-island"
+    },
+    {
+      "Id": "k51qzi5uqu5dggdjnm0bym1p10gtu3o7dz3ipfaa4ccxgs73oohaqndzegk16d",
+      "Name": "oracle-corporate-registration-rock-island"
+    },
+    {
+      "Id": "k51qzi5uqu5diwj8neksmp4xl6ct61sr4am3n8mzeok9d7atbqwr6ckt85n5d5",
+      "Name": "oracle-open-data-polk"
+    },
+    {
+      "Id": "k51qzi5uqu5dly93m4h8vv3rfhaolyo0i2njowirgv1kvanplaseuf6af7e4my",
+      "Name": "oracle-permit-table-polk"
+    },
+    {
+      "Id": "k51qzi5uqu5dhunnyikvu2hwwun14cvyalavouxrfo953skk64u3dfbfm7xk8n",
+      "Name": "oracle-query-table-pinellas-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dlw7tr5c9f3d0uel1kue0eubbqwudytzismje9iw8vm233sfbnl",
+      "Name": "oracle-dataset-coverage-pinellas-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dicgs18vee4x9joam13mlohykbsackhxawi5tasb1lye7hljmqi",
+      "Name": "oracle-query-table-palm-beach-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dhud6orwbs2l4eby3lr5fdycvuzl6gix485c99acm3gxolsczaa",
+      "Name": "oracle-dataset-coverage-palm-beach-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dk0vrq2nzaa9bxuarqgqd8ayqzs4yk36n3k02exgjr4y8hnyzli",
+      "Name": "oracle-query-table-hillsborough-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dl9vkvyn9lv5dvhtv62bb7l2v3ze7k76qnlwvvdrzal5cp40pwa",
+      "Name": "oracle-dataset-coverage-hillsborough-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5div4mt8yg2utwy1n8iytxxiagvqvgh1ctftyehygk20nnb11yfq",
+      "Name": "oracle-query-table-orange-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dkeu5mpwkdlsh0ya60vlalpo9i9x60eg9g31jvafy9c9gd79gh0",
+      "Name": "oracle-dataset-coverage-orange-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5direilg2bjojjs6rkrsvgdu6qzw4kc2h8zqxrrn93ndxikxcybm",
+      "Name": "oracle-dataset-coverage-polk-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dhsksg7e2me2zhso3phdi1lvmcup6ypiywjtnatw21yxzk3d3md",
+      "Name": "oracle-query-table-seminole-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dhmrab4ojlb400jf7g875wkpu0t52f8fj8kexzrjg1kolxttew9",
+      "Name": "oracle-dataset-coverage-seminole-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dkflq4utl1c1mwfqnk8hkm4e8mr5g23fmenurpno8xzdxmu5cyc",
+      "Name": "oracle-dataset-coverage-lee-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dlxy585bspcf9vqv8rs1527gljqehiqrhngavwvo4f2s3xe7ome",
+      "Name": "oracle-dataset-coverage-miami-dade-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dkihaqtcx17t56xk4tra6gbmnajxjfs0sb4mqksgnzoc5a14wlk",
+      "Name": "oracle-dataset-coverage-pasco-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5diai4v9hf3dt30gloyidgg7zkhagdji8ljs335t69cxnysgv1ko",
+      "Name": "oracle-query-table-osceola-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dhwb5buuagkdi5z9werhlvs02mx3g7a2lc3tt0zxm1rxo41ccwr",
+      "Name": "oracle-dataset-coverage-osceola-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dl0ebjpm9jzpc82um8ocoi4y7w4bmdnv8d3p0qlalqtyliwrqyu",
+      "Name": "oracle-dataset-coverage-duval-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dmfz3uiboalucubotcglsxyy84egvrbwzgya1gzztuhtmi8gnpp",
+      "Name": "oracle-dataset-coverage-broward-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dlt9yazd4vz0fxymeni39jp8mamk1vrh11ehww6x3hahqz5mt0v",
+      "Name": "oracle-dataset-coverage-clay-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dgsh4004w62payc64u3bwxbz7r0y3xadkvgschvp6hlqml23dri",
+      "Name": "oracle-query-table-st-johns-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dktugj3bmhhsrj2p9pq7mvnw1osu4i4zghvgacljnuu0ohwz3ov",
+      "Name": "oracle-dataset-coverage-lake-hoa-pm"
+    },
+    {
+      "Id": "k51qzi5uqu5dh53ckujq0i51aimjsvtbo0kz6emdkzgks3xnd12gi0uj1q7d9q",
+      "Name": "oracle-dataset-coverage-manatee-hoa-pm"
+    }
+  ]
+}
