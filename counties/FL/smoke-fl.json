@@ -2,5 +2,11 @@
   "county": "smoke-fl",
   "state": "FL",
   "fips": "12999",
-  "groups": {}
+  "groups": {
+    "county": {
+      "cid": "baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerasxkelzdxtkgdrii54zoanz3t7qznf72niikqmiyer4dlb2k2xfhq"
+    }
+  }
 }
