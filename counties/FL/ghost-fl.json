@@ -1,0 +1,12 @@
+{
+  "county": "ghost-fl",
+  "state": "FL",
+  "fips": "12998",
+  "groups": {
+    "county": {
+      "cid": "baguqeeralqgsoop3t2k22a7yrodse7wsh67cqmimtgfuw2x2qhbd32d74iya",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraqugykw3iisa4ww6p6ee4avmafq3n5etw2ihrlivpax4xqjfo6sta"
+    }
+  }
+}
