@@ -1,4 +1,26 @@
 {
-  "generated_from": "670b7668661f4d687971c4d91db9758d1dfd2f9e",
-  "counties": []
+  "generated_from": "fc65cccb42e54787722a4569b54d8555c0ea25ce",
+  "counties": [
+    {
+      "county": "smoke-fl",
+      "state": "FL",
+      "fips": "12999",
+      "run": "2026-09-21-a",
+      "county_root": "baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda",
+      "tables_root": "baguqeerasxkelzdxtkgdrii54zoanz3t7qznf72niikqmiyer4dlb2k2xfhq",
+      "blocks": 133,
+      "properties": 3,
+      "parts": 40,
+      "cli": "994f96356c76b6697fb46dbe261d96b7a292c956",
+      "lexicon": {
+        "manifest_url": "https://lexicon.elephant.xyz/api/manifest"
+      },
+      "node": "filebase",
+      "evidence": {
+        "car_upload": "/tmp/wt9-smoke/upload-filebase.json",
+        "tables_upload": "/tmp/atlas-smoke/tables-upload-filebase.json"
+      },
+      "status": "published"
+    }
+  ]
 }
