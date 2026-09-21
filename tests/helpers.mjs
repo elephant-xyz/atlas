@@ -19,10 +19,12 @@ export function run(overrides = {}) {
     node: 'filebase',
     evidence: { car_upload: CID_C },
     status: 'published',
-    published_at: '2026-09-21T12:07:53.177Z',
     ...overrides,
   };
 }
+
+/** publishedAt stub for buildEntries: root -> timestamp map. */
+export const stamps = (map = {}) => (_path, cid) => map[cid];
 
 export function page(overrides = {}) {
   return { county: 'lee', state: 'FL', fips: '12071', runs: [run()], ...overrides };

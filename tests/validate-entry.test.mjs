@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { validateRegistry } from '../scripts/validate-entry.mjs';
 import { VERSION } from '../scripts/build-index.mjs';
 import { buildEntries, readPages } from '../scripts/lib.mjs';
-import { CID_A, CID_C, page, registry, run } from './helpers.mjs';
+import { CID_A, CID_C, page, registry, run, stamps } from './helpers.mjs';
 
-const indexFor = (pages) => ({ version: VERSION, generated_from: 'x', counties: buildEntries(pages) });
+const indexFor = (pages) => ({ version: VERSION, generated_from: 'x', counties: buildEntries(pages, stamps()) });
 const check = (files) => {
   const root = registry(files);
   return validateRegistry(root, readPages(root));
@@ -24,14 +24,13 @@ test('archive-only run without tables_root passes', () => {
   assert.deepEqual(check(withIndex({ 'counties/FL/lee.json': lee }, lee)), []);
 });
 
-test('schema rejects bad keys, a run key, a latest pointer, and a bad published_at', () => {
+test('schema rejects bad keys, a run key, a latest pointer, and a published_at', () => {
   let problems = check(withIndex({ 'counties/FL/Lee.json': page({ county: 'Lee', fips: '1207' }) }));
   assert.ok(problems.some((p) => p.includes('/county')));
   assert.ok(problems.some((p) => p.includes('/fips')));
-  problems = check(withIndex({ 'counties/FL/lee.json': page({ latest: 'x', runs: [run({ run: '2026-09-21-a', published_at: '2026-09-21 12:07' })] }) }));
+  problems = check(withIndex({ 'counties/FL/lee.json': page({ latest: 'x', runs: [run({ run: '2026-09-21-a', published_at: '2026-09-21T12:07:53Z' })] }) }));
   assert.ok(problems.some((p) => p.includes("must NOT have additional properties") && p.startsWith('counties/FL/lee.json: /')), problems.join('\n'));
   assert.ok(problems.some((p) => p.includes('/runs/0 must NOT have additional properties')), problems.join('\n'));
-  assert.ok(problems.some((p) => p.includes('/runs/0/published_at')), problems.join('\n'));
 });
 
 test('path must match state and county', () => {
@@ -47,13 +46,13 @@ test('the same root on two pages is rejected', () => {
 });
 
 test('appending a run with the root of an existing non-withdrawn run is rejected', () => {
-  const lee = page({ runs: [run({ status: 'superseded' }), run({ published_at: '2026-09-22T00:00:00Z' })] });
+  const lee = page({ runs: [run({ status: 'superseded' }), run({ blocks: 134 })] });
   const problems = check(withIndex({ 'counties/FL/lee.json': lee }, lee));
   assert.ok(problems.some((p) => p.includes('the same root is the same publication')), problems.join('\n'));
 });
 
 test('a withdrawn run releases its roots for a later run on the same page', () => {
-  const lee = page({ runs: [run({ status: 'withdrawn' }), run({ published_at: '2026-09-22T00:00:00Z' })] });
+  const lee = page({ runs: [run({ status: 'withdrawn' }), run({ blocks: 134 })] });
   assert.deepEqual(check(withIndex({ 'counties/FL/lee.json': lee }, lee)), []);
 });
 
@@ -123,7 +122,6 @@ test('evidence must be a CID or a path under evidence/<state>/<county>/<county_r
 test('a page that predates the schema may be migrated', () => {
   const v2 = page();
   v2.runs[0].run = '2026-09-21-a';
-  delete v2.runs[0].published_at;
   const migrated = page({ runs: [run({ blocks: 999 })] }); // any rewrite is accepted while the base fails the schema
   const root = registry({ 'counties/FL/lee.json': migrated, 'index.json': indexFor([{ page: v2 }]) });
   assert.deepEqual(validateRegistry(root, [{ path: 'counties/FL/lee.json', page: v2 }]), []);
