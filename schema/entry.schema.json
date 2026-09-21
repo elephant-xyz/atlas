@@ -1,146 +1,34 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/elephant-xyz/atlas/schema/v4/entry.schema.json",
-  "title": "Atlas county page (version 4)",
-  "description": "One page per county: every run ever published for it, in publication order (newest last). A run is identified by its county_root.",
+  "$id": "https://github.com/elephant-xyz/atlas/schema/v5/entry.schema.json",
+  "title": "Atlas county page (version 5)",
+  "description": "The current state of one county: one archive per data group. History lives in git.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "county",
-    "state",
-    "fips",
-    "runs"
-  ],
+  "required": ["county", "state", "fips", "groups"],
   "properties": {
-    "county": {
-      "type": "string",
-      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-      "description": "lowercase kebab-case county key"
-    },
-    "state": {
-      "type": "string",
-      "pattern": "^[A-Z]{2}$"
-    },
-    "fips": {
-      "type": "string",
-      "pattern": "^[0-9]{5}$"
-    },
-    "runs": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "$ref": "#/definitions/run"
+    "county": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "lowercase kebab-case county key" },
+    "state": { "type": "string", "pattern": "^[A-Z]{2}$" },
+    "fips": { "type": "string", "pattern": "^[0-9]{5}$" },
+    "groups": {
+      "type": "object",
+      "description": "data-group key (`county`, `property_improvement`, ...) to the archive published for it; empty means nothing is published",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(_[a-z0-9]+)*$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cid", "schema", "tables"],
+          "properties": {
+            "cid": { "$ref": "#/definitions/cid", "description": "CountyIndex root of the archive" },
+            "schema": { "$ref": "#/definitions/cid", "description": "CID of the data-group schema from the lexicon manifest that the archive's properties carry" },
+            "tables": { "$ref": "#/definitions/cid", "description": "CountyTables root written by export-tables for this archive" }
+          }
+        }
       }
     }
   },
   "definitions": {
-    "cid": {
-      "type": "string",
-      "pattern": "^b[a-z2-7]{50,}$",
-      "description": "CIDv1, base32"
-    },
-    "sha": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
-    },
-    "run": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "county_root",
-        "groups",
-        "blocks",
-        "properties",
-        "cli",
-        "lexicon",
-        "node",
-        "evidence",
-        "status"
-      ],
-      "properties": {
-        "groups": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
-          },
-          "description": "data-group keys this run carries (`county`, `seed`, `property_improvement`, ...)"
-        },
-        "county_root": {
-          "$ref": "#/definitions/cid",
-          "description": "CID of the CountyIndex block rooting the county CAR"
-        },
-        "tables_root": {
-          "$ref": "#/definitions/cid",
-          "description": "CID of the CountyTables block rooting the Parquet part set; absent for archive-only runs"
-        },
-        "blocks": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "properties": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "parts": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "cli": {
-          "$ref": "#/definitions/sha",
-          "description": "elephant-cli commit that produced the run"
-        },
-        "lexicon": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "manifest_url"
-          ],
-          "properties": {
-            "manifest_url": {
-              "type": "string",
-              "pattern": "^https://"
-            },
-            "cid": {
-              "$ref": "#/definitions/cid"
-            }
-          }
-        },
-        "node": {
-          "type": "string",
-          "minLength": 1,
-          "description": "`filebase` or a named node"
-        },
-        "evidence": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "car_upload": {
-              "$ref": "#/definitions/evidenceRef"
-            },
-            "tables_upload": {
-              "$ref": "#/definitions/evidenceRef"
-            },
-            "validation": {
-              "$ref": "#/definitions/evidenceRef"
-            }
-          }
-        },
-        "status": {
-          "enum": [
-            "published",
-            "superseded",
-            "withdrawn"
-          ]
-        }
-      }
-    },
-    "evidenceRef": {
-      "type": "string",
-      "pattern": "^(b[a-z2-7]{50,}|[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*)$",
-      "description": "a CIDv1 or a repository-relative path; never an absolute filesystem path"
-    }
+    "cid": { "type": "string", "pattern": "^b[a-z2-7]{50,}$", "description": "CIDv1, base32" }
   }
 }

@@ -2,37 +2,24 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PinFailed, token, waitForPin } from '../scripts/filebase.mjs';
 import { rootsToPin } from '../scripts/pin-roots.mjs';
-import { CID_A, CID_B, CID_C, page, run } from './helpers.mjs';
+import { CID_A, CID_B, CID_C, group, page } from './helpers.mjs';
 
 const at = (path, page) => ({ path, page });
 const LEE = 'counties/FL/lee.json';
 
-test('a new published run pins both roots', () => {
-  const head = [at(LEE, page({ runs: [run({ status: 'withdrawn' }), run()] }))];
-  const base = [at(LEE, page({ runs: [run({ status: 'withdrawn' })] }))];
-  assert.deepEqual(rootsToPin(head, base), [
-    { county: 'FL/lee', key: 'county_root', cid: CID_A },
-    { county: 'FL/lee', key: 'tables_root', cid: CID_B },
+test('a new page pins its archive and tables roots', () => {
+  assert.deepEqual(rootsToPin([at(LEE, page())], []), [
+    { county: 'FL/lee', key: 'county.cid', cid: CID_A },
+    { county: 'FL/lee', key: 'county.tables', cid: CID_B },
   ]);
 });
 
-test('a brand-new page pins its published runs', () => {
-  const r = run();
-  delete r.tables_root;
-  assert.deepEqual(rootsToPin([at(LEE, page({ runs: [r] }))], []), [{ county: 'FL/lee', key: 'county_root', cid: CID_A }]);
-});
-
-test('a status flip to published pins; a flip away from published does not', () => {
-  const head = [at(LEE, page({ runs: [run(), run({ county_root: CID_C, tables_root: undefined, status: 'superseded' })] }))];
-  const base = [at(LEE, page({ runs: [run({ status: 'superseded' }), run({ county_root: CID_C, tables_root: undefined })] }))];
-  assert.deepEqual(rootsToPin(head, base).map((t) => t.cid), [CID_A, CID_B]);
-});
-
-test('a new withdrawn run and an unchanged page pin nothing', () => {
-  const unchanged = [at(LEE, page())];
-  assert.deepEqual(rootsToPin(unchanged, unchanged), []);
-  const head = [at(LEE, page({ runs: [run(), run({ county_root: CID_C, tables_root: undefined, status: 'withdrawn' })] }))];
-  assert.deepEqual(rootsToPin(head, unchanged), []);
+test('a superseded cid pins only what is new; an unchanged page and a removed group pin nothing', () => {
+  const base = [at(LEE, page())];
+  assert.deepEqual(rootsToPin(base, base), []);
+  assert.deepEqual(rootsToPin([at(LEE, page({ groups: {} }))], base), []);
+  const head = [at(LEE, page({ groups: { county: group({ cid: CID_C }) } }))];
+  assert.deepEqual(rootsToPin(head, base), [{ county: 'FL/lee', key: 'county.cid', cid: CID_C }]);
 });
 
 const clock = () => {

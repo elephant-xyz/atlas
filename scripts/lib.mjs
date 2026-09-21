@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 const COUNTIES = 'counties';
 
@@ -52,32 +52,41 @@ export function gitPublishedAt(root, ref = 'origin/main') {
   };
 }
 
+/** Every (key, group) of a page, keys sorted. */
+export const groupsOf = (page) => Object.keys(page.groups ?? {}).sort().map((key) => [key, page.groups[key]]);
+
 /**
- * The list consumers read: one entry per county with a published run; `groups` maps each
- * data-group key to the newest (last in the array) published run carrying it. `publishedAt(path, cid)`
- * supplies the merge time of each root; undefined leaves the field out.
+ * The list consumers read: one entry per county with at least one group; each group is copied
+ * from the page plus `published_at` from `publishedAt(path, cid)` (undefined leaves it out).
  */
 export function buildEntries(pages, publishedAt) {
-  const entries = [];
-  for (const { path, page } of pages) {
-    const groups = {};
-    for (const run of page.runs) {
-      if (run.status !== 'published') continue;
-      for (const key of run.groups ?? []) { // ponytail: pre-v2 base pages have no groups; only matters during a schema migration
-        groups[key] = { county_root: run.county_root, ...(run.tables_root && { tables_root: run.tables_root }), properties: run.properties, published_at: publishedAt(path, run.county_root) };
-      }
-    }
-    const keys = Object.keys(groups).sort();
-    if (keys.length) entries.push({ county: page.county, state: page.state, fips: page.fips, groups: Object.fromEntries(keys.map((k) => [k, groups[k]])) });
-  }
-  return entries.sort((a, b) => a.state.localeCompare(b.state) || a.county.localeCompare(b.county));
+  return pages
+    .filter(({ page }) => groupsOf(page).length)
+    .map(({ path, page }) => ({
+      county: page.county,
+      state: page.state,
+      fips: page.fips,
+      groups: Object.fromEntries(groupsOf(page).map(([key, g]) => [key, { cid: g.cid, schema: g.schema, tables: g.tables, published_at: publishedAt(path, g.cid) }])),
+    }))
+    .sort((a, b) => a.state.localeCompare(b.state) || a.county.localeCompare(b.county));
 }
 
-/** Roots held by non-withdrawn runs. A withdrawn run releases its roots: they may be published again. */
+/** Every archive and tables root held by any group on any page. */
 export function rootsOf(pages) {
   const roots = new Set();
-  for (const { page } of pages) for (const run of page.runs) if (run.status !== 'withdrawn') for (const k of ['county_root', 'tables_root']) if (run[k]) roots.add(run[k]);
+  for (const { page } of pages) for (const [, g] of groupsOf(page)) roots.add(g.cid).add(g.tables);
   return roots;
 }
 
-export const relPath = (root, path) => relative(root, path).replaceAll('\\', '/');
+/** Groups whose (cid, schema, tables) differ from the same group on the base pages: [{ path, key, ...group }]. */
+export function changedGroups(pages, basePages) {
+  const base = new Map((basePages ?? []).map(({ path, page }) => [path, page]));
+  const out = [];
+  for (const { path, page } of pages) {
+    for (const [key, g] of groupsOf(page)) {
+      const before = base.get(path)?.groups?.[key];
+      if (!before || before.cid !== g.cid || before.schema !== g.schema || before.tables !== g.tables) out.push({ path, key, ...g });
+    }
+  }
+  return out;
+}

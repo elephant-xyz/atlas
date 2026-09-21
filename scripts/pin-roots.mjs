@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Pin every root that this push published: the county_root and tables_root of runs that are
-// new at HEAD relative to HEAD~1 (first parent) or whose status became `published`. Roots only;
+// Pin every root that this push published: every group cid and tables root at HEAD that no
+// group held at HEAD~1 (first parent). Roots only;
 // the recursive pin covers everything beneath. Exits 1 with GITHUB_OUTPUT failed_root/
 // failed_status/county when a pin fails or times out (the workflow reverts), 2 on any other
 // error (credentials, network; re-dispatch instead).
@@ -9,18 +9,16 @@
 import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PinFailed, rpc, waitForPin } from './filebase.mjs';
-import { pagesAt } from './lib.mjs';
+import { groupsOf, pagesAt, rootsOf } from './lib.mjs';
 
-/** [{ county: 'FL/lee', key, cid }] for runs at HEAD that are published and were not published at base. */
+/** [{ county: 'FL/lee', key, cid }] for every archive or tables root at HEAD that no group at base held. */
 export function rootsToPin(headPages, basePages) {
-  const base = new Map(basePages.map(({ path, page }) => [path, page]));
+  const known = rootsOf(basePages);
   const out = [];
-  for (const { path, page } of headPages) {
-    const before = base.get(path)?.runs ?? [];
-    page.runs.forEach((run, i) => {
-      if (run.status !== 'published' || before[i]?.status === 'published') return;
-      for (const key of ['county_root', 'tables_root']) if (run[key]) out.push({ county: `${page.state}/${page.county}`, key, cid: run[key] });
-    });
+  for (const { page } of headPages) {
+    for (const [key, g] of groupsOf(page)) {
+      for (const field of ['cid', 'tables']) if (!known.has(g[field])) out.push({ county: `${page.state}/${page.county}`, key: `${key}.${field}`, cid: g[field] });
+    }
   }
   return out;
 }
