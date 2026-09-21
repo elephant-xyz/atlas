@@ -1,0 +1,19 @@
+{
+  "county": "mislabeled",
+  "state": "FL",
+  "fips": "12997",
+  "latest": "2026-09-21-a",
+  "runs": [
+    {
+      "run": "2026-09-21-a",
+      "county_root": "baguqeeraek5eh2ihcujvsmbv5i6jwmkqvvc3z46qegpyo7mdgm4w2j2z4qda",
+      "blocks": 1,
+      "properties": 0,
+      "cli": "994f96356c76b6697fb46dbe261d96b7a292c956",
+      "lexicon": { "manifest_url": "https://lexicon.elephant.xyz/api/manifest" },
+      "node": "filebase",
+      "evidence": {},
+      "status": "published"
+    }
+  ]
+}
