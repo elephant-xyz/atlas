@@ -1,0 +1,19 @@
+{
+  "county": "ghost",
+  "state": "FL",
+  "fips": "12998",
+  "latest": "2026-09-21-a",
+  "runs": [
+    {
+      "run": "2026-09-21-a",
+      "county_root": "baguqeeralqgsoop3t2k22a7yrodse7wsh67cqmimtgfuw2x2qhbd32d74iya",
+      "blocks": 1,
+      "properties": 0,
+      "cli": "994f96356c76b6697fb46dbe261d96b7a292c956",
+      "lexicon": { "manifest_url": "https://lexicon.elephant.xyz/api/manifest" },
+      "node": "filebase",
+      "evidence": {},
+      "status": "published"
+    }
+  ]
+}
