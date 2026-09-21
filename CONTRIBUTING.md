@@ -29,7 +29,8 @@ publishable, whatever the upload logs say.
    on a non-withdrawn run anywhere in the registry is rejected. To replace a run, append the new
    one and set the old one's `status` to `superseded`. To pull a run, find it by `county_root`
    and set its `status` to `withdrawn`; that releases its roots, so they may be published again
-   later. `published_at` is the `uploadedAt` from the CAR upload summary. Counts come from the CLI output:
+   later. Do not record a publication time: the index derives `published_at` from the merge
+   commit on `main`. Counts come from the CLI output:
    `blocks` from `hash`, `properties` from `validate`, `parts` from `export-tables`. `cli` is
    `git rev-parse HEAD` in the `elephant-cli` checkout that produced the run. `groups` lists the
    data-group keys the run carries. `evidence` holds the upload summaries and the validation

@@ -20,26 +20,27 @@ Status: scaffold. Nothing here is consumed yet.
 | `node` | where it was pinned: `filebase` or a named node |
 | `evidence` | paths or CIDs of the upload summaries and the validation report |
 | `status` | `published`, `superseded`, or `withdrawn` |
-| `published_at` | ISO 8601 UTC from the CLI upload summary's `uploadedAt`; informational, never used for identity or order |
 
 Runs are append-only; their order is their position in the array, newest last. A run has no
 name of its own: the same `county_root` is the same publication, wherever it appears.
 
 ## Index
 
-`index.json` is what consumers read. Version 3 holds one entry per county with at least one
-non-withdrawn run; `groups` maps each data-group key to the newest (last in the array)
-non-withdrawn run that carries it. A withdrawn run never appears; `tables_root` is omitted when
-the run has none.
+`index.json` is what consumers read. Version 4 holds one entry per county with at least one
+published run; `groups` maps each data-group key to the newest (last in the array) run with
+`status: published` that carries it. A withdrawn or superseded run never appears; `tables_root`
+is omitted when the run has none. `published_at` is the time the registry merged the run,
+derived from history, never supplied: the committer date of the first commit on `main` in which
+the root appeared in the page.
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "generated_from": "<main sha>",
   "counties": [
     { "county": "lee", "state": "FL", "fips": "12071",
       "groups": {
-        "county": { "county_root": "...", "tables_root": "...", "properties": 511695, "published_at": "2026-09-21T12:07:53.177Z" }
+        "county": { "county_root": "...", "tables_root": "...", "properties": 511695, "published_at": "2026-09-21T17:23:52.000Z" }
       } }
   ]
 }

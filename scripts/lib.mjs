@@ -35,17 +35,36 @@ export function pagesAt(ref, root) {
 }
 
 /**
- * The list consumers read: one entry per county with a non-withdrawn run; `groups` maps each
- * data-group key to the newest (last in the array) non-withdrawn run carrying it.
+ * When the registry observed a root: committer date (UTC) of the first commit on `ref`'s
+ * first-parent history in which the root appears in the page file. That is the merge commit,
+ * whatever the branch history looked like. Returns undefined when the root is not on `ref` yet
+ * (or `root` is not a git checkout).
  */
-export function buildEntries(pages) {
+export function gitPublishedAt(root, ref = 'origin/main') {
+  return (path, cid) => {
+    try {
+      const out = execFileSync('git', ['-C', root, 'log', '--first-parent', '--reverse', '--format=%cI', `-S${cid}`, ref, '--', path], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      const first = out.split('\n')[0];
+      return first ? new Date(first).toISOString() : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+/**
+ * The list consumers read: one entry per county with a published run; `groups` maps each
+ * data-group key to the newest (last in the array) published run carrying it. `publishedAt(path, cid)`
+ * supplies the merge time of each root; undefined leaves the field out.
+ */
+export function buildEntries(pages, publishedAt) {
   const entries = [];
-  for (const { page } of pages) {
+  for (const { path, page } of pages) {
     const groups = {};
     for (const run of page.runs) {
-      if (run.status === 'withdrawn') continue;
+      if (run.status !== 'published') continue;
       for (const key of run.groups ?? []) { // ponytail: pre-v2 base pages have no groups; only matters during a schema migration
-        groups[key] = { county_root: run.county_root, ...(run.tables_root && { tables_root: run.tables_root }), properties: run.properties, published_at: run.published_at };
+        groups[key] = { county_root: run.county_root, ...(run.tables_root && { tables_root: run.tables_root }), properties: run.properties, published_at: publishedAt(path, run.county_root) };
       }
     }
     const keys = Object.keys(groups).sort();

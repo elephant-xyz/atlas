@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/elephant-xyz/atlas/schema/v3/entry.schema.json",
-  "title": "Atlas county page (version 3)",
+  "$id": "https://github.com/elephant-xyz/atlas/schema/v4/entry.schema.json",
+  "title": "Atlas county page (version 4)",
   "description": "One page per county: every run ever published for it, in publication order (newest last). A run is identified by its county_root.",
   "type": "object",
   "additionalProperties": false,
@@ -55,8 +55,7 @@
         "lexicon",
         "node",
         "evidence",
-        "status",
-        "published_at"
+        "status"
       ],
       "properties": {
         "groups": {
@@ -135,11 +134,6 @@
             "superseded",
             "withdrawn"
           ]
-        },
-        "published_at": {
-          "type": "string",
-          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
-          "description": "ISO 8601 UTC, copied from the CLI upload summary's uploadedAt; informational, never used for identity or order"
         }
       }
     },
