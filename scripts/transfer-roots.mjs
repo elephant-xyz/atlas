@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // Transfer every root this push published into the elephant-atlas bucket: every group cid and
 // tables root at HEAD that no group held at HEAD~1 (first parent). Each root is exported from
-// the public gateway as CAR and imported with dag/import, bounded piece by piece so a runner
+// the IPFS network as CAR through the gateway list (see gateways.mjs) and imported with dag/import, bounded piece by piece so a runner
 // never holds a whole county: the root block alone (pin-roots=false), then one shard or one
 // Parquet part at a time through a temp file, then the root block again with pin-roots=true
 // so the recursive pin sees a complete DAG, verified with pin/ls. pin/add is never called:
 // Filebase does not serve a bucket's inner blocks to nodes outside the owning account.
 //
-// Exit 1 with GITHUB_OUTPUT failed_root/failed_reason/county when the gateway cannot serve a
+// Exit 1 with GITHUB_OUTPUT failed_root/failed_reason/county when no gateway can serve a
 // root (the workflow reverts); exit 2 on any other error (credentials, RPC; re-dispatch).
 //
 // TODO: unpin roots of withdrawn groups; nothing is unpinned yet.
@@ -23,6 +23,7 @@ import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { rpc as filebaseRpc } from './filebase.mjs';
+import { fetchFromAny, gatewayList } from './gateways.mjs';
 import { groupsOf, pagesAt, rootsOf } from './lib.mjs';
 
 export class TransferFailed extends Error {
@@ -49,7 +50,7 @@ export function rootsToTransfer(headPages, basePages) {
 const defaults = () => ({
   fetch: globalThis.fetch,
   rpc: filebaseRpc,
-  gateway: (process.env.ATLAS_GATEWAY ?? 'https://ipfs.filebase.io').replace(/\/$/, ''),
+  gateways: gatewayList(),
   deadlineMs: Number(process.env.ATLAS_GATEWAY_DEADLINE_MINUTES ?? 20) * 60_000,
   requestMs: 15 * 60_000,
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
@@ -58,21 +59,20 @@ const defaults = () => ({
   tmp: undefined,
 });
 
-/** GET from the gateway, retrying 404/5xx/timeouts with backoff until the deadline; a persistent failure is TransferFailed. */
+/** GET /ipfs/<path> from the first gateway that answers, retrying the whole list with backoff until the deadline; all failing through the deadline is TransferFailed. */
 async function gatewayGet(root, path, accept, d) {
-  const url = `${d.gateway}/ipfs/${path}`;
   const started = d.now();
   let last;
   for (let wait = 5_000; ; wait = Math.min(wait * 2, 60_000)) {
     try {
-      const res = await d.fetch(url, { headers: { accept }, signal: AbortSignal.timeout(d.requestMs) });
-      if (res.ok) return res;
-      last = `HTTP ${res.status}`;
+      const { res, url } = await fetchFromAny(path, { gateways: d.gateways, fetch: d.fetch, headers: { accept }, requestMs: d.requestMs });
+      d.log(`fetched ${url}`);
+      return res;
     } catch (e) {
-      last = e.name === 'TimeoutError' ? `timeout after ${d.requestMs / 1000}s` : e.message;
+      last = e.message;
     }
-    d.log(`${url}: ${last}`);
-    if (d.now() - started + wait > d.deadlineMs) throw new TransferFailed(root, `${url}: ${last}; content not available within ${d.deadlineMs / 60_000} min`);
+    d.log(`/ipfs/${path}: ${last}`);
+    if (d.now() - started + wait > d.deadlineMs) throw new TransferFailed(root, `/ipfs/${path} not available from any gateway within ${d.deadlineMs / 60_000} min: ${last}`);
     await d.sleep(wait);
   }
 }

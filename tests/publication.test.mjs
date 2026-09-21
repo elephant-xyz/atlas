@@ -10,7 +10,9 @@ import { CID } from 'multiformats/cid';
 import * as raw from 'multiformats/codecs/raw';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { poll, token } from '../scripts/filebase.mjs';
+import { DEFAULT_GATEWAYS, fetchFromAny, gatewayList } from '../scripts/gateways.mjs';
 import { TransferFailed, rootsToTransfer, transferArchive, transferTables } from '../scripts/transfer-roots.mjs';
+import { blockFromCar } from '../scripts/verify-roots.mjs';
 import { CID_A, CID_B, CID_C, group, page } from './helpers.mjs';
 
 const at = (path, page) => ({ path, page });
@@ -68,6 +70,7 @@ async function fixture() {
   const part = await block(new TextEncoder().encode('parquet'), raw);
   const tables = await block({ label: 'CountyTables', county_root: index.cid, codec: 'zstd', tables: { address: { rows: 1, parts: [{ cid: part.cid, bytes: 7, rows: 1 }] } } });
   const G = 'https://gw.test';
+  const G2 = 'https://gw2.test';
   const routes = {
     [`${G}/ipfs/${index.cid}?format=raw`]: () => new Response(index.bytes),
     [`${G}/ipfs/${index.cid}/shards/0?format=car`]: async () => new Response(await car(shard.cid, [index, shard, property])),
@@ -77,7 +80,8 @@ async function fixture() {
   const fetched = [];
   const fetch = async (url) => {
     fetched.push(url);
-    return routes[url] ? routes[url]() : new Response('no', { status: 404 });
+    const key = url.replace(G2, G);
+    return routes[key] ? routes[key]() : new Response('no', { status: 404 });
   };
   const calls = [];
   const rpc = async (path, { body } = {}) => {
@@ -91,8 +95,8 @@ async function fixture() {
   };
   let t = 0;
   const tmp = await mkdtemp(join(tmpdir(), 'atlas-test-'));
-  const deps = { fetch, rpc, gateway: G, deadlineMs: 60_000, sleep: async (ms) => (t += ms), now: () => t, log() {}, tmp };
-  return { index, shard, tables, part, fetched, calls, deps, tmp, G };
+  const deps = { fetch, rpc, gateways: [G], deadlineMs: 60_000, sleep: async (ms) => (t += ms), now: () => t, log() {}, tmp };
+  return { index, shard, property, tables, part, fetched, calls, deps, tmp, G, G2 };
 }
 
 test('transferArchive imports the root block, each shard, then the root block pinned, and verifies the pin', async () => {
@@ -118,13 +122,23 @@ test('transferTables imports the tables block, each part by path, then the table
   assert.deepEqual(readdirSync(f.tmp), []);
 });
 
-test('a gateway 504 that persists through the deadline is a TransferFailed naming the URL', async () => {
+test('every gateway failing through the deadline is a TransferFailed naming each attempt', async () => {
   const f = await fixture();
   let tries = 0;
   const fetch = async () => (tries++, new Response('gateway timeout', { status: 504 }));
-  await assert.rejects(transferArchive(f.index.cid.toString(), { ...f.deps, fetch }), (e) => e instanceof TransferFailed && e.cid === f.index.cid.toString() && e.reason.includes(`${f.G}/ipfs/${f.index.cid}?format=raw: HTTP 504`) && e.reason.includes('not available within 1 min'));
-  assert.ok(tries > 1, 'retried before giving up');
+  await assert.rejects(transferArchive(f.index.cid.toString(), { ...f.deps, fetch, gateways: [f.G, f.G2] }), (e) => e instanceof TransferFailed && e.cid === f.index.cid.toString() && e.reason.includes(`${f.G}/ipfs/${f.index.cid}?format=raw: HTTP 504; ${f.G2}/ipfs/${f.index.cid}?format=raw: HTTP 504`) && e.reason.includes('not available from any gateway within 1 min'));
+  assert.ok(tries > 2, 'retried the whole list before giving up');
   assert.deepEqual(f.calls, []);
+});
+
+test('a gateway that fails moves to the next; the answering gateway is logged', async () => {
+  const f = await fixture();
+  const fetch = async (url, init) => (url.startsWith(f.G + '/') ? new Response('', { status: 504 }) : f.deps.fetch(url, init));
+  const log = [];
+  await transferArchive(f.index.cid.toString(), { ...f.deps, fetch, gateways: [f.G, f.G2], log: (l) => log.push(l) });
+  assert.equal(f.calls.length, 3);
+  assert.ok(log.includes(`fetched ${f.G2}/ipfs/${f.index.cid}?format=raw`), log.join('\n'));
+  assert.ok(log.includes(`fetched ${f.G2}/ipfs/${f.index.cid}/shards/0?format=car`), log.join('\n'));
 });
 
 test('a transient gateway error is retried, and a persistent RPC error is not a TransferFailed', async () => {
@@ -147,4 +161,32 @@ test('a transient gateway error is retried, and a persistent RPC error is not a 
 test('a root that decodes but is not a CountyIndex is a TransferFailed', async () => {
   const f = await fixture();
   await assert.rejects(transferArchive(f.tables.cid.toString(), f.deps), (e) => e instanceof TransferFailed && e.reason === 'not a CountyIndex block');
+});
+
+test('gatewayList reads ATLAS_GATEWAYS or the defaults', () => {
+  assert.deepEqual(gatewayList({}), DEFAULT_GATEWAYS);
+  assert.deepEqual(gatewayList({ ATLAS_GATEWAYS: ' https://a.test/, https://b.test ' }), ['https://a.test', 'https://b.test']);
+});
+
+test('fetchFromAny takes the first 2xx, skipping a 504, and throws listing every attempt when all fail', async () => {
+  const seen = [];
+  const fetch = async (url) => {
+    seen.push(url);
+    if (url.startsWith('https://a.test')) return new Response('', { status: 504 });
+    if (url.startsWith('https://b.test')) return new Response('ok');
+    throw new Error('unreachable');
+  };
+  const { res, url } = await fetchFromAny('bafy/x?format=raw', { gateways: ['https://a.test', 'https://b.test', 'https://c.test'], fetch });
+  assert.equal(url, 'https://b.test/ipfs/bafy/x?format=raw');
+  assert.equal(await res.text(), 'ok');
+  assert.deepEqual(seen, ['https://a.test/ipfs/bafy/x?format=raw', 'https://b.test/ipfs/bafy/x?format=raw']);
+  await assert.rejects(fetchFromAny('bafy/x', { gateways: ['https://a.test', 'https://c.test'], fetch }), { message: 'https://a.test/ipfs/bafy/x: HTTP 504; https://c.test/ipfs/bafy/x: unreachable' });
+});
+
+test('blockFromCar returns the block with the expected CID from a path CAR, ignoring ancestors', async () => {
+  const f = await fixture();
+  const bytes = await car(f.shard.cid, [f.index, f.shard, f.property]);
+  assert.equal(Buffer.compare(await blockFromCar(bytes, f.shard.cid.toString()), f.shard.bytes), 0);
+  assert.equal(Buffer.compare(await blockFromCar(bytes, f.property.cid.toString()), f.property.bytes), 0);
+  assert.equal(await blockFromCar(bytes, f.tables.cid.toString()), undefined);
 });

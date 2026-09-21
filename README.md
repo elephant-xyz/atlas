@@ -50,15 +50,17 @@ Merging a pull request that touches `counties/` runs the publish workflow. The a
 transferred to the registry's own bucket before the index changes, so consumers never see a
 root the registry cannot serve:
 
-1. Every archive and tables root the merge added is exported from the public gateway as CAR
+1. Every archive and tables root the merge added is exported from the IPFS network as CAR,
+   through a list of public gateways tried in order (`https://ipfs.filebase.io`,
+   `https://ipfs.io`, `https://dweb.link`, `https://w3s.link`; `ATLAS_GATEWAYS` overrides),
    and imported into the `elephant-atlas` Filebase bucket with `dag/import`, bounded piece by
    piece: the root block alone, then one shard (or one Parquet part) at a time through a temp
    file, then the root block again with `pin-roots=true` so the recursive pin sees a complete
    DAG. The pin is verified with `pin/ls`. Pinning by CID (`pin/add`) is not used: Filebase does
    not serve a bucket's inner blocks to nodes outside the owning account, its own pinning
    cluster included, so a `pin/add` of another account's root sits in `pinning` forever.
-2. If a root cannot be exported from the gateway (a 404 or 504 that persists through the retry
-   policy), the merge is reverted on `main` by the actions bot, an issue titled
+2. If no gateway can serve a root through the retry policy, the merge is reverted on `main`
+   by the actions bot, an issue titled
    `Publication reverted: <county> <root>` is opened, and neither `index.json` nor the IPNS name
    changes.
 3. Otherwise `index.json` is regenerated and committed, added to the bucket, and the IPNS name
@@ -105,8 +107,8 @@ atlas/
 2. A generator writes the county's page and opens a pull request that touches exactly one
    file under `counties/`. One file per county is what lets many counties publish in parallel
    without conflicts.
-3. CI validates the page against the schema, fetches every changed root from the public
-   gateway, checks the bytes hash to the CID and the blocks have the expected shape, checks the
+3. CI validates the page against the schema, fetches every changed root from the IPFS network
+   through the gateway list, checks the bytes hash to the CID and the blocks have the expected shape, checks the
    archive carries the claimed schema and the tables point back at the archive, and refuses a
    root used twice.
 4. A code owner approves. Merging is publication.
@@ -116,6 +118,9 @@ atlas/
 ## Rules
 
 - Never edit `index.json` by hand; it is generated.
-- A root that the gateway cannot serve at review time is not publishable.
+- The archive must be retrievable from the IPFS network by its root CID at review and at merge;
+  any pinning provider or a publicly reachable node that keeps the pin until the merge is fine;
+  the org copies it onto its own account on merge. Gateways are untrusted: every block kept is
+  hashed against its CID.
 - A `cid` or `tables` root appears once in the whole registry.
 - Atlas records identifiers, never data.

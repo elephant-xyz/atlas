@@ -5,12 +5,14 @@ Atlas records what is published, never the data. A pull request that touches one
 
 ## The promise
 
-A root reaching `index.json` means someone fetched it from a public gateway at review time
+A root reaching `index.json` means someone fetched it from the IPFS network at review time
 and the registry then transferred it to its own bucket: CI fetched the `CountyIndex` block,
 hashed the bytes, checked they match the CID, resolved shard 0 and one property by path,
 checked the property carries the claimed schema, and checked the `CountyTables` root points
-back at the archive. A root the gateway cannot serve is not publishable, whatever the upload
-logs say.
+back at the archive. The archive must be retrievable from the IPFS network by its root CID at
+review and at merge; any pinning provider or a publicly reachable node that keeps the pin until
+the merge is fine; the org copies it onto its own account on merge. A root no gateway can serve
+is not publishable, whatever the upload logs say.
 
 ## From a finished archive to a pull request
 
@@ -61,12 +63,12 @@ logs say.
 
 ## When a publication is reverted
 
-If a root cannot be exported from the public gateway (a 404 or 504 that persists through the
-retry policy), the workflow reverts your merge on `main` with a commit by
+If no public gateway can serve a root through the retry policy, the workflow reverts your merge
+on `main` with a commit by
 `github-actions[bot]` and opens an issue titled `Publication reverted: <STATE>/<county> <root>`
 with the reason and the run link. Your change is gone from `main` again; `index.json` and the
-IPNS name did not change. Re-upload the archive, confirm `https://ipfs.filebase.io/ipfs/<root>`
-serves it, then open a new pull request. If instead the run failed after the transfer (index
+IPNS name did not change. Re-pin the archive, confirm a public gateway serves
+`/ipfs/<root>/shards/0`, then open a new pull request. If instead the run failed after the transfer (index
 commit, IPNS), nothing is reverted; a maintainer re-runs the workflow.
 
 ## Rules
