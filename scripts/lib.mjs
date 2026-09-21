@@ -90,3 +90,9 @@ export function changedGroups(pages, basePages) {
   }
   return out;
 }
+
+/** Groups whose archive cid is not held by any group on the base pages: [{ path, key, ...group }]. */
+export function newArchives(pages, basePages) {
+  const known = rootsOf(basePages ?? []);
+  return changedGroups(pages, basePages).filter((t) => !known.has(t.cid));
+}

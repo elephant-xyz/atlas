@@ -1,1 +1,4 @@
 node_modules/
+elephant-cli.log
+submit_errors.csv
+validation-errors.csv

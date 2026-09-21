@@ -9,7 +9,9 @@ A root reaching `index.json` means someone fetched it from the IPFS network at r
 and the registry then transferred it to its own bucket: CI fetched the `CountyIndex` block,
 hashed the bytes, checked they match the CID, resolved shard 0 and one property by path,
 checked the property carries the claimed schema, and checked the `CountyTables` root points
-back at the archive. The archive must be retrievable from the IPFS network by its root CID at
+back at the archive. A pull request is validated in full: the archive is downloaded and every
+block, link, data-group root, and lexicon schema is checked with `elephant-cli validate`, and
+every check must be clean; merging copies it to the org account. The archive must be retrievable from the IPFS network by its root CID at
 review and at merge; any pinning provider or a publicly reachable node that keeps the pin until
 the merge is fine; the org copies it onto its own account on merge. A root no gateway can serve
 is not publishable, whatever the upload logs say.
@@ -55,8 +57,11 @@ is not publishable, whatever the upload logs say.
    gh pr create --fill
    ```
 
-7. The `validate` check runs the unit tests, the page validator, the gateway spot checks, and
-   the index check. A code owner (`.github/CODEOWNERS`) reviews and approves. Merge.
+7. The `validate` check runs the unit tests, the page validator, the gateway spot checks, the
+   index check, and then `elephant-cli validate` on the full archive of every new `cid`
+   (integrity, root, index, graph, lexicon, orphans: all six must be clean; the error CSV is
+   attached to the run as the `validation-errors` artifact when they are not). A code owner
+   (`.github/CODEOWNERS`) reviews and approves. Merge.
 8. The publish workflow transfers your roots into the registry's Filebase bucket, regenerates
    `index.json`, commits it to `main`, and points the `elephant-atlas` IPNS name at it.
    Consumers read the index through that name.

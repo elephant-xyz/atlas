@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validateRegistry } from '../scripts/validate-entry.mjs';
 import { VERSION } from '../scripts/build-index.mjs';
-import { buildEntries, changedGroups, readPages } from '../scripts/lib.mjs';
+import { buildEntries, changedGroups, newArchives, readPages } from '../scripts/lib.mjs';
 import { CID_A, CID_B, CID_C, CID_D, group, page, registry, stamps } from './helpers.mjs';
 
 const indexFor = (pages) => ({ version: VERSION, generated_from: 'x', counties: buildEntries(pages, stamps()) });
@@ -80,4 +80,15 @@ test('changedGroups picks groups whose cid, schema, or tables differ from main',
   ];
   assert.deepEqual(changedGroups(head, base).map((t) => `${t.path} ${t.key}`), ['counties/FL/lee.json county', 'counties/GA/fulton.json county']);
   assert.equal(changedGroups(head, null).length, 3);
+});
+
+test('newArchives picks groups whose cid no base group held', () => {
+  const at = (path, page) => ({ path, page });
+  const base = [at('counties/FL/lee.json', page())];
+  assert.deepEqual(newArchives(base, base), []);
+  const retabled = [at('counties/FL/lee.json', page({ groups: { county: group({ tables: CID_D }) } }))];
+  assert.deepEqual(newArchives(retabled, base), [], 'a new tables root alone is not a new archive');
+  const superseded = [at('counties/FL/lee.json', page({ groups: { county: group({ cid: CID_C }) } }))];
+  assert.deepEqual(newArchives(superseded, base).map((t) => t.cid), [CID_C]);
+  assert.deepEqual(newArchives(base, null).map((t) => t.cid), [CID_A]);
 });
