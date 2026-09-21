@@ -10,6 +10,10 @@ on:
       gateway_deadline_minutes:
         description: Minutes to keep retrying a gateway export before calling the content unavailable (default 20)
         required: false
+      transfer_all:
+        description: Transfer every root on main again (idempotent), not only the ones this push added
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -49,7 +53,7 @@ jobs:
       # 1-2. Export every root this push published from the public gateway and import it into
       # the elephant-atlas bucket, shard by shard and part by part, then pin the root.
       - id: transfer
-        run: node scripts/transfer-roots.mjs
+        run: node scripts/transfer-roots.mjs ${{ inputs.transfer_all && '--all' || '' }}
 
       # 3. A root the gateway cannot serve is not publishable: revert the push. Pushes made with
       # GITHUB_TOKEN never trigger workflows, so the revert cannot retrigger this job.

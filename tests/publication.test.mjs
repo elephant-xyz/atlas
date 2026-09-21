@@ -63,7 +63,7 @@ const car = async (root, blocks) => {
   return Buffer.concat(chunks);
 };
 
-async function fixture() {
+async function fixture(rpcReply) {
   const property = await block({ label: 'Seed', relationships: {} });
   const shard = await block({ properties: [{ property_cid: property.cid, data_groups: {} }] });
   const index = await block({ label: 'CountyIndex', properties: 1, shards: [shard.cid], version: 1 });
@@ -91,7 +91,7 @@ async function fixture() {
     for await (const _ of reader.blocks()) n++;
     const [root] = await reader.getRoots();
     calls.push(`${path} root=${root} blocks=${n}`);
-    return [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }];
+    return (rpcReply ?? ((root, n) => [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }]))(root, n, path);
   };
   let t = 0;
   const tmp = await mkdtemp(join(tmpdir(), 'atlas-test-'));
@@ -156,6 +156,28 @@ test('a transient gateway error is retried, and a persistent RPC error is not a 
 
   const g = await fixture();
   await assert.rejects(transferArchive(g.index.cid.toString(), { ...g.deps, rpc: async () => { throw new Error('HTTP 401'); } }), (e) => !(e instanceof TransferFailed) && e.message === 'HTTP 401');
+});
+
+test('the log reports the distinct blocks and bytes copied per root', async () => {
+  const f = await fixture();
+  const log = [];
+  await transferArchive(f.index.cid.toString(), { ...f.deps, log: (l) => log.push(l) });
+  const total = f.index.bytes.length + f.shard.bytes.length + f.property.bytes.length;
+  assert.ok(log.includes(`pinned ${f.index.cid}: 3 distinct blocks, ${total} bytes copied`), log.join('\n'));
+});
+
+test('an import that stores fewer blocks than the CAR carried is a TransferFailed', async () => {
+  const f = await fixture((root, n) => [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n - 1, BlockBytesCount: 0 } }]);
+  await assert.rejects(transferArchive(f.index.cid.toString(), f.deps), (e) => e instanceof TransferFailed && /stored 0 blocks, sent 1/.test(e.reason));
+});
+
+test('a pinned import that returns no root (Filebase on an incomplete DAG) is a TransferFailed; on an unpinned import it is an ordinary error', async () => {
+  const f = await fixture((root, n, path) => (path.includes('pin-roots=true') ? [] : [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }]));
+  await assert.rejects(transferArchive(f.index.cid.toString(), f.deps), (e) => e instanceof TransferFailed && /did not pin: the node returned no root; the copy is incomplete/.test(e.reason));
+  const g = await fixture(() => []);
+  await assert.rejects(transferArchive(g.index.cid.toString(), g.deps), (e) => !(e instanceof TransferFailed) && /the node returned no root/.test(e.message));
+  const h = await fixture((root, n, path) => (path.includes('pin-roots=true') ? [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: 'missing block' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }] : [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }]));
+  await assert.rejects(transferArchive(h.index.cid.toString(), h.deps), (e) => e instanceof TransferFailed && /missing block; the copy is incomplete/.test(e.reason));
 });
 
 test('a root that decodes but is not a CountyIndex is a TransferFailed', async () => {

@@ -7,18 +7,24 @@
 // so the recursive pin sees a complete DAG, verified with pin/ls. pin/add is never called:
 // Filebase does not serve a bucket's inner blocks to nodes outside the owning account.
 //
+// The copy is proven complete before it counts: every dag/import must report exactly the
+// blocks the CAR carried, the final pinned import must return the root with no pin error
+// (Filebase returns nothing and pins nothing when a child is missing), and pin/ls must list
+// the root recursively. Any of those failing is a publication failure.
+//
 // Exit 1 with GITHUB_OUTPUT failed_root/failed_reason/county when no gateway can serve a
-// root (the workflow reverts); exit 2 on any other error (credentials, RPC; re-dispatch).
+// root or the copy is incomplete (the workflow reverts); exit 2 on any other error
+// (credentials, RPC; re-dispatch). --all transfers every root on the page, not only new ones.
 //
 // TODO: unpin roots of withdrawn groups; nothing is unpinned yet.
-import { appendFileSync, createWriteStream, openAsBlob } from 'node:fs';
+import { appendFileSync, createWriteStream, openAsBlob, readFileSync } from 'node:fs';
 import { mkdtemp, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { CarWriter } from '@ipld/car';
+import { CarReader, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
@@ -99,8 +105,28 @@ async function singleBlockCar(cid, bytes) {
   return new Blob([Buffer.concat(chunks)], { type: 'application/vnd.ipld.car' });
 }
 
-/** dag/import a CAR and require its root to be `expect` with no pin error. The RPC is retried; a persistent RPC error is not a TransferFailed. */
-async function importCar(blob, expect, pinRoots, d) {
+/** Distinct blocks and bytes in a CAR, without keeping the blocks. */
+async function carBlocks(bytes, tally) {
+  const reader = await CarReader.fromBytes(bytes);
+  let count = 0;
+  for await (const { cid, bytes: b } of reader.blocks()) {
+    count++;
+    const key = cid.toString();
+    if (!tally.seen.has(key)) {
+      tally.seen.add(key);
+      tally.bytes += b.length;
+    }
+  }
+  return count;
+}
+
+/**
+ * dag/import a CAR of `count` blocks and require the node to report exactly that many blocks
+ * and, when pinning, the root with no pin error. Filebase answers a pinned import of an
+ * incomplete DAG with an empty body and no pin, so a missing Root on the pinned import means
+ * the copy is incomplete: TransferFailed. A persistent RPC error is not a TransferFailed.
+ */
+async function importCar(root, blob, expect, count, pinRoots, d) {
   const form = new FormData();
   form.append('file', blob, 'import.car');
   let lines;
@@ -114,22 +140,27 @@ async function importCar(blob, expect, pinRoots, d) {
       await d.sleep(10_000 * attempt);
     }
   }
-  const root = lines.find((l) => l.Root)?.Root;
-  const got = root?.Cid?.['/'];
-  if (got !== expect) throw new Error(`dag/import: root ${got}, expected ${expect}`);
-  if (root.PinErrorMsg) throw new Error(`dag/import ${expect}: ${root.PinErrorMsg}`);
+  const rootLine = lines.find((l) => l.Root)?.Root;
+  const got = rootLine?.Cid?.['/'];
+  if (got !== expect || rootLine.PinErrorMsg) {
+    const why = got === undefined ? 'the node returned no root' : got !== expect ? `root ${got}, expected ${expect}` : rootLine.PinErrorMsg;
+    if (pinRoots) throw new TransferFailed(root, `pinned import of ${expect} did not pin: ${why}; the copy is incomplete`);
+    throw new Error(`dag/import ${expect}: ${why}`);
+  }
   const stats = lines.find((l) => l.Stats)?.Stats;
-  return stats ? `${stats.BlockCount} blocks, ${stats.BlockBytesCount} bytes` : 'no stats';
+  if (!stats || stats.BlockCount !== count) throw new TransferFailed(root, `dag/import of ${expect} stored ${stats?.BlockCount ?? 'no'} blocks, sent ${count}`);
+  return `${stats.BlockCount} blocks, ${stats.BlockBytesCount} bytes`;
 }
 
-/** Export <path>?format=car to a temp file, import it (pin-roots=false), delete the file. */
-async function transferSubtree(root, path, expect, d) {
+/** Export <path>?format=car to a temp file, count its blocks, import it (pin-roots=false), delete the file. */
+async function transferSubtree(root, path, expect, tally, d) {
   const res = await gatewayGet(root, `${path}?format=car`, 'application/vnd.ipld.car', d);
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
   const file = join(d.tmp, `${expect}.car`);
   await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
   try {
-    d.log(`imported ${path}: ${await importCar(await openAsBlob(file), expect, false, d)}`);
+    const count = await carBlocks(readFileSync(file), tally);
+    d.log(`imported ${path}: ${await importCar(root, await openAsBlob(file), expect, count, false, d)}`);
   } finally {
     await unlink(file).catch(() => {});
   }
@@ -154,12 +185,13 @@ export async function transferArchive(root, deps = {}) {
   const index = decode(bytes);
   if (index.label !== 'CountyIndex' || !Array.isArray(index.shards)) throw new TransferFailed(root, 'not a CountyIndex block');
   const block = await singleBlockCar(root, bytes);
+  const tally = { seen: new Set([root]), bytes: bytes.length };
   d.log(`archive ${root}: ${index.shards.length} shard(s), ${index.properties} properties`);
-  d.log(`imported ${root} (root block): ${await importCar(block, root, false, d)}`);
-  for (let i = 0; i < index.shards.length; i++) await transferSubtree(root, `${root}/shards/${i}`, index.shards[i].toString(), d);
-  d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(block, root, true, d)}`);
+  d.log(`imported ${root} (root block): ${await importCar(root, block, root, 1, false, d)}`);
+  for (let i = 0; i < index.shards.length; i++) await transferSubtree(root, `${root}/shards/${i}`, index.shards[i].toString(), tally, d);
+  d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
   await requirePinned(root, d);
-  d.log(`pinned ${root}`);
+  d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);
 }
 
 export async function transferTables(root, deps = {}) {
@@ -168,21 +200,23 @@ export async function transferTables(root, deps = {}) {
   const tables = decode(bytes);
   if (tables.label !== 'CountyTables' || !tables.tables) throw new TransferFailed(root, 'not a CountyTables block');
   const block = await singleBlockCar(root, bytes);
+  const tally = { seen: new Set([root]), bytes: bytes.length };
   const names = Object.keys(tables.tables).sort();
   d.log(`tables ${root}: ${names.length} table(s), ${names.reduce((n, t) => n + tables.tables[t].parts.length, 0)} part(s)`);
-  d.log(`imported ${root} (root block): ${await importCar(block, root, false, d)}`);
+  d.log(`imported ${root} (root block): ${await importCar(root, block, root, 1, false, d)}`);
   for (const name of names) {
     const parts = tables.tables[name].parts;
-    for (let i = 0; i < parts.length; i++) await transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, parts[i].cid.toString(), d);
+    for (let i = 0; i < parts.length; i++) await transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, parts[i].cid.toString(), tally, d);
   }
-  d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(block, root, true, d)}`);
+  d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
   await requirePinned(root, d);
-  d.log(`pinned ${root}`);
+  d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied (the county_root link is pinned by the archive transfer)`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.cwd();
-  const targets = rootsToTransfer(pagesAt('HEAD', root), pagesAt('HEAD~1', root) ?? []);
+  const all = process.argv.includes('--all');
+  const targets = rootsToTransfer(pagesAt('HEAD', root), all ? [] : (pagesAt('HEAD~1', root) ?? []));
   if (!targets.length) console.log('no new roots to transfer');
   for (const t of targets) {
     console.log(`transferring ${t.county} ${t.key} ${t.cid}`);
