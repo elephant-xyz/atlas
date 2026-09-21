@@ -5,6 +5,9 @@
   "runs": [
     {
       "run": "2026-09-21-a",
+      "groups": [
+        "county"
+      ],
       "county_root": "baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda",
       "tables_root": "baguqeerasxkelzdxtkgdrii54zoanz3t7qznf72niikqmiyer4dlb2k2xfhq",
       "blocks": 133,
@@ -16,8 +19,8 @@
       },
       "node": "filebase",
       "evidence": {
-        "car_upload": "/tmp/wt9-smoke/upload-filebase.json",
-        "tables_upload": "/tmp/atlas-smoke/tables-upload-filebase.json"
+        "car_upload": "evidence/FL/smoke-fl/2026-09-21-a/car-upload.json",
+        "tables_upload": "evidence/FL/smoke-fl/2026-09-21-a/tables-upload.json"
       },
       "status": "withdrawn"
     }

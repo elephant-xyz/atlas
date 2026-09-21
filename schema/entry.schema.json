@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/elephant-xyz/atlas/schema/entry.schema.json",
-  "title": "Atlas county page",
+  "$id": "https://github.com/elephant-xyz/atlas/schema/v2/entry.schema.json",
+  "title": "Atlas county page (version 2)",
   "description": "One page per county: every run ever published for it, newest last, and a `latest` pointer.",
   "type": "object",
   "additionalProperties": false,
@@ -56,6 +56,7 @@
       "additionalProperties": false,
       "required": [
         "run",
+        "groups",
         "county_root",
         "blocks",
         "properties",
@@ -68,6 +69,16 @@
       "properties": {
         "run": {
           "$ref": "#/definitions/runId"
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
+          },
+          "description": "data-group keys this run carries (`county`, `seed`, `property_improvement`, ...)"
         },
         "county_root": {
           "$ref": "#/definitions/cid",
@@ -119,16 +130,13 @@
           "additionalProperties": false,
           "properties": {
             "car_upload": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/definitions/evidenceRef"
             },
             "tables_upload": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/definitions/evidenceRef"
             },
             "validation": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/definitions/evidenceRef"
             }
           }
         },
@@ -140,6 +148,11 @@
           ]
         }
       }
+    },
+    "evidenceRef": {
+      "type": "string",
+      "pattern": "^(b[a-z2-7]{50,}|[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*)$",
+      "description": "a CIDv1 or a repository-relative path; never an absolute filesystem path"
     }
   }
 }

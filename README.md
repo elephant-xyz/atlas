@@ -12,6 +12,7 @@ Status: scaffold. Nothing here is consumed yet.
 |---|---|
 | `county`, `state`, `fips` | the county, keyed the same way everywhere (`lee`, `FL`, `12071`) |
 | `run` | ISO date plus a short suffix; runs are append-only and ordered |
+| `groups` | the data-group keys the run carries (`county`, `seed`, `property_improvement`, ...); several when mined together, one when a source refreshes on its own cadence |
 | `county_root` | CID of the `CountyIndex` block that roots the county CAR |
 | `tables_root` | CID of the `CountyTables` block that roots the Parquet part set |
 | `blocks`, `properties`, `parts` | counts reported by `hash`, `validate`, and `export-tables` |
@@ -20,6 +21,29 @@ Status: scaffold. Nothing here is consumed yet.
 | `node` | where it was pinned: `filebase` or a named node |
 | `evidence` | paths or CIDs of the upload summaries and the validation report |
 | `status` | `published`, `superseded`, or `withdrawn` |
+
+## Index
+
+`index.json` is what consumers read. Version 2 holds one entry per county with at least one
+published run; `groups` maps each data-group key to the newest run with `status: published`
+that carries it. A withdrawn or superseded run never appears; `tables_root` is omitted when the
+run has none.
+
+```json
+{
+  "version": 2,
+  "generated_from": "<main sha>",
+  "counties": [
+    { "county": "lee", "state": "FL", "fips": "12071",
+      "groups": {
+        "county": { "run": "2026-09-21-a", "county_root": "...", "tables_root": "...", "properties": 511695 }
+      } }
+  ]
+}
+```
+
+The index holds roots and counts only. `cli`, `lexicon`, `node`, `evidence`, `blocks`, and
+`parts` stay on the county pages.
 
 ## Layout
 

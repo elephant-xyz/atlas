@@ -15,6 +15,9 @@ export function readIndex(root) {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
 }
 
+export const VERSION = 2;
+const body = (index) => JSON.stringify({ version: index?.version, counties: index?.counties });
+
 export function render(index) {
   return JSON.stringify(index, null, 2) + '\n';
 }
@@ -23,19 +26,18 @@ export function render(index) {
 export function checkIndex(root, pages) {
   const committed = readIndex(root);
   if (!committed) return ['index.json: missing; run `npm run index`'];
-  const expected = buildEntries(pages);
-  if (JSON.stringify(committed.counties) !== JSON.stringify(expected)) {
+  if (body(committed) !== body({ version: VERSION, counties: buildEntries(pages) })) {
     return ['index.json: differs from a regeneration; never edit it by hand, it is generated on merge'];
   }
   return [];
 }
 
 export function writeIndex(root) {
-  const entries = buildEntries(readPages(root));
+  const next = { version: VERSION, counties: buildEntries(readPages(root)) };
   const current = readIndex(root);
-  const unchanged = current && JSON.stringify(current.counties) === JSON.stringify(entries);
+  const unchanged = current && body(current) === body(next);
   const sha = unchanged ? current.generated_from : execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  writeFileSync(`${root}/index.json`, render({ generated_from: sha, counties: entries }));
+  writeFileSync(`${root}/index.json`, render({ version: VERSION, generated_from: sha, ...next }));
   return !unchanged;
 }
 

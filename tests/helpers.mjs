@@ -9,6 +9,7 @@ export const CID_C = 'baguqeerad32anku3fwoiex7gw4se6kybbujphmxmea3g2ztnytaatdpb4
 export function run(overrides = {}) {
   return {
     run: '2026-09-21-a',
+    groups: ['county'],
     county_root: CID_A,
     tables_root: CID_B,
     blocks: 133,
@@ -17,7 +18,7 @@ export function run(overrides = {}) {
     cli: '994f96356c76b6697fb46dbe261d96b7a292c956',
     lexicon: { manifest_url: 'https://lexicon.elephant.xyz/api/manifest' },
     node: 'filebase',
-    evidence: { car_upload: 'upload.json', tables_upload: 'tables.json' },
+    evidence: { car_upload: CID_C },
     status: 'published',
     ...overrides,
   };
@@ -27,7 +28,7 @@ export function page(overrides = {}) {
   return { county: 'lee', state: 'FL', fips: '12071', latest: '2026-09-21-a', runs: [run()], ...overrides };
 }
 
-/** Write a registry into a temp dir: files is { 'counties/FL/lee.json': obj, 'index.json': obj }. */
+/** Write a registry into a temp dir: files is { 'counties/FL/lee.json': obj, 'index.json': obj, 'evidence/x.json': obj }. */
 export function registry(files) {
   const root = mkdtempSync(join(tmpdir(), 'atlas-'));
   for (const [path, value] of Object.entries(files)) {

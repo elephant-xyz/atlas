@@ -29,8 +29,10 @@ publishable, whatever the upload logs say.
    its `status` to `withdrawn`; if nothing on the page is publishable, remove `latest`.
    `run` is the ISO date plus a short suffix (`2026-09-21-a`). Counts come from the CLI output:
    `blocks` from `hash`, `properties` from `validate`, `parts` from `export-tables`. `cli` is
-   `git rev-parse HEAD` in the `elephant-cli` checkout that produced the run. `evidence` holds the
-   paths or CIDs of the upload summaries and the validation report. See
+   `git rev-parse HEAD` in the `elephant-cli` checkout that produced the run. `groups` lists the
+   data-group keys the run carries. `evidence` holds the upload summaries and the validation
+   report as CIDs or as repository-relative paths (commit the files under
+   `evidence/<STATE>/<county>/<run>/`); absolute filesystem paths are rejected. See
    `schema/entry.schema.json` for every field.
 4. Check locally before pushing. `verify` only fetches roots that are new relative to
    `origin/main`; `--all` refetches everything.
@@ -61,7 +63,8 @@ publishable, whatever the upload logs say.
 ## Rules
 
 - One county file per pull request. That is what lets counties publish in parallel.
-- A `county_root` or `tables_root` appears once in the whole registry.
+- A `county_root` or `tables_root` appears once among the runs that are not withdrawn. Withdrawing a run releases its roots.
 - `latest` must name a run on the page and must not be withdrawn.
 - A run already on `main` may only change `status`. To fix anything else, append a new run and supersede the old one.
 - Never edit `index.json` by hand and never rewrite a run in place.
+- `evidence` values are CIDs or repository-relative paths, never absolute paths.

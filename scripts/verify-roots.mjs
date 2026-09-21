@@ -79,7 +79,7 @@ export function newRoots(pages, basePages) {
     for (const run of page.runs) {
       if (run.status === 'withdrawn') continue;
       for (const key of ['county_root', 'tables_root']) {
-        if (run[key] && !known.has(run[key])) out.push({ path, run: run.run, key, cid: run[key] });
+        if (run[key] && !known.has(run[key])) out.push({ path, run: run.run, groups: run.groups, key, cid: run[key] });
       }
     }
   }
@@ -93,7 +93,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!targets.length) console.log('no new roots to verify');
   let failed = 0;
   for (const t of targets) {
-    console.log(`verifying ${t.path} run ${t.run} ${t.key} ${t.cid}`);
+    console.log(`verifying ${t.path} run ${t.run} groups [${t.groups.join(', ')}] ${t.key} ${t.cid}`);
     try {
       await (t.key === 'county_root' ? verifyCountyRoot(t.cid) : verifyTablesRoot(t.cid));
       console.log(`ok ${t.key} ${t.cid}`);
