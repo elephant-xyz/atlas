@@ -34,20 +34,30 @@ export function pagesAt(ref, root) {
     .map((path) => ({ path, page: JSON.parse(git('show', `${ref}:${path}`)) }));
 }
 
-/** The flat list consumers read: the `latest` run of every page, sorted by state then county. */
+/**
+ * The list consumers read: one entry per county with a published run; `groups` maps each
+ * data-group key to the newest published run carrying it (roots and property count only).
+ */
 export function buildEntries(pages) {
-  return pages
-    .filter(({ page }) => page.latest)
-    .map(({ page }) => {
-      const run = page.runs.find((r) => r.run === page.latest);
-      return { county: page.county, state: page.state, fips: page.fips, ...run };
-    })
-    .sort((a, b) => a.state.localeCompare(b.state) || a.county.localeCompare(b.county));
+  const entries = [];
+  for (const { page } of pages) {
+    const groups = {};
+    for (const run of page.runs) {
+      if (run.status !== 'published') continue;
+      for (const key of run.groups ?? []) { // ponytail: pre-v2 base pages have no groups; only matters during a schema migration
+        groups[key] = { run: run.run, county_root: run.county_root, ...(run.tables_root && { tables_root: run.tables_root }), properties: run.properties };
+      }
+    }
+    const keys = Object.keys(groups).sort();
+    if (keys.length) entries.push({ county: page.county, state: page.state, fips: page.fips, groups: Object.fromEntries(keys.map((k) => [k, groups[k]])) });
+  }
+  return entries.sort((a, b) => a.state.localeCompare(b.state) || a.county.localeCompare(b.county));
 }
 
+/** Roots held by non-withdrawn runs. A withdrawn run releases its roots: they may be published again. */
 export function rootsOf(pages) {
   const roots = new Set();
-  for (const { page } of pages) for (const run of page.runs) for (const k of ['county_root', 'tables_root']) if (run[k]) roots.add(run[k]);
+  for (const { page } of pages) for (const run of page.runs) if (run.status !== 'withdrawn') for (const k of ['county_root', 'tables_root']) if (run[k]) roots.add(run[k]);
   return roots;
 }
 

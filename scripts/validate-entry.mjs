@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Validate every county page under counties/ and the committed index.json.
 // Prints one line per problem and exits 1 if there are any.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
 import { CID } from 'multiformats/cid';
@@ -35,6 +36,11 @@ export function validateRegistry(root, basePages) {
       ids.add(run.run);
       if (run.run <= prev) say(`run ${run.run} is not after ${prev}; runs must be ascending`);
       prev = run.run;
+      for (const [kind, ref] of Object.entries(run.evidence)) {
+        if (/^b[a-z2-7]{50,}$/.test(ref)) continue;
+        if (isAbsolute(ref) || ref.split('/').includes('..')) say(`run ${run.run} evidence.${kind} must be a CID or a repository-relative path`);
+        else if (!existsSync(join(root, ref))) say(`run ${run.run} evidence.${kind} ${ref} is not in the repository`);
+      }
       for (const key of ['county_root', 'tables_root']) {
         const cid = run[key];
         if (!cid) continue;
@@ -43,6 +49,7 @@ export function validateRegistry(root, basePages) {
         } catch {
           say(`run ${run.run} ${key} is not a valid CID`);
         }
+        if (run.status === 'withdrawn') continue; // a withdrawn run releases its roots
         const where = `${path} run ${run.run} ${key}`;
         if (roots.has(cid)) say(`run ${run.run} ${key} ${cid} already used by ${roots.get(cid)}`);
         else roots.set(cid, where);
@@ -65,6 +72,7 @@ export function checkAppendOnly(pages, basePages) {
   const current = new Map(pages.map(({ path, page }) => [path, page]));
   const frozen = ({ status, ...rest }) => JSON.stringify(rest); // ponytail: key order counts as a change
   for (const { path, page: base } of basePages) {
+    if (!validateSchema(base)) continue; // schema migration: the base predates the current schema, so the pull request must rewrite it
     const now = current.get(path);
     if (!now) {
       problems.push(`${path}: page was deleted; pages are never removed`);

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validateRegistry } from '../scripts/validate-entry.mjs';
+import { VERSION } from '../scripts/build-index.mjs';
 import { buildEntries, readPages } from '../scripts/lib.mjs';
 import { CID_C, page, registry, run } from './helpers.mjs';
 
-const indexFor = (pages) => ({ generated_from: 'x', counties: buildEntries(pages) });
+const indexFor = (pages) => ({ version: VERSION, generated_from: 'x', counties: buildEntries(pages) });
 const check = (files) => {
   const root = registry(files);
   return validateRegistry(root, readPages(root));
@@ -90,4 +91,42 @@ test('a page whose only run is withdrawn passes when latest is absent', () => {
   const lee = page({ runs: [run({ status: 'withdrawn' })] });
   delete lee.latest;
   assert.deepEqual(check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) }), []);
+});
+
+test('groups must be non-empty, snake_case, unique', () => {
+  for (const groups of [[], ['County'], ['county', 'county'], ['property-improvement']]) {
+    const lee = page({ runs: [run({ groups })] });
+    const problems = check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) });
+    assert.ok(problems.some((p) => p.includes('/runs/0/groups')), JSON.stringify(groups) + ' -> ' + problems.join('\n'));
+  }
+});
+
+test('evidence must be a CID or a repository-relative path that exists', () => {
+  const abs = page({ runs: [run({ evidence: { car_upload: '/tmp/upload.json' } })] });
+  let problems = check({ 'counties/FL/lee.json': abs, 'index.json': indexFor([{ page: abs }]) });
+  assert.ok(problems.some((p) => p.includes('/runs/0/evidence/car_upload')), problems.join('\n'));
+
+  const escaping = page({ runs: [run({ evidence: { car_upload: 'evidence/../../x.json' } })] });
+  problems = check({ 'counties/FL/lee.json': escaping, 'index.json': indexFor([{ page: escaping }]) });
+  assert.ok(problems.some((p) => p.includes('must be a CID or a repository-relative path')), problems.join('\n'));
+
+  const missing = page({ runs: [run({ evidence: { car_upload: 'evidence/FL/lee/x.json' } })] });
+  problems = check({ 'counties/FL/lee.json': missing, 'index.json': indexFor([{ page: missing }]) });
+  assert.deepEqual(problems, ['counties/FL/lee.json: run 2026-09-21-a evidence.car_upload evidence/FL/lee/x.json is not in the repository']);
+
+  const present = page({ runs: [run({ evidence: { car_upload: 'evidence/FL/lee/x.json' } })] });
+  assert.deepEqual(check({ 'counties/FL/lee.json': present, 'index.json': indexFor([{ page: present }]), 'evidence/FL/lee/x.json': {} }), []);
+});
+
+test('a withdrawn run releases its roots for a later run', () => {
+  const lee = page({ latest: '2026-09-22-a', runs: [run({ status: 'withdrawn' }), run({ run: '2026-09-22-a' })] });
+  assert.deepEqual(check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) }), []);
+});
+
+test('a page that predates the schema may be migrated', () => {
+  const v1 = page();
+  delete v1.runs[0].groups;
+  const migrated = page({ runs: [run({ blocks: 999 })] }); // any rewrite is accepted while the base fails the schema
+  const root = registry({ 'counties/FL/lee.json': migrated, 'index.json': indexFor([{ page: v1 }]) });
+  assert.deepEqual(validateRegistry(root, [{ path: 'counties/FL/lee.json', page: v1 }]), []);
 });
