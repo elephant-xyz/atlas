@@ -85,3 +85,9 @@ test('a run already on main may change status but nothing else', () => {
   const root3 = registry({ 'index.json': indexFor(base) });
   assert.deepEqual(validateRegistry(root3, base), ['counties/FL/lee.json: page was deleted; pages are never removed']);
 });
+
+test('a page whose only run is withdrawn passes when latest is absent', () => {
+  const lee = page({ runs: [run({ status: 'withdrawn' })] });
+  delete lee.latest;
+  assert.deepEqual(check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) }), []);
+});
