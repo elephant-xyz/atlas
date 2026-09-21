@@ -1,0 +1,17 @@
+{
+  "name": "atlas",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test 'tests/*.test.mjs'",
+    "validate": "node scripts/validate-entry.mjs",
+    "verify": "node scripts/verify-roots.mjs",
+    "index": "node scripts/build-index.mjs"
+  },
+  "dependencies": {
+    "@ipld/dag-json": "^11.0.1",
+    "ajv": "^8.20.0",
+    "multiformats": "^14.0.5"
+  }
+}

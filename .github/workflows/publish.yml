@@ -1,0 +1,40 @@
+name: publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - counties/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: publish
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run index
+      # Publication is a merge that already passed validation; this job never validates.
+      # The push below uses GITHUB_TOKEN. Pushes made with GITHUB_TOKEN never trigger workflows,
+      # so the bot commit cannot retrigger this job (and it only touches index.json, which is
+      # outside the paths filter anyway).
+      - name: Commit index.json if it changed
+        run: |
+          if git diff --quiet -- index.json; then
+            echo "index.json unchanged, nothing to publish"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.json
+          git commit -m "Publish index.json from ${GITHUB_SHA}"
+          git push

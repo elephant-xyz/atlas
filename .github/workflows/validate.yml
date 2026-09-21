@@ -1,0 +1,31 @@
+name: validate
+
+on:
+  pull_request:
+    paths:
+      - counties/**
+      - schema/**
+      - scripts/**
+      - tests/**
+      - index.json
+      - package.json
+      - package-lock.json
+      - .github/workflows/validate.yml
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # origin/main is the baseline for "new root" and for the index check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run validate
+      - run: npm run verify
+      - run: npm run index -- --check
+      # TODO: nightly job doing full CAR validation of every published root (every block, every link).
