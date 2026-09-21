@@ -71,3 +71,17 @@ test('hand-edited index fails', () => {
   const problems = check({ 'counties/FL/lee.json': lee, 'index.json': index });
   assert.deepEqual(problems, ['index.json: differs from a regeneration; never edit it by hand, it is generated on merge']);
 });
+
+test('a run already on main may change status but nothing else', () => {
+  const base = [{ path: 'counties/FL/lee.json', page: page() }];
+  const superseded = page({ runs: [run({ status: 'superseded' })] });
+  const root = registry({ 'counties/FL/lee.json': superseded, 'index.json': indexFor(base) });
+  assert.deepEqual(validateRegistry(root, base), []);
+
+  const edited = page({ runs: [run({ blocks: 134 })] });
+  const root2 = registry({ 'counties/FL/lee.json': edited, 'index.json': indexFor(base) });
+  assert.deepEqual(validateRegistry(root2, base), ['counties/FL/lee.json: run 2026-09-21-a was edited in place; only status may change, supersede it instead']);
+
+  const root3 = registry({ 'index.json': indexFor(base) });
+  assert.deepEqual(validateRegistry(root3, base), ['counties/FL/lee.json: page was deleted; pages are never removed']);
+});
