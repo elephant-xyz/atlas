@@ -6,11 +6,25 @@ on:
     paths:
       - counties/**
   workflow_dispatch:
+    inputs:
+      pin_limit_minutes:
+        description: Minutes to wait for each root to reach `pinned` (default 45)
+        required: false
 
 permissions:
   contents: write
+  issues: write
 
 concurrency: publish
+
+env:
+  FILEBASE_ACCESS_KEY: ${{ secrets.ELEPHANT_FILEBASE_ACCESS_KEY }}
+  FILEBASE_SECRET_KEY: ${{ secrets.ELEPHANT_FILEBASE_SECRET_KEY }}
+  FILEBASE_BUCKET: elephant-atlas
+  ATLAS_IPNS_KEY: elephant-atlas
+  ATLAS_IPNS_ID: k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04
+  # Dispatch input, else the repository variable (set it to shorten a test), else 45 minutes.
+  ATLAS_PIN_LIMIT_MINUTES: ${{ inputs.pin_limit_minutes || vars.ATLAS_PIN_LIMIT_MINUTES || '45' }}
 
 jobs:
   publish:
@@ -18,25 +32,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # published_at is derived from main's history
+          fetch-depth: 0 # HEAD~1 for the root diff, main's history for published_at
+      - name: Mask the Filebase token
+        run: echo "::add-mask::$(printf '%s:%s:%s' "$FILEBASE_ACCESS_KEY" "$FILEBASE_SECRET_KEY" "$FILEBASE_BUCKET" | base64 -w0)"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run index
-      # Publication is a merge that already passed validation; this job never validates.
-      # The push below uses GITHUB_TOKEN. Pushes made with GITHUB_TOKEN never trigger workflows,
-      # so the bot commit cannot retrigger this job (and it only touches index.json, which is
-      # outside the paths filter anyway).
-      - name: Commit index.json if it changed
+      - name: Commit as the actions bot
         run: |
-          if git diff --quiet -- index.json; then
-            echo "index.json unchanged, nothing to publish"
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.json
-          git commit -m "Publish index.json from ${GITHUB_SHA}"
-          git push
+
+      # Publication is a merge that already passed validation; this job never validates.
+      # 1-2. Pin every root this push published and wait for `pinned`.
+      - id: pin
+        run: node scripts/pin-roots.mjs
+
+      # 3. A root that failed to pin or timed out is not publishable: revert the push. Pushes made
+      # with GITHUB_TOKEN never trigger workflows, so the revert cannot retrigger this job.
+      # index.json and the IPNS name are untouched on this path.
+      - name: Revert the publication
+        if: failure() && steps.pin.outputs.failed_root != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if git rev-parse -q --verify HEAD^2 >/dev/null; then git revert --no-edit -m 1 HEAD; else git revert --no-edit HEAD; fi
+          git push origin HEAD:main
+          REVERT=$(git rev-parse HEAD)
+          gh issue create \
+            --title "Publication reverted: ${{ steps.pin.outputs.county }} ${{ steps.pin.outputs.failed_root }}" \
+            --body "$(printf 'The publish workflow could not pin `%s` on the `elephant-atlas` bucket.\n\n- status: `%s`\n- reverted in %s\n- run: %s\n\nRe-upload or re-pin the root, confirm a public gateway serves it, then open a new pull request.' \
+              "${{ steps.pin.outputs.failed_root }}" "${{ steps.pin.outputs.failed_status }}" "$REVERT" "$RUN_URL")"
+          echo "Reverted ${{ github.sha }} in $REVERT" >> "$GITHUB_STEP_SUMMARY"
+
+      # 4. Regenerate index.json, commit it if it changed, add it to the bucket, point the IPNS
+      # name at it, and require the gateway to serve the committed bytes. A failure here is not
+      # a revert; re-run the workflow (workflow_dispatch) and it finishes idempotently.
+      - run: node scripts/publish-index.mjs
