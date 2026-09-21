@@ -54,7 +54,28 @@ export function validateRegistry(root, basePages) {
       else if (latest.status === 'withdrawn') say(`latest ${page.latest} is withdrawn`);
     }
   }
+  if (basePages) problems.push(...checkAppendOnly(pages, basePages));
   problems.push(...checkIndex(root, basePages ?? pages));
+  return problems;
+}
+
+/** Runs already on main are history: they may change `status`, nothing else, and never disappear. */
+export function checkAppendOnly(pages, basePages) {
+  const problems = [];
+  const current = new Map(pages.map(({ path, page }) => [path, page]));
+  const frozen = ({ status, ...rest }) => JSON.stringify(rest); // ponytail: key order counts as a change
+  for (const { path, page: base } of basePages) {
+    const now = current.get(path);
+    if (!now) {
+      problems.push(`${path}: page was deleted; pages are never removed`);
+      continue;
+    }
+    for (const baseRun of base.runs) {
+      const run = now.runs?.find((r) => r.run === baseRun.run);
+      if (!run) problems.push(`${path}: run ${baseRun.run} was removed; runs are append-only`);
+      else if (frozen(run) !== frozen(baseRun)) problems.push(`${path}: run ${baseRun.run} was edited in place; only status may change, supersede it instead`);
+    }
+  }
   return problems;
 }
 

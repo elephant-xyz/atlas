@@ -63,4 +63,5 @@ publishable, whatever the upload logs say.
 - One county file per pull request. That is what lets counties publish in parallel.
 - A `county_root` or `tables_root` appears once in the whole registry.
 - `latest` must name a run on the page and must not be withdrawn.
+- A run already on `main` may only change `status`. To fix anything else, append a new run and supersede the old one.
 - Never edit `index.json` by hand and never rewrite a run in place.
