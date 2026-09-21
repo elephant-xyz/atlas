@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Regenerate index.json from the newest non-withdrawn run per data group of every county page.
+// Regenerate index.json from every group of every county page.
 //   build-index          write index.json (exit 0 whether or not it changed)
 //   build-index --check  exit 1 if the committed index.json differs from a regeneration
 //
@@ -16,7 +16,7 @@ export function readIndex(root) {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
 }
 
-export const VERSION = 4;
+export const VERSION = 5;
 const body = (index) => JSON.stringify({ version: index?.version, counties: index?.counties });
 
 export function render(index) {
