@@ -16,7 +16,7 @@ export function readIndex(root) {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
 }
 
-export const VERSION = 5;
+export const VERSION = 1;
 const body = (index) => JSON.stringify({ version: index?.version, counties: index?.counties });
 
 export function render(index) {

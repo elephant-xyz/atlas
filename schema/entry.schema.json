@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/elephant-xyz/atlas/schema/v5/entry.schema.json",
-  "title": "Atlas county page (version 5)",
+  "$id": "https://github.com/elephant-xyz/atlas/schema/v1/entry.schema.json",
+  "title": "Atlas county page",
   "description": "The current state of one county: one archive per data group. History lives in git.",
   "type": "object",
   "additionalProperties": false,
