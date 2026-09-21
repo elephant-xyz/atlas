@@ -1,4 +1,4 @@
-# Oracle registry
+# Elephant data registry
 
 The single list of every published Elephant county archive. One JSON file per county,
 one entry per run, written only through pull requests. A merge is the act of
@@ -24,7 +24,7 @@ Status: scaffold. Nothing here is consumed yet.
 ## Layout
 
 ```text
-oracle-registry/
+data-registry/
 ├── README.md
 ├── schema/
 │   └── entry.schema.json           JSON Schema every county file must satisfy
