@@ -10,10 +10,11 @@
     "validate": "node scripts/validate-entry.mjs",
     "verify": "node scripts/verify-roots.mjs",
     "index": "node scripts/build-index.mjs",
-    "pin": "node scripts/pin-roots.mjs",
-    "publish": "node scripts/publish-index.mjs"
+    "publish": "node scripts/publish-index.mjs",
+    "transfer": "node scripts/transfer-roots.mjs"
   },
   "dependencies": {
+    "@ipld/car": "^5.4.7",
     "@ipld/dag-json": "^11.0.1",
     "ajv": "^8.20.0",
     "multiformats": "^14.0.5"

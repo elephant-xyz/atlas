@@ -19,7 +19,7 @@ const git = (root, ...args) => execFileSync('git', ['-C', root, ...args], { enco
 
 async function resolved() {
   try {
-    return (await rpc(`name/resolve?arg=/ipns/${ID}&nocache=true`)).Path;
+    return (await rpc(`name/resolve?arg=/ipns/${ID}&nocache=true`))[0]?.Path;
   } catch (e) {
     console.log(`name/resolve: ${e.message}`);
     return undefined;
@@ -33,7 +33,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   const form = new FormData();
   form.append('file', new Blob([bytes], { type: 'application/json' }), 'index.json');
-  const { Hash: cid } = await rpc('add?pin=true&cid-version=1&raw-leaves=true', { body: form });
+  const [{ Hash: cid }] = await rpc('add?pin=true&cid-version=1&raw-leaves=true', { body: form });
   console.log(`index.json ${changed ? 'updated' : 'unchanged'}; cid ${cid}`);
 
   if (changed) {
@@ -47,7 +47,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if ((await resolved()) === want) {
     console.log(`ipns ${ID} already resolves to ${want}`);
   } else {
-    const published = await rpc(`name/publish?arg=${want}&key=${KEY}`, { timeoutMs: 180_000 });
+    const [published] = await rpc(`name/publish?arg=${want}&key=${KEY}`, { timeoutMs: 180_000 });
     console.log(`name/publish: ${JSON.stringify(published)}`);
     const path = await resolved();
     if (path !== want) throw new Error(`ipns ${ID} resolves to ${path}, expected ${want}`);
