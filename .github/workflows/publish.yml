@@ -7,8 +7,8 @@ on:
       - counties/**
   workflow_dispatch:
     inputs:
-      pin_limit_minutes:
-        description: Minutes to wait for each root to reach `pinned` (default 45)
+      gateway_deadline_minutes:
+        description: Minutes to keep retrying a gateway export before calling the content unavailable (default 20)
         required: false
 
 permissions:
@@ -23,8 +23,8 @@ env:
   FILEBASE_BUCKET: elephant-atlas
   ATLAS_IPNS_KEY: elephant-atlas
   ATLAS_IPNS_ID: k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04
-  # Dispatch input, else the repository variable (set it to shorten a test), else 45 minutes.
-  ATLAS_PIN_LIMIT_MINUTES: ${{ inputs.pin_limit_minutes || vars.ATLAS_PIN_LIMIT_MINUTES || '45' }}
+  # Dispatch input, else the repository variable (set it to shorten a test), else 20 minutes.
+  ATLAS_GATEWAY_DEADLINE_MINUTES: ${{ inputs.gateway_deadline_minutes || vars.ATLAS_GATEWAY_DEADLINE_MINUTES || '20' }}
 
 jobs:
   publish:
@@ -46,26 +46,31 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       # Publication is a merge that already passed validation; this job never validates.
-      # 1-2. Pin every root this push published and wait for `pinned`.
-      - id: pin
-        run: node scripts/pin-roots.mjs
+      # 1-2. Export every root this push published from the public gateway and import it into
+      # the elephant-atlas bucket, shard by shard and part by part, then pin the root.
+      - id: transfer
+        run: node scripts/transfer-roots.mjs
 
-      # 3. A root that failed to pin or timed out is not publishable: revert the push. Pushes made
-      # with GITHUB_TOKEN never trigger workflows, so the revert cannot retrigger this job.
-      # index.json and the IPNS name are untouched on this path.
+      # 3. A root the gateway cannot serve is not publishable: revert the push. Pushes made with
+      # GITHUB_TOKEN never trigger workflows, so the revert cannot retrigger this job.
+      # index.json and the IPNS name are untouched on this path. Other failures (credentials,
+      # RPC) set no failed_root and are not reverted; re-run the workflow.
       - name: Revert the publication
-        if: failure() && steps.pin.outputs.failed_root != ''
+        if: failure() && steps.transfer.outputs.failed_root != ''
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FAILED_ROOT: ${{ steps.transfer.outputs.failed_root }}
+          FAILED_REASON: ${{ steps.transfer.outputs.failed_reason }}
+          COUNTY: ${{ steps.transfer.outputs.county }}
         run: |
           if git rev-parse -q --verify HEAD^2 >/dev/null; then git revert --no-edit -m 1 HEAD; else git revert --no-edit HEAD; fi
           git push origin HEAD:main
           REVERT=$(git rev-parse HEAD)
           gh issue create \
-            --title "Publication reverted: ${{ steps.pin.outputs.county }} ${{ steps.pin.outputs.failed_root }}" \
-            --body "$(printf 'The publish workflow could not pin `%s` on the `elephant-atlas` bucket.\n\n- status: `%s`\n- reverted in %s\n- run: %s\n\nRe-upload or re-pin the root, confirm a public gateway serves it, then open a new pull request.' \
-              "${{ steps.pin.outputs.failed_root }}" "${{ steps.pin.outputs.failed_status }}" "$REVERT" "$RUN_URL")"
+            --title "Publication reverted: $COUNTY $FAILED_ROOT" \
+            --body "$(printf 'The publish workflow could not transfer `%s` into the `elephant-atlas` bucket.\n\n- reason: %s\n- reverted in %s\n- run: %s\n\nRe-upload the archive, confirm a public gateway serves it, then open a new pull request.' \
+              "$FAILED_ROOT" "$FAILED_REASON" "$REVERT" "$RUN_URL")"
           echo "Reverted ${{ github.sha }} in $REVERT" >> "$GITHUB_STEP_SUMMARY"
 
       # 4. Regenerate index.json, commit it if it changed, add it to the bucket, point the IPNS
