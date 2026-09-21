@@ -1,6 +1,6 @@
-# Elephant data registry
+# Atlas
 
-The single list of every published Elephant county archive. One JSON file per county,
+Atlas is the book of maps for Elephant data: one page per county, listing every published archive of that county. One JSON file per county,
 one entry per run, written only through pull requests. A merge is the act of
 publication: it is what makes a county root discoverable to consumers.
 
@@ -24,7 +24,7 @@ Status: scaffold. Nothing here is consumed yet.
 ## Layout
 
 ```text
-data-registry/
+atlas/
 ├── README.md
 ├── schema/
 │   └── entry.schema.json           JSON Schema every county file must satisfy
@@ -63,4 +63,4 @@ data-registry/
 - Never edit `index.json` by hand; it is generated.
 - Never rewrite history in a county file; supersede a run, do not delete it.
 - A root that the gateway cannot serve at review time is not publishable.
-- The registry records identifiers and counts, never data.
+- Atlas records identifiers and counts, never data.
