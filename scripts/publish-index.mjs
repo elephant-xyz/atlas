@@ -49,8 +49,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else {
     const [published] = await rpc(`name/publish?arg=${want}&key=${KEY}`, { timeoutMs: 180_000 });
     console.log(`name/publish: ${JSON.stringify(published)}`);
-    const path = await resolved();
-    if (path !== want) throw new Error(`ipns ${ID} resolves to ${path}, expected ${want}`);
+    // name/resolve can lag name/publish by a few seconds on Filebase; poll instead of reading once.
+    let path;
+    const ok = await poll(async () => {
+      path = await resolved();
+      if (path !== want) console.log(`ipns ${ID} still resolves to ${path}`);
+      return path === want;
+    }, { limitMs: IPNS_DEADLINE_MS, intervalMs: 10_000 });
+    if (!ok) throw new Error(`ipns ${ID} resolves to ${path}, expected ${want}, after ${IPNS_DEADLINE_MS / 60_000} min`);
     console.log(`ipns ${ID} resolves to ${path}`);
   }
 
