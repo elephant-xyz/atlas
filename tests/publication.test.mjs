@@ -13,6 +13,7 @@ import { poll, token } from '../scripts/filebase.mjs';
 import { DEFAULT_GATEWAYS, fetchFromAny, gatewayList } from '../scripts/gateways.mjs';
 import { TransferFailed, rootsToTransfer, transferArchive, transferTables } from '../scripts/transfer-roots.mjs';
 import { blockFromCar } from '../scripts/verify-roots.mjs';
+import * as validateArchives from '../scripts/validate-archives.mjs';
 import { CID_A, CID_B, CID_C, group, page } from './helpers.mjs';
 
 const at = (path, page) => ({ path, page });
@@ -189,4 +190,12 @@ test('blockFromCar returns the block with the expected CID from a path CAR, igno
   assert.equal(Buffer.compare(await blockFromCar(bytes, f.shard.cid.toString()), f.shard.bytes), 0);
   assert.equal(Buffer.compare(await blockFromCar(bytes, f.property.cid.toString()), f.property.bytes), 0);
   assert.equal(await blockFromCar(bytes, f.tables.cid.toString()), undefined);
+});
+
+test('validateCar is clean only on exit 0 and strips browserslist noise from the report', () => {
+  const { validateCar } = validateArchives;
+  const run = (status, stdout) => () => ({ status, stdout, stderr: '' });
+  assert.deepEqual(validateCar('x.car', 'e.csv', 'cli', run(0, 'Browserslist: data is old\n  lexicon errors: 0\n')), { ok: true, report: '  lexicon errors: 0' });
+  assert.deepEqual(validateCar('x.car', 'e.csv', 'cli', run(1, '  lexicon errors: 25\n')), { ok: false, report: '  lexicon errors: 25' });
+  assert.equal(validateCar('x.car', 'e.csv', 'cli', () => ({ status: null, error: new Error('spawn cli ENOENT') })).ok, false);
 });

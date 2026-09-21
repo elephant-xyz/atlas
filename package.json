@@ -11,7 +11,8 @@
     "verify": "node scripts/verify-roots.mjs",
     "index": "node scripts/build-index.mjs",
     "publish": "node scripts/publish-index.mjs",
-    "transfer": "node scripts/transfer-roots.mjs"
+    "transfer": "node scripts/transfer-roots.mjs",
+    "validate-archives": "node scripts/validate-archives.mjs"
   },
   "dependencies": {
     "@ipld/car": "^5.4.7",

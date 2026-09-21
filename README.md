@@ -85,6 +85,7 @@ atlas/
 ├── scripts/
 │   ├── validate-entry.mjs          schema, key consistency, no duplicate roots, index not hand-edited
 │   ├── verify-roots.mjs            fetch each changed group's roots from the gateway, hash, check shape and schema
+│   ├── validate-archives.mjs       download each new archive in full and run elephant-cli validate on it
 │   ├── build-index.mjs             regenerate index.json from counties/
 │   ├── transfer-roots.mjs          export new roots from the gateway, import them into the bucket
 │   ├── publish-index.mjs           commit index.json, add it, point the IPNS name at it
@@ -94,7 +95,7 @@ atlas/
 ├── .github/
 │   ├── CODEOWNERS                  who must approve a publication
 │   └── workflows/
-│       ├── validate.yml            on pull request: validate-entry + verify-roots
+│       ├── validate.yml            on pull request: validate-entry, verify-roots, full archive validation
 │       └── publish.yml             on merge to main: transfer roots, build-index, commit, publish to IPNS
 └── CONTRIBUTING.md                 how an archive becomes a pull request
 ```
@@ -108,9 +109,11 @@ atlas/
    file under `counties/`. One file per county is what lets many counties publish in parallel
    without conflicts.
 3. CI validates the page against the schema, fetches every changed root from the IPFS network
-   through the gateway list, checks the bytes hash to the CID and the blocks have the expected shape, checks the
-   archive carries the claimed schema and the tables point back at the archive, and refuses a
-   root used twice.
+   through the gateway list, checks the bytes hash to the CID and the blocks have the expected
+   shape, checks the archive carries the claimed schema and the tables point back at the
+   archive, and refuses a root used twice. Then a pull request is validated in full: the
+   archive is downloaded and every block, link, data-group root, and lexicon schema is checked
+   with `elephant-cli validate`; merging copies it to the org account.
 4. A code owner approves. Merging is publication.
 5. The publish workflow transfers the roots, regenerates `index.json`, and points the IPNS
    name at it (see Publication).
