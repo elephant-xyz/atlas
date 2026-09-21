@@ -24,14 +24,14 @@ withdraw it by removing the group key or the page.
 
 ## Index
 
-`index.json` is what consumers read. Version 5 holds one entry per county with at least one
+`index.json` is what consumers read. It holds one entry per county with at least one
 group; each group is copied from the page plus `published_at`, the time the registry merged the
 archive, derived from history, never supplied: the committer date of the first commit on `main`
 in which the `cid` appeared in the page.
 
 ```json
 {
-  "version": 5,
+  "version": 1,
   "generated_from": "<main sha>",
   "counties": [
     { "county": "lee", "state": "FL", "fips": "12071",
@@ -112,10 +112,6 @@ atlas/
 4. A code owner approves. Merging is publication.
 5. The publish workflow transfers the roots, regenerates `index.json`, and points the IPNS
    name at it (see Publication).
-
-Pull requests #4 to #7 document the gates of the first schema (an unserved root, a wrong label,
-an in-place edit, a hand-edited index); the gates of the current schema are re-proven by the
-later pull requests.
 
 ## Rules
 
