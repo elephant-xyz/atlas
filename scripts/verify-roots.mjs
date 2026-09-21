@@ -6,8 +6,6 @@
 // property by path; require the page's schema CID to be a key of that property's data_groups;
 // require the schema to be a data-group JSON Schema; require the tables root to point back at
 // the archive and one part to be served. Exits 1 with the failing URL on any problem.
-//
-// TODO: full CAR validation (every block, every link) belongs in a nightly job, not here.
 import { fileURLToPath } from 'node:url';
 import { CarReader } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
