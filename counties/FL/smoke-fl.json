@@ -2,7 +2,6 @@
   "county": "smoke-fl",
   "state": "FL",
   "fips": "12999",
-  "latest": "2026-09-21-b",
   "runs": [
     {
       "run": "2026-09-21-a",
@@ -45,7 +44,7 @@
         "car_upload": "evidence/FL/smoke-fl/2026-09-21-b/car-upload.json",
         "tables_upload": "evidence/FL/smoke-fl/2026-09-21-b/tables-upload.json"
       },
-      "status": "published"
+      "status": "withdrawn"
     }
   ]
 }
