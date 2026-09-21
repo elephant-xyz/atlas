@@ -3,130 +3,128 @@ import { test } from 'node:test';
 import { validateRegistry } from '../scripts/validate-entry.mjs';
 import { VERSION } from '../scripts/build-index.mjs';
 import { buildEntries, readPages } from '../scripts/lib.mjs';
-import { CID_C, page, registry, run } from './helpers.mjs';
+import { CID_A, CID_C, page, registry, run } from './helpers.mjs';
 
 const indexFor = (pages) => ({ version: VERSION, generated_from: 'x', counties: buildEntries(pages) });
 const check = (files) => {
   const root = registry(files);
   return validateRegistry(root, readPages(root));
 };
+const withIndex = (files, ...pages) => ({ ...files, 'index.json': indexFor(pages.map((page) => ({ page }))) });
 
 test('valid page passes', () => {
   const lee = page();
-  assert.deepEqual(check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) }), []);
+  assert.deepEqual(check(withIndex({ 'counties/FL/lee.json': lee }, lee)), []);
 });
 
 test('archive-only run without tables_root passes', () => {
   const r = run();
   delete r.tables_root;
   const lee = page({ runs: [r] });
-  assert.deepEqual(check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) }), []);
+  assert.deepEqual(check(withIndex({ 'counties/FL/lee.json': lee }, lee)), []);
 });
 
-test('schema rejects bad keys', () => {
-  const problems = check({ 'counties/FL/Lee.json': page({ county: 'Lee', fips: '1207' }), 'index.json': indexFor([]) });
+test('schema rejects bad keys, a run key, a latest pointer, and a bad published_at', () => {
+  let problems = check(withIndex({ 'counties/FL/Lee.json': page({ county: 'Lee', fips: '1207' }) }));
   assert.ok(problems.some((p) => p.includes('/county')));
   assert.ok(problems.some((p) => p.includes('/fips')));
+  problems = check(withIndex({ 'counties/FL/lee.json': page({ latest: 'x', runs: [run({ run: '2026-09-21-a', published_at: '2026-09-21 12:07' })] }) }));
+  assert.ok(problems.some((p) => p.includes("must NOT have additional properties") && p.startsWith('counties/FL/lee.json: /')), problems.join('\n'));
+  assert.ok(problems.some((p) => p.includes('/runs/0 must NOT have additional properties')), problems.join('\n'));
+  assert.ok(problems.some((p) => p.includes('/runs/0/published_at')), problems.join('\n'));
 });
 
 test('path must match state and county', () => {
-  const problems = check({ 'counties/GA/lee.json': page(), 'index.json': indexFor([]) });
+  const problems = check(withIndex({ 'counties/GA/lee.json': page() }));
   assert.ok(problems.some((p) => p.includes('path must be counties/FL/lee.json')), problems.join('\n'));
 });
 
-test('duplicate root across the registry fails', () => {
+test('the same root on two pages is rejected', () => {
   const lee = page();
   const collier = page({ county: 'collier', fips: '12021' });
-  const problems = check({ 'counties/FL/lee.json': lee, 'counties/FL/collier.json': collier, 'index.json': indexFor([{ page: collier }, { page: lee }]) });
-  assert.ok(problems.some((p) => p.includes('already used by')), problems.join('\n'));
+  const problems = check(withIndex({ 'counties/FL/lee.json': lee, 'counties/FL/collier.json': collier }, collier, lee));
+  assert.ok(problems.some((p) => p.includes(`county_root ${CID_A} is already published by counties/FL/collier.json`)), problems.join('\n'));
 });
 
-test('out-of-order runs fail', () => {
-  const lee = page({ latest: '2026-09-22-a', runs: [run({ run: '2026-09-22-a' }), run({ run: '2026-09-21-a', county_root: CID_C, tables_root: undefined })] });
-  const problems = check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) });
-  assert.ok(problems.some((p) => p.includes('must be ascending')), problems.join('\n'));
+test('appending a run with the root of an existing non-withdrawn run is rejected', () => {
+  const lee = page({ runs: [run({ status: 'superseded' }), run({ published_at: '2026-09-22T00:00:00Z' })] });
+  const problems = check(withIndex({ 'counties/FL/lee.json': lee }, lee));
+  assert.ok(problems.some((p) => p.includes('the same root is the same publication')), problems.join('\n'));
 });
 
-test('duplicate run id fails', () => {
-  const lee = page({ runs: [run(), run({ county_root: CID_C, tables_root: undefined })] });
-  const problems = check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) });
-  assert.ok(problems.some((p) => p.includes('appears twice')), problems.join('\n'));
-});
-
-test('withdrawn latest fails', () => {
-  const lee = page({ runs: [run({ status: 'withdrawn' })] });
-  const problems = check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) });
-  assert.deepEqual(problems, ['counties/FL/lee.json: latest 2026-09-21-a is withdrawn']);
-});
-
-test('latest must name an existing run', () => {
-  const lee = page({ latest: '2026-09-22-a' });
-  const problems = check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) });
-  assert.ok(problems.some((p) => p.includes('is not a run on this page')), problems.join('\n'));
+test('a withdrawn run releases its roots for a later run on the same page', () => {
+  const lee = page({ runs: [run({ status: 'withdrawn' }), run({ published_at: '2026-09-22T00:00:00Z' })] });
+  assert.deepEqual(check(withIndex({ 'counties/FL/lee.json': lee }, lee)), []);
 });
 
 test('hand-edited index fails', () => {
   const lee = page();
   const index = indexFor([{ page: lee }]);
-  index.counties[0].blocks = 999;
+  index.counties[0].groups.county.properties = 999;
   const problems = check({ 'counties/FL/lee.json': lee, 'index.json': index });
   assert.deepEqual(problems, ['index.json: differs from a regeneration; never edit it by hand, it is generated on merge']);
 });
 
-test('a run already on main may change status but nothing else', () => {
+test('runs already on main may change status but nothing else, by array position', () => {
   const base = [{ path: 'counties/FL/lee.json', page: page() }];
   const superseded = page({ runs: [run({ status: 'superseded' })] });
-  const root = registry({ 'counties/FL/lee.json': superseded, 'index.json': indexFor(base) });
-  assert.deepEqual(validateRegistry(root, base), []);
+  assert.deepEqual(validateRegistry(registry(withIndex({ 'counties/FL/lee.json': superseded }, ...base.map((b) => b.page))), base), []);
 
   const edited = page({ runs: [run({ blocks: 134 })] });
-  const root2 = registry({ 'counties/FL/lee.json': edited, 'index.json': indexFor(base) });
-  assert.deepEqual(validateRegistry(root2, base), ['counties/FL/lee.json: run 2026-09-21-a was edited in place; only status may change, supersede it instead']);
+  assert.deepEqual(validateRegistry(registry(withIndex({ 'counties/FL/lee.json': edited }, ...base.map((b) => b.page))), base), [
+    `counties/FL/lee.json: run 0 (${CID_A}) was edited in place; only status may change, supersede it instead`,
+  ]);
 
-  const root3 = registry({ 'index.json': indexFor(base) });
-  assert.deepEqual(validateRegistry(root3, base), ['counties/FL/lee.json: page was deleted; pages are never removed']);
-});
+  const inserted = page({ runs: [run({ county_root: CID_C, tables_root: undefined, status: 'withdrawn' }), run()] });
+  const problems = validateRegistry(registry(withIndex({ 'counties/FL/lee.json': inserted }, ...base.map((b) => b.page))), base);
+  assert.ok(problems.some((p) => p.includes('run 0') && p.includes('edited in place')), problems.join('\n'));
 
-test('a page whose only run is withdrawn passes when latest is absent', () => {
-  const lee = page({ runs: [run({ status: 'withdrawn' })] });
-  delete lee.latest;
-  assert.deepEqual(check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) }), []);
+  const removed = page({ runs: [run({ county_root: CID_C, tables_root: undefined })] });
+  const problems2 = validateRegistry(registry({ 'counties/FL/lee.json': removed, 'index.json': indexFor(base) }), base);
+  assert.ok(problems2.some((p) => p.includes('edited in place')), problems2.join('\n'));
+
+  const emptied = page({ runs: [] });
+  const problems3 = validateRegistry(registry({ 'counties/FL/lee.json': emptied, 'index.json': indexFor(base) }), base);
+  assert.ok(problems3.some((p) => p.includes('/runs must NOT have fewer than 1 items')), problems3.join('\n'));
+
+  assert.deepEqual(validateRegistry(registry({ 'index.json': indexFor(base) }), base), ['counties/FL/lee.json: page was deleted; pages are never removed']);
 });
 
 test('groups must be non-empty, snake_case, unique', () => {
   for (const groups of [[], ['County'], ['county', 'county'], ['property-improvement']]) {
     const lee = page({ runs: [run({ groups })] });
-    const problems = check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) });
+    const problems = check(withIndex({ 'counties/FL/lee.json': lee }, lee));
     assert.ok(problems.some((p) => p.includes('/runs/0/groups')), JSON.stringify(groups) + ' -> ' + problems.join('\n'));
   }
 });
 
-test('evidence must be a CID or a repository-relative path that exists', () => {
+test('evidence must be a CID or a path under evidence/<state>/<county>/<county_root>/ that exists', () => {
+  const dir = `evidence/FL/lee/${CID_A}`;
   const abs = page({ runs: [run({ evidence: { car_upload: '/tmp/upload.json' } })] });
-  let problems = check({ 'counties/FL/lee.json': abs, 'index.json': indexFor([{ page: abs }]) });
+  let problems = check(withIndex({ 'counties/FL/lee.json': abs }, abs));
   assert.ok(problems.some((p) => p.includes('/runs/0/evidence/car_upload')), problems.join('\n'));
 
-  const escaping = page({ runs: [run({ evidence: { car_upload: 'evidence/../../x.json' } })] });
-  problems = check({ 'counties/FL/lee.json': escaping, 'index.json': indexFor([{ page: escaping }]) });
+  const escaping = page({ runs: [run({ evidence: { car_upload: `${dir}/../../x.json` } })] });
+  problems = check(withIndex({ 'counties/FL/lee.json': escaping }, escaping));
   assert.ok(problems.some((p) => p.includes('must be a CID or a repository-relative path')), problems.join('\n'));
 
-  const missing = page({ runs: [run({ evidence: { car_upload: 'evidence/FL/lee/x.json' } })] });
-  problems = check({ 'counties/FL/lee.json': missing, 'index.json': indexFor([{ page: missing }]) });
-  assert.deepEqual(problems, ['counties/FL/lee.json: run 2026-09-21-a evidence.car_upload evidence/FL/lee/x.json is not in the repository']);
+  const elsewhere = page({ runs: [run({ evidence: { car_upload: 'evidence/FL/lee/x.json' } })] });
+  problems = check(withIndex({ 'counties/FL/lee.json': elsewhere, 'evidence/FL/lee/x.json': {} }, elsewhere));
+  assert.deepEqual(problems, [`counties/FL/lee.json: run ${CID_A} evidence.car_upload must live under ${dir}/`]);
 
-  const present = page({ runs: [run({ evidence: { car_upload: 'evidence/FL/lee/x.json' } })] });
-  assert.deepEqual(check({ 'counties/FL/lee.json': present, 'index.json': indexFor([{ page: present }]), 'evidence/FL/lee/x.json': {} }), []);
-});
+  const missing = page({ runs: [run({ evidence: { car_upload: `${dir}/x.json` } })] });
+  problems = check(withIndex({ 'counties/FL/lee.json': missing }, missing));
+  assert.deepEqual(problems, [`counties/FL/lee.json: run ${CID_A} evidence.car_upload ${dir}/x.json is not in the repository`]);
 
-test('a withdrawn run releases its roots for a later run', () => {
-  const lee = page({ latest: '2026-09-22-a', runs: [run({ status: 'withdrawn' }), run({ run: '2026-09-22-a' })] });
-  assert.deepEqual(check({ 'counties/FL/lee.json': lee, 'index.json': indexFor([{ page: lee }]) }), []);
+  const present = page({ runs: [run({ evidence: { car_upload: `${dir}/x.json` } })] });
+  assert.deepEqual(check(withIndex({ 'counties/FL/lee.json': present, [`${dir}/x.json`]: {} }, present)), []);
 });
 
 test('a page that predates the schema may be migrated', () => {
-  const v1 = page();
-  delete v1.runs[0].groups;
+  const v2 = page();
+  v2.runs[0].run = '2026-09-21-a';
+  delete v2.runs[0].published_at;
   const migrated = page({ runs: [run({ blocks: 999 })] }); // any rewrite is accepted while the base fails the schema
-  const root = registry({ 'counties/FL/lee.json': migrated, 'index.json': indexFor([{ page: v1 }]) });
-  assert.deepEqual(validateRegistry(root, [{ path: 'counties/FL/lee.json', page: v1 }]), []);
+  const root = registry({ 'counties/FL/lee.json': migrated, 'index.json': indexFor([{ page: v2 }]) });
+  assert.deepEqual(validateRegistry(root, [{ path: 'counties/FL/lee.json', page: v2 }]), []);
 });

@@ -11,9 +11,8 @@ Status: scaffold. Nothing here is consumed yet.
 | Field | Meaning |
 |---|---|
 | `county`, `state`, `fips` | the county, keyed the same way everywhere (`lee`, `FL`, `12071`) |
-| `run` | ISO date plus a short suffix; runs are append-only and ordered |
 | `groups` | the data-group keys the run carries (`county`, `seed`, `property_improvement`, ...); several when mined together, one when a source refreshes on its own cadence |
-| `county_root` | CID of the `CountyIndex` block that roots the county CAR |
+| `county_root` | CID of the `CountyIndex` block that roots the county CAR; this is the run's identity |
 | `tables_root` | CID of the `CountyTables` block that roots the Parquet part set |
 | `blocks`, `properties`, `parts` | counts reported by `hash`, `validate`, and `export-tables` |
 | `cli` | the `elephant-cli` commit that produced the run |
@@ -21,22 +20,26 @@ Status: scaffold. Nothing here is consumed yet.
 | `node` | where it was pinned: `filebase` or a named node |
 | `evidence` | paths or CIDs of the upload summaries and the validation report |
 | `status` | `published`, `superseded`, or `withdrawn` |
+| `published_at` | ISO 8601 UTC from the CLI upload summary's `uploadedAt`; informational, never used for identity or order |
+
+Runs are append-only; their order is their position in the array, newest last. A run has no
+name of its own: the same `county_root` is the same publication, wherever it appears.
 
 ## Index
 
-`index.json` is what consumers read. Version 2 holds one entry per county with at least one
-published run; `groups` maps each data-group key to the newest run with `status: published`
-that carries it. A withdrawn or superseded run never appears; `tables_root` is omitted when the
-run has none.
+`index.json` is what consumers read. Version 3 holds one entry per county with at least one
+non-withdrawn run; `groups` maps each data-group key to the newest (last in the array)
+non-withdrawn run that carries it. A withdrawn run never appears; `tables_root` is omitted when
+the run has none.
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "generated_from": "<main sha>",
   "counties": [
     { "county": "lee", "state": "FL", "fips": "12071",
       "groups": {
-        "county": { "run": "2026-09-21-a", "county_root": "...", "tables_root": "...", "properties": 511695 }
+        "county": { "county_root": "...", "tables_root": "...", "properties": 511695, "published_at": "2026-09-21T12:07:53.177Z" }
       } }
   ]
 }
@@ -53,7 +56,7 @@ atlas/
 ├── schema/
 │   └── entry.schema.json           JSON Schema every county file must satisfy
 ├── counties/
-│   └── <state>/<county>.json       all runs for one county, newest last, `latest` pointer
+│   └── <state>/<county>.json       all runs for one county, newest last
 ├── index.json                      generated on merge: the flat list consumers read
 ├── scripts/
 │   ├── validate-entry.mjs          schema, key consistency, ordering, no duplicate roots
@@ -77,7 +80,7 @@ atlas/
    many counties publish in parallel without conflicts.
 3. CI validates the entry against the schema, fetches every new root from the public
    gateway, checks the bytes hash to the CID and the block has the expected shape, and
-   refuses duplicates or out-of-order runs.
+   refuses duplicate roots and rewritten history.
 4. A code owner approves. Merging is publication.
 5. The publish workflow regenerates `index.json`. Pointing an IPNS name at that index is
    the next step and is not part of this scaffold.

@@ -35,17 +35,17 @@ export function pagesAt(ref, root) {
 }
 
 /**
- * The list consumers read: one entry per county with a published run; `groups` maps each
- * data-group key to the newest published run carrying it (roots and property count only).
+ * The list consumers read: one entry per county with a non-withdrawn run; `groups` maps each
+ * data-group key to the newest (last in the array) non-withdrawn run carrying it.
  */
 export function buildEntries(pages) {
   const entries = [];
   for (const { page } of pages) {
     const groups = {};
     for (const run of page.runs) {
-      if (run.status !== 'published') continue;
+      if (run.status === 'withdrawn') continue;
       for (const key of run.groups ?? []) { // ponytail: pre-v2 base pages have no groups; only matters during a schema migration
-        groups[key] = { run: run.run, county_root: run.county_root, ...(run.tables_root && { tables_root: run.tables_root }), properties: run.properties };
+        groups[key] = { county_root: run.county_root, ...(run.tables_root && { tables_root: run.tables_root }), properties: run.properties, published_at: run.published_at };
       }
     }
     const keys = Object.keys(groups).sort();

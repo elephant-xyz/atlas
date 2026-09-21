@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/elephant-xyz/atlas/schema/v2/entry.schema.json",
-  "title": "Atlas county page (version 2)",
-  "description": "One page per county: every run ever published for it, newest last, and a `latest` pointer.",
+  "$id": "https://github.com/elephant-xyz/atlas/schema/v3/entry.schema.json",
+  "title": "Atlas county page (version 3)",
+  "description": "One page per county: every run ever published for it, in publication order (newest last). A run is identified by its county_root.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,10 +25,6 @@
       "type": "string",
       "pattern": "^[0-9]{5}$"
     },
-    "latest": {
-      "$ref": "#/definitions/runId",
-      "description": "run id of the run consumers should read; must exist and must not be withdrawn. Absent means nothing on this page is published."
-    },
     "runs": {
       "type": "array",
       "minItems": 1,
@@ -38,10 +34,6 @@
     }
   },
   "definitions": {
-    "runId": {
-      "type": "string",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]{1,8}$"
-    },
     "cid": {
       "type": "string",
       "pattern": "^b[a-z2-7]{50,}$",
@@ -55,21 +47,18 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "run",
-        "groups",
         "county_root",
+        "groups",
         "blocks",
         "properties",
         "cli",
         "lexicon",
         "node",
         "evidence",
-        "status"
+        "status",
+        "published_at"
       ],
       "properties": {
-        "run": {
-          "$ref": "#/definitions/runId"
-        },
         "groups": {
           "type": "array",
           "minItems": 1,
@@ -146,6 +135,11 @@
             "superseded",
             "withdrawn"
           ]
+        },
+        "published_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+          "description": "ISO 8601 UTC, copied from the CLI upload summary's uploadedAt; informational, never used for identity or order"
         }
       }
     },

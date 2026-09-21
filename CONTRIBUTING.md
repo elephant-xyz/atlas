@@ -5,7 +5,7 @@ under `counties/` is how a run becomes discoverable. Merging it is the act of pu
 
 ## The promise
 
-A page reaching `latest` means someone fetched its roots from a public gateway at review
+A root reaching `index.json` means someone fetched it from a public gateway at review
 time: CI fetched the `CountyIndex` block, hashed the bytes, checked they match the CID, and
 resolved shard 0 and one property root by path. A root the gateway cannot serve is not
 publishable, whatever the upload logs say.
@@ -20,19 +20,21 @@ publishable, whatever the upload logs say.
    ```bash
    git clone git@github.com:elephant-xyz/atlas.git && cd atlas
    npm ci
-   git switch -c publish/<state>-<county>-<run>
+   git switch -c publish/<state>-<county>
    ```
 
-3. Add a run to `counties/<STATE>/<county>.json` (create the file for a new county). Runs are
-   append-only and ordered by `run`; never edit or delete an earlier run. To replace a run, append
-   the new one, set the old one's `status` to `superseded`, and move `latest`. To pull a run, set
-   its `status` to `withdrawn`; if nothing on the page is publishable, remove `latest`.
-   `run` is the ISO date plus a short suffix (`2026-09-21-a`). Counts come from the CLI output:
+3. Append a run to `counties/<STATE>/<county>.json` (create the file for a new county). Runs are
+   append-only and ordered by array position, newest last; never edit, insert, or delete an
+   earlier run. A run has no key: its `county_root` is its identity, and a root that is already
+   on a non-withdrawn run anywhere in the registry is rejected. To replace a run, append the new
+   one and set the old one's `status` to `superseded`. To pull a run, find it by `county_root`
+   and set its `status` to `withdrawn`; that releases its roots, so they may be published again
+   later. `published_at` is the `uploadedAt` from the CAR upload summary. Counts come from the CLI output:
    `blocks` from `hash`, `properties` from `validate`, `parts` from `export-tables`. `cli` is
    `git rev-parse HEAD` in the `elephant-cli` checkout that produced the run. `groups` lists the
    data-group keys the run carries. `evidence` holds the upload summaries and the validation
    report as CIDs or as repository-relative paths (commit the files under
-   `evidence/<STATE>/<county>/<run>/`); absolute filesystem paths are rejected. See
+   `evidence/<STATE>/<county>/<county_root>/`); absolute filesystem paths are rejected. See
    `schema/entry.schema.json` for every field.
 4. Check locally before pushing. `verify` only fetches roots that are new relative to
    `origin/main`; `--all` refetches everything.
@@ -64,7 +66,6 @@ publishable, whatever the upload logs say.
 
 - One county file per pull request. That is what lets counties publish in parallel.
 - A `county_root` or `tables_root` appears once among the runs that are not withdrawn. Withdrawing a run releases its roots.
-- `latest` must name a run on the page and must not be withdrawn.
-- A run already on `main` may only change `status`. To fix anything else, append a new run and supersede the old one.
+- A run already on `main` may only change `status`; runs are matched by array position. To fix anything else, append a new run and supersede the old one.
 - Never edit `index.json` by hand and never rewrite a run in place.
 - `evidence` values are CIDs or repository-relative paths, never absolute paths.

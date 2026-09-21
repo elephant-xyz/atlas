@@ -4,7 +4,6 @@
   "fips": "12999",
   "runs": [
     {
-      "run": "2026-09-21-a",
       "groups": [
         "county"
       ],
@@ -19,13 +18,13 @@
       },
       "node": "filebase",
       "evidence": {
-        "car_upload": "evidence/FL/smoke-fl/2026-09-21-a/car-upload.json",
-        "tables_upload": "evidence/FL/smoke-fl/2026-09-21-a/tables-upload.json"
+        "car_upload": "evidence/FL/smoke-fl/baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda/car-upload.json",
+        "tables_upload": "evidence/FL/smoke-fl/baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda/tables-upload.json"
       },
-      "status": "withdrawn"
+      "status": "withdrawn",
+      "published_at": "2026-09-21T12:07:53.177Z"
     },
     {
-      "run": "2026-09-21-b",
       "groups": [
         "county",
         "seed"
@@ -41,10 +40,11 @@
       },
       "node": "filebase",
       "evidence": {
-        "car_upload": "evidence/FL/smoke-fl/2026-09-21-b/car-upload.json",
-        "tables_upload": "evidence/FL/smoke-fl/2026-09-21-b/tables-upload.json"
+        "car_upload": "evidence/FL/smoke-fl/baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda/car-upload.json",
+        "tables_upload": "evidence/FL/smoke-fl/baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda/tables-upload.json"
       },
-      "status": "withdrawn"
+      "status": "withdrawn",
+      "published_at": "2026-09-21T12:07:53.177Z"
     }
   ]
 }
