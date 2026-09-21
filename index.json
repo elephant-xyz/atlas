@@ -1,25 +1,5 @@
 {
   "version": 3,
-  "generated_from": "6d0469b9daccd3917e70fedef26d6e575d0e38e5",
-  "counties": [
-    {
-      "county": "smoke-fl",
-      "state": "FL",
-      "fips": "12999",
-      "groups": {
-        "county": {
-          "county_root": "baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda",
-          "tables_root": "baguqeerasxkelzdxtkgdrii54zoanz3t7qznf72niikqmiyer4dlb2k2xfhq",
-          "properties": 3,
-          "published_at": "2026-09-21T12:07:53.177Z"
-        },
-        "seed": {
-          "county_root": "baguqeerakenv6uzkrga4lx6jntgqe4ftdrqjgqiigm4h5gedrqopujfa6sda",
-          "tables_root": "baguqeerasxkelzdxtkgdrii54zoanz3t7qznf72niikqmiyer4dlb2k2xfhq",
-          "properties": 3,
-          "published_at": "2026-09-21T12:07:53.177Z"
-        }
-      }
-    }
-  ]
+  "generated_from": "0ab8868f20ebc7242045bd1ed1fafbff8a945e11",
+  "counties": []
 }
