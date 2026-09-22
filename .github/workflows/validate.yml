@@ -1,16 +1,9 @@
 name: validate
 
 on:
+  # Every pull request: the ruleset on main requires this check, so a PR that
+  # touches only docs or workflows must still report it (the scripts no-op).
   pull_request:
-    paths:
-      - counties/**
-      - schema/**
-      - scripts/**
-      - tests/**
-      - index.json
-      - package.json
-      - package-lock.json
-      - .github/workflows/validate.yml
 
 jobs:
   validate:
