@@ -34,9 +34,13 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      # main is protected by a ruleset that GITHUB_TOKEN cannot bypass; the bot commits (index.json,
+      # reverts) go through the write deploy key registered as a bypass actor, so the checkout's
+      # origin is SSH and every `git push origin HEAD:main` below uses it.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # HEAD~1 for the root diff, main's history for published_at
+          ssh-key: ${{ secrets.ATLAS_DEPLOY_KEY }}
       - name: Mask the Filebase token
         run: echo "::add-mask::$(printf '%s:%s:%s' "$FILEBASE_ACCESS_KEY" "$FILEBASE_SECRET_KEY" "$FILEBASE_BUCKET" | base64 -w0)"
       - uses: actions/setup-node@v4
@@ -55,10 +59,11 @@ jobs:
       - id: transfer
         run: node scripts/transfer-roots.mjs ${{ inputs.transfer_all && '--all' || '' }}
 
-      # 3. A root the gateway cannot serve is not publishable: revert the push. Pushes made with
-      # GITHUB_TOKEN never trigger workflows, so the revert cannot retrigger this job.
-      # index.json and the IPNS name are untouched on this path. Other failures (credentials,
-      # RPC) set no failed_root and are not reverted; re-run the workflow.
+      # 3. A root the gateway cannot serve is not publishable: revert the push. A deploy-key push
+      # does trigger workflows, and the revert touches counties/**, so its message carries
+      # [skip ci] to keep it from retriggering this job. index.json and the IPNS name are
+      # untouched on this path. Other failures (credentials, RPC) set no failed_root and are not
+      # reverted; re-run the workflow.
       - name: Revert the publication
         if: failure() && steps.transfer.outputs.failed_root != ''
         env:
@@ -69,6 +74,7 @@ jobs:
           COUNTY: ${{ steps.transfer.outputs.county }}
         run: |
           if git rev-parse -q --verify HEAD^2 >/dev/null; then git revert --no-edit -m 1 HEAD; else git revert --no-edit HEAD; fi
+          git commit --amend --no-edit -m "$(git log -1 --format=%B) [skip ci]"
           git push origin HEAD:main
           REVERT=$(git rev-parse HEAD)
           gh issue create \
@@ -77,7 +83,9 @@ jobs:
               "$FAILED_ROOT" "$FAILED_REASON" "$REVERT" "$RUN_URL")"
           echo "Reverted ${{ github.sha }} in $REVERT" >> "$GITHUB_STEP_SUMMARY"
 
-      # 4. Regenerate index.json, commit it if it changed, add it to the bucket, point the IPNS
-      # name at it, and require the gateway to serve the committed bytes. A failure here is not
-      # a revert; re-run the workflow (workflow_dispatch) and it finishes idempotently.
+      # 4. Regenerate index.json, commit it if it changed (pushed through the deploy key; the
+      # commit touches only index.json, outside this workflow's path filter, so it does not
+      # retrigger), add it to the bucket, point the IPNS name at it, and require the gateway to
+      # serve the committed bytes. A failure here is not a revert; re-run the workflow
+      # (workflow_dispatch) and it finishes idempotently.
       - run: node scripts/publish-index.mjs

@@ -4,7 +4,10 @@ Atlas is the book of maps for Elephant data: one page per county, naming the arc
 for each of its data groups. One JSON file per county, written only through pull requests.
 A merge is the act of publication: it is what makes an archive discoverable to consumers.
 
-Status: scaffold. Nothing here is consumed yet.
+Status: scaffold. Nothing here is consumed yet. The repository is public; `main` is protected
+by a ruleset (changes only through a pull request with one approving code-owner review and a
+green `validate` check, no deletion or force-push), and the publish workflow writes its commits
+through a deploy key registered as the only bypass.
 
 ## What a page records
 
