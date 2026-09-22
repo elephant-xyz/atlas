@@ -60,11 +60,14 @@ is not publishable, whatever the upload logs say.
 7. The `validate` check runs the unit tests, the page validator, the gateway spot checks, the
    index check, and then `elephant-cli validate` on the full archive of every new `cid`
    (integrity, root, index, graph, lexicon, orphans: all six must be clean; the error CSV is
-   attached to the run as the `validation-errors` artifact when they are not). A code owner
-   (`.github/CODEOWNERS`) reviews and approves. Merge.
+   attached to the run as the `validation-errors` artifact when they are not). `main` is
+   protected by a ruleset: a change lands only through a pull request with one approving
+   review from a code owner (`.github/CODEOWNERS`) and a green `validate`; nothing is deleted
+   or force-pushed. Merge once both are in place.
 8. The publish workflow transfers your roots into the registry's Filebase bucket, regenerates
    `index.json`, commits it to `main`, and points the `elephant-atlas` IPNS name at it.
-   Consumers read the index through that name.
+   Consumers read the index through that name. The workflow's own commits (the index, a
+   revert) are pushed through a deploy key, the ruleset's only bypass.
 
 ## When a publication is reverted
 
