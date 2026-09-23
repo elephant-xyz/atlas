@@ -12,7 +12,7 @@
 //      key of property 0's data_groups.
 //   3. The schema block is fetched by CID, hashed, and must be a data-group JSON Schema.
 //   4. The tables block is fetched by CID, hashed, must be a CountyTables whose county_root is
-//      the cid, and every part of every table must answer a 1-byte range request by its own CID.
+//      the cid, and every part of every table must serve its root block by its own CID (`?format=raw`, hashed).
 // Gateways: first that answers wins, a 429 puts a gateway on cooldown, the gateway that served
 // the CAR is preferred afterwards, one deadline (ATLAS_GATEWAY_DEADLINE_MINUTES) per group.
 // The CAR is deleted after the checks. The CLI comes from ELEPHANT_CLI (default: elephant-cli).
@@ -165,7 +165,9 @@ export async function verifyGroup({ cid, schema, tables }, deps = {}) {
     for (const [i, part] of (tablesNode.tables[name].parts ?? []).entries()) {
       const partCid = part.cid?.toString();
       try {
-        await gw.get(partCid, { headers: { range: 'bytes=0-0' } });
+        // Trustless form: public gateways answer a plain /ipfs/<cid> with 429 (Retry-After 900)
+        // but serve ?format=raw. The part's root block, hashed; a raw-leaf part is the whole file.
+        await fetchBlock(gw, partCid);
         checked++;
       } catch (e) {
         missing.push(`${name}/parts/${i} ${partCid}`);
