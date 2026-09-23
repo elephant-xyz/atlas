@@ -26,3 +26,28 @@ export function registry(files) {
   }
   return root;
 }
+
+// ---- IPLD fixtures for the gateway/transfer/verify tests
+import { CarWriter } from '@ipld/car';
+import * as dagJson from '@ipld/dag-json';
+import { CID } from 'multiformats/cid';
+import { sha256 } from 'multiformats/hashes/sha2';
+
+/** { cid, bytes } for a value encoded with `codec` (dag-json by default). */
+export const block = async (value, codec = dagJson) => {
+  const bytes = codec.encode(value);
+  return { cid: CID.create(1, codec.code, await sha256.digest(bytes)), bytes };
+};
+
+/** CAR bytes with one root and the given blocks. */
+export const car = async (root, blocks) => {
+  const { writer, out } = CarWriter.create([root]);
+  const chunks = [];
+  const collected = (async () => {
+    for await (const c of out) chunks.push(c);
+  })();
+  for (const b of blocks) await writer.put(b);
+  await writer.close();
+  await collected;
+  return Buffer.concat(chunks);
+};

@@ -29,3 +29,62 @@ export async function fetchFromAny(path, { gateways = gatewayList(), fetch = glo
   }
   throw new Error(failures.join('; '));
 }
+
+/**
+ * A gateway client with one deadline for a whole job. `get(path)` tries the gateways in order,
+ * the one that answered last first; a 429 puts that gateway on cooldown (Retry-After, else
+ * 30 s) and is not counted as an attempt; any other failure moves to the next gateway; the
+ * whole list is retried with backoff until the deadline, then an Error lists the last failures.
+ */
+export function gatewayClient({ gateways = gatewayList(), fetch = globalThis.fetch, deadlineMs = 20 * 60_000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now, log = () => {} } = {}) {
+  const started = now();
+  const cooldown = new Map(); // gateway -> time it may be tried again
+  let preferred;
+  return {
+    get preferred() {
+      return preferred;
+    },
+    /** A 2xx whose body turned out unusable: cool the gateway down so the next get() tries the others. */
+    reject(url, seconds = 60) {
+      const gateway = gateways.find((g) => url.startsWith(`${g}/`));
+      if (!gateway) return;
+      cooldown.set(gateway, now() + seconds * 1_000);
+      if (preferred === gateway) preferred = undefined;
+      log(`${url}: unusable response, backing off ${seconds}s`);
+    },
+    async get(path, { headers = {}, requestMs = 30_000 } = {}) {
+      let wait = 2_000;
+      for (;;) {
+        const failures = [];
+        const order = preferred ? [preferred, ...gateways.filter((g) => g !== preferred)] : gateways;
+        for (const gateway of order) {
+          if ((cooldown.get(gateway) ?? 0) > now()) continue;
+          const url = `${gateway}/ipfs/${path}`;
+          try {
+            const res = await fetch(url, { headers, signal: AbortSignal.timeout(requestMs) });
+            if (res.ok) {
+              preferred = gateway;
+              return { res, url };
+            }
+            if (res.status === 429) {
+              const retry = Number(res.headers.get('retry-after')) || 30;
+              cooldown.set(gateway, now() + retry * 1_000);
+              log(`${url}: HTTP 429, backing off ${retry}s`);
+              continue;
+            }
+            failures.push(`${url}: HTTP ${res.status}`);
+          } catch (e) {
+            failures.push(`${url}: ${e.name === 'TimeoutError' ? `timeout after ${requestMs / 1000}s` : e.message}`);
+          }
+        }
+        const cooling = gateways.map((g) => cooldown.get(g) ?? 0).filter((t) => t > now());
+        const pause = cooling.length && !failures.length ? Math.max(1_000, Math.min(...cooling) - now()) : wait;
+        const remaining = deadlineMs - (now() - started);
+        if (pause >= remaining) throw new Error(`/ipfs/${path} not available from any gateway within ${deadlineMs / 60_000} min: ${failures.join('; ') || 'every gateway is rate limiting'}`);
+        if (failures.length) log(`/ipfs/${path}: ${failures.join('; ')}; retrying in ${pause / 1000}s`);
+        await sleep(pause);
+        wait = Math.min(wait * 2, 60_000);
+      }
+    },
+  };
+}

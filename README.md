@@ -87,8 +87,7 @@ atlas/
 ├── index.json                      generated on merge: the flat list consumers read
 ├── scripts/
 │   ├── validate-entry.mjs          schema, key consistency, no duplicate roots, index not hand-edited
-│   ├── verify-roots.mjs            fetch each changed group's roots from the gateway, hash, check shape and schema
-│   ├── validate-archives.mjs       download each new archive in full and run elephant-cli validate on it
+│   ├── verify-roots.mjs            the gate: whole archive by root, elephant-cli validate, schema, tables and parts by CID
 │   ├── build-index.mjs             regenerate index.json from counties/
 │   ├── transfer-roots.mjs          export new roots from the gateway, import them into the bucket
 │   ├── publish-index.mjs           commit index.json, add it, point the IPNS name at it
@@ -98,7 +97,7 @@ atlas/
 ├── .github/
 │   ├── CODEOWNERS                  who must approve a publication
 │   └── workflows/
-│       ├── validate.yml            on pull request: validate-entry, verify-roots, full archive validation
+│       ├── validate.yml            on pull request: validate-entry, index check, verify-roots
 │       └── publish.yml             on merge to main: transfer roots, build-index, commit, publish to IPNS
 └── CONTRIBUTING.md                 how an archive becomes a pull request
 ```
@@ -111,12 +110,12 @@ atlas/
 2. A generator writes the county's page and opens a pull request that touches exactly one
    file under `counties/`. One file per county is what lets many counties publish in parallel
    without conflicts.
-3. CI validates the page against the schema, fetches every changed root from the IPFS network
-   through the gateway list, checks the bytes hash to the CID and the blocks have the expected
-   shape, checks the archive carries the claimed schema and the tables point back at the
-   archive, and refuses a root used twice. Then a pull request is validated in full: the
-   archive is downloaded and every block, link, data-group root, and lexicon schema is checked
-   with `elephant-cli validate`; merging copies it to the org account.
+3. CI validates the page against the schema and refuses a root used twice. Then a pull request
+   is validated by downloading the whole archive by root and running the CLI on it; nothing is
+   resolved by path: `elephant-cli validate` checks every block, link, data-group root, and
+   lexicon schema; the local CAR must show a `CountyIndex` whose first property carries the
+   claimed schema; the schema block, the `CountyTables` block (pointing back at the archive),
+   and every Parquet part are fetched by their own CIDs. Merging copies it to the org account.
 4. A code owner approves. Merging is publication.
 5. The publish workflow transfers the roots, regenerates `index.json`, and points the IPNS
    name at it (see Publication).
@@ -124,9 +123,9 @@ atlas/
 ## Rules
 
 - Never edit `index.json` by hand; it is generated.
-- The archive must be retrievable from the IPFS network by its root CID at review and at merge;
-  any pinning provider or a publicly reachable node that keeps the pin until the merge is fine;
-  the org copies it onto its own account on merge. Gateways are untrusted: every block kept is
-  hashed against its CID.
+- The archive must be retrievable from the IPFS network by its root CID at review and at merge,
+  and every Parquet part by its own CID; any pinning provider or a publicly reachable node that
+  keeps the pin until the merge is fine; the org copies it onto its own account on merge.
+  Gateways are untrusted: every block kept is hashed against its CID.
 - A `cid` or `tables` root appears once in the whole registry.
 - Atlas records identifiers, never data.
