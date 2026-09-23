@@ -27,8 +27,12 @@ async function world(edit = () => {}) {
     [`${w.index.cid}?format=car`]: () => new Response(carBytes),
     [`${w.schema.cid}?format=raw`]: () => new Response(w.schema.bytes),
     [`${w.tables.cid}?format=raw`]: () => new Response(w.tables.bytes),
-    [`${w.partA.cid}`]: () => new Response('p', { status: 206 }),
-    [`${w.partB.cid}`]: () => new Response('p', { status: 206 }),
+    // Like ipfs.io, dweb.link and w3s.link: the trustless form serves the block, the plain
+    // form is refused with 429 and a 15-minute Retry-After.
+    [`${w.partA.cid}?format=raw`]: () => new Response(w.partA.bytes),
+    [`${w.partB.cid}?format=raw`]: () => new Response(w.partB.bytes),
+    [`${w.partA.cid}`]: () => new Response('refused', { status: 429, headers: { 'retry-after': '900' } }),
+    [`${w.partB.cid}`]: () => new Response('refused', { status: 429, headers: { 'retry-after': '900' } }),
   };
   w.fetched = [];
   w.fetch = async (url) => {
@@ -49,6 +53,8 @@ test('a consistent archive passes: CAR by root, CLI, local shape, schema and tab
   assert.ok(w.log.some((l) => l.startsWith(`downloaded ${G}/ipfs/${w.index.cid}?format=car`)), w.log.join('\n'));
   assert.ok(w.log.includes('checked 2 part(s) by CID'), w.log.join('\n'));
   assert.ok(w.fetched.every((u) => !u.includes('/shards/') && !u.includes('/tables/')), 'nothing resolved by path: ' + w.fetched.join('\n'));
+  assert.ok(w.fetched.includes(`${G}/ipfs/${w.partA.cid}?format=raw`), 'parts are fetched in the trustless form');
+  assert.ok(!w.fetched.some((u) => u.endsWith(`/ipfs/${w.partA.cid}`)), 'parts are never fetched in the plain form, which public gateways refuse');
 });
 
 test('an unserved root fails at the download with "not available from any gateway"', async () => {
@@ -105,7 +111,7 @@ test('a tables root pointing at another archive fails', async () => {
 
 test('a missing part is reported by its CID after every part was tried', async () => {
   const w = await world();
-  delete w.routes[`${w.partB.cid}`];
+  delete w.routes[`${w.partB.cid}?format=raw`];
   await assert.rejects(verifyGroup(w.group, w.deps), (e) => e.message.includes(`part(s) not available from any gateway: deed/parts/0 ${w.partB.cid}`));
   assert.ok(w.log.includes('checked 1 part(s) by CID, 1 unavailable'), w.log.join('\n'));
 });
