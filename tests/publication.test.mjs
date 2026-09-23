@@ -4,17 +4,13 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { CarReader, CarWriter } from '@ipld/car';
-import * as dagJson from '@ipld/dag-json';
-import { CID } from 'multiformats/cid';
+import { CarReader } from '@ipld/car';
 import * as raw from 'multiformats/codecs/raw';
-import { sha256 } from 'multiformats/hashes/sha2';
 import { poll, token } from '../scripts/filebase.mjs';
 import { DEFAULT_GATEWAYS, fetchFromAny, gatewayList } from '../scripts/gateways.mjs';
 import { TransferFailed, rootsToTransfer, transferArchive, transferTables } from '../scripts/transfer-roots.mjs';
-import { blockFromCar } from '../scripts/verify-roots.mjs';
-import * as validateArchives from '../scripts/validate-archives.mjs';
-import { CID_A, CID_B, CID_C, group, page } from './helpers.mjs';
+import { validateCar } from '../scripts/verify-roots.mjs';
+import { CID_A, CID_B, CID_C, block, car, group, page } from './helpers.mjs';
 
 const at = (path, page) => ({ path, page });
 const LEE = 'counties/FL/lee.json';
@@ -47,22 +43,6 @@ test('poll returns the first truthy result or undefined at the limit', async () 
 });
 
 // ---- transfer with a stubbed gateway and RPC
-
-const block = async (value, codec = dagJson) => {
-  const bytes = codec.encode(value);
-  return { cid: CID.create(1, codec.code, await sha256.digest(bytes)), bytes };
-};
-const car = async (root, blocks) => {
-  const { writer, out } = CarWriter.create([root]);
-  const chunks = [];
-  const collected = (async () => {
-    for await (const c of out) chunks.push(c);
-  })();
-  for (const b of blocks) await writer.put(b);
-  await writer.close();
-  await collected;
-  return Buffer.concat(chunks);
-};
 
 async function fixture(rpcReply) {
   const property = await block({ label: 'Seed', relationships: {} });
@@ -206,16 +186,7 @@ test('fetchFromAny takes the first 2xx, skipping a 504, and throws listing every
   await assert.rejects(fetchFromAny('bafy/x', { gateways: ['https://a.test', 'https://c.test'], fetch }), { message: 'https://a.test/ipfs/bafy/x: HTTP 504; https://c.test/ipfs/bafy/x: unreachable' });
 });
 
-test('blockFromCar returns the block with the expected CID from a path CAR, ignoring ancestors', async () => {
-  const f = await fixture();
-  const bytes = await car(f.shard.cid, [f.index, f.shard, f.property]);
-  assert.equal(Buffer.compare(await blockFromCar(bytes, f.shard.cid.toString()), f.shard.bytes), 0);
-  assert.equal(Buffer.compare(await blockFromCar(bytes, f.property.cid.toString()), f.property.bytes), 0);
-  assert.equal(await blockFromCar(bytes, f.tables.cid.toString()), undefined);
-});
-
 test('validateCar is clean only on exit 0 and strips browserslist noise from the report', () => {
-  const { validateCar } = validateArchives;
   const run = (status, stdout) => () => ({ status, stdout, stderr: '' });
   assert.deepEqual(validateCar('x.car', 'e.csv', 'cli', run(0, 'Browserslist: data is old\n  lexicon errors: 0\n')), { ok: true, report: '  lexicon errors: 0' });
   assert.deepEqual(validateCar('x.car', 'e.csv', 'cli', run(1, '  lexicon errors: 25\n')), { ok: false, report: '  lexicon errors: 25' });
