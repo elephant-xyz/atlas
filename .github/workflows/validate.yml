@@ -19,12 +19,11 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run validate
-      # Root and spot checks first: they fail fast on an unserved or malformed root.
-      - run: npm run verify
       - run: npm run index -- --check
 
-      # Full validation of every archive this pull request adds, with the Elephant CLI from
-      # GitHub main (cached per main commit).
+      # Every changed group: the whole archive downloaded by root and validated with the Elephant
+      # CLI from GitHub main (cached per main commit), then schema, tables and every part by CID.
+      # Nothing is resolved by path.
       - name: Resolve elephant-cli main
         id: cli
         run: echo "sha=$(git ls-remote https://github.com/elephant-xyz/elephant-cli.git refs/heads/main | cut -f1)" >> "$GITHUB_OUTPUT"
@@ -38,11 +37,11 @@ jobs:
           mkdir -p ~/elephant-cli && cd ~/elephant-cli
           npm init -y >/dev/null
           npm i --no-audit --no-fund "github:elephant-xyz/elephant-cli#${{ steps.cli.outputs.sha }}"
-      - name: Validate every new archive in full
+      - name: Verify every changed group
         env:
           ELEPHANT_CLI: /home/runner/elephant-cli/node_modules/.bin/elephant-cli
           ATLAS_VALIDATION_CSV: ${{ runner.temp }}/validation-errors.csv
-        run: node scripts/validate-archives.mjs
+        run: npm run verify
       - name: Upload validation errors
         if: failure()
         uses: actions/upload-artifact@v4
