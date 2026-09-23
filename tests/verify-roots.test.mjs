@@ -57,6 +57,25 @@ test('an unserved root fails at the download with "not available from any gatewa
   await assert.rejects(verifyGroup(w.group, { ...w.deps, fetch, gateways: [G, G2] }), (e) => e.message.includes(`/ipfs/${w.index.cid}?format=car not available from any gateway within 1 min`) && e.message.includes(`${G2}/ipfs/${w.index.cid}?format=car: HTTP 504`));
 });
 
+test('a 2xx with an empty or root-less CAR counts as that gateway failing; the next gateway serves it', async () => {
+  const w = await world();
+  const fetch = async (url, init) => {
+    if (url.startsWith(G) && url.endsWith('?format=car')) return new Response('', { status: 200 });
+    return w.fetch(url, init);
+  };
+  const cli = [];
+  await verifyGroup(w.group, { ...w.deps, fetch, gateways: [G, G2], validateCar: (f) => (cli.push(f), { ok: true, report: 'ok' }) });
+  assert.ok(w.log.some((l) => l === `${G}/ipfs/${w.index.cid}?format=car: empty body (0 bytes)`), w.log.join('\n'));
+  assert.ok(w.log.some((l) => l.startsWith(`downloaded ${G2}/ipfs/${w.index.cid}?format=car`)), w.log.join('\n'));
+  assert.equal(cli.length, 1, 'the CLI ran once, on the good CAR');
+
+  const other = await block({ label: 'CountyIndex', shards: [] });
+  const wrongRoot = await world();
+  const bad = async (url, init) => (url.endsWith('?format=car') ? new Response(await car(other.cid, [other])) : wrongRoot.fetch(url, init));
+  await assert.rejects(verifyGroup(wrongRoot.group, { ...wrongRoot.deps, fetch: bad, deadlineMs: 5_000 }), (e) => e.message.includes(`/ipfs/${wrongRoot.index.cid}?format=car not available from any gateway within`) && e.message.includes('every gateway is rate limiting'));
+  assert.ok(wrongRoot.log.some((l) => l.includes(`CAR roots are [${other.cid}]`)), wrongRoot.log.join('\n'));
+});
+
 test('a CLI failure stops the gate before the shape checks', async () => {
   const w = await world();
   await assert.rejects(verifyGroup(w.group, { ...w.deps, validateCar: () => ({ ok: false, report: 'lexicon errors: 25' }) }), { message: `archive ${w.index.cid}: elephant-cli validate failed; see e.csv` });

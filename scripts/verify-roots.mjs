@@ -3,7 +3,8 @@
 // origin/main (or every group with --all). Nothing is resolved by path: public gateways do not
 // resolve paths reliably for content they do not pin.
 //   1. The archive is downloaded by root (`/ipfs/<cid>?format=car`) from the first gateway that
-//      answers, streamed to disk, and `elephant-cli validate` runs on it: every block must hash
+//      answers with a CAR whose root block is the cid and hashes to it (an empty or root-less
+//      2xx counts as that gateway failing), streamed to disk, and `elephant-cli validate` runs on it: every block must hash
 //      to its CID and all six checks (integrity, root, index, graph, lexicon, orphans) must be
 //      clean. The error CSV is left at ATLAS_VALIDATION_CSV for the workflow to upload.
 //   2. From that local CAR: the root block hashes to the cid and is a CountyIndex with shards,
@@ -59,6 +60,36 @@ function require_(cond, what, msg) {
   if (!cond) throw new Error(`${what}: ${msg}`);
 }
 
+/** Stream `<cid>?format=car` to `file` from a gateway whose CAR actually carries the hashed root; loop until one does or the deadline passes. */
+async function downloadArchive(gw, cid, file, d) {
+  for (;;) {
+    const { res, url } = await gw.get(`${cid}?format=car`, { headers: { accept: 'application/vnd.ipld.car' }, requestMs: 60 * 60_000 });
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+    const size = statSync(file).size;
+    let problem;
+    if (!size) problem = 'empty body';
+    else {
+      try {
+        const reader = await CarIndexedReader.fromFile(file);
+        try {
+          const roots = (await reader.getRoots()).map(String);
+          const block = await reader.get(CID.parse(cid));
+          if (!roots.includes(cid)) problem = `CAR roots are [${roots.join(', ')}]`;
+          else if (!block) problem = 'root block missing from the CAR';
+          else await verified(url, block.bytes, cid);
+        } finally {
+          await reader.close();
+        }
+      } catch (e) {
+        problem = e.message.startsWith(url) ? e.message.slice(url.length + 2) : `not a CAR (${e.message})`;
+      }
+    }
+    if (!problem) return { url, size };
+    d.log(`${url}: ${problem} (${size} bytes)`);
+    gw.reject(url);
+  }
+}
+
 /** A hashed, decoded block out of the local CAR. */
 async function carNode(reader, cid, what) {
   const block = await reader.get(CID.parse(cid));
@@ -80,9 +111,8 @@ export async function verifyGroup({ cid, schema, tables }, deps = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'atlas-verify-'));
   const file = join(dir, `${cid}.car`);
   try {
-    const { res, url } = await gw.get(`${cid}?format=car`, { headers: { accept: 'application/vnd.ipld.car' }, requestMs: 60 * 60_000 });
-    await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
-    d.log(`downloaded ${url} (${statSync(file).size} bytes)`);
+    const { url, size } = await downloadArchive(gw, cid, file, d);
+    d.log(`downloaded ${url} (${size} bytes, root block verified)`);
     const { ok, report } = d.validateCar(file);
     d.log(report);
     require_(ok, `archive ${cid}`, `elephant-cli validate failed; see ${d.csv}`);

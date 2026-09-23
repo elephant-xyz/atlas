@@ -44,6 +44,14 @@ export function gatewayClient({ gateways = gatewayList(), fetch = globalThis.fet
     get preferred() {
       return preferred;
     },
+    /** A 2xx whose body turned out unusable: cool the gateway down so the next get() tries the others. */
+    reject(url, seconds = 60) {
+      const gateway = gateways.find((g) => url.startsWith(`${g}/`));
+      if (!gateway) return;
+      cooldown.set(gateway, now() + seconds * 1_000);
+      if (preferred === gateway) preferred = undefined;
+      log(`${url}: unusable response, backing off ${seconds}s`);
+    },
     async get(path, { headers = {}, requestMs = 30_000 } = {}) {
       let wait = 2_000;
       for (;;) {
@@ -70,7 +78,7 @@ export function gatewayClient({ gateways = gatewayList(), fetch = globalThis.fet
           }
         }
         const cooling = gateways.map((g) => cooldown.get(g) ?? 0).filter((t) => t > now());
-        const pause = failures.length ? wait : Math.max(1_000, Math.min(...cooling) - now());
+        const pause = cooling.length && !failures.length ? Math.max(1_000, Math.min(...cooling) - now()) : wait;
         const remaining = deadlineMs - (now() - started);
         if (pause >= remaining) throw new Error(`/ipfs/${path} not available from any gateway within ${deadlineMs / 60_000} min: ${failures.join('; ') || 'every gateway is rate limiting'}`);
         if (failures.length) log(`/ipfs/${path}: ${failures.join('; ')}; retrying in ${pause / 1000}s`);
