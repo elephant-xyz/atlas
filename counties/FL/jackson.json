@@ -1,0 +1,12 @@
+{
+  "county": "jackson",
+  "state": "FL",
+  "fips": "12063",
+  "groups": {
+    "county": {
+      "cid": "baguqeerafpmumlr6x2iood2tismucos6w6eu6clge3z3pbwpogs5u5wkk6cq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerau5cozk6j4p5p32zlsqwlc2va4eigqqptkl6xhlns5wxpl4vsilmq"
+    }
+  }
+}
