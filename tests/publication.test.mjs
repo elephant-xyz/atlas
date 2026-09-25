@@ -168,7 +168,8 @@ test('a root that decodes but is not a CountyIndex is a TransferFailed', async (
 
 test('gatewayList reads ATLAS_GATEWAYS or the defaults', () => {
   assert.deepEqual(gatewayList({}), DEFAULT_GATEWAYS);
-  assert.deepEqual(gatewayList({ ATLAS_GATEWAYS: ' https://a.test/, https://b.test ' }), ['https://a.test', 'https://b.test']);
+  assert.deepEqual(gatewayList({ ATLAS_GATEWAYS: '' }), DEFAULT_GATEWAYS, 'an empty secret counts as unset');
+  assert.deepEqual(gatewayList({ ATLAS_GATEWAYS: ' https://a.test/, https://ipfs.filebase.io ' }), ['https://a.test', 'https://ipfs.filebase.io', 'https://trustless-gateway.link'], 'custom gateways go first, defaults follow');
 });
 
 test('fetchFromAny takes the first 2xx, skipping a 504, and throws listing every attempt when all fail', async () => {

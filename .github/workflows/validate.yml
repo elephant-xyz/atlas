@@ -41,6 +41,10 @@ jobs:
         env:
           ELEPHANT_CLI: /home/runner/elephant-cli/node_modules/.bin/elephant-cli
           ATLAS_VALIDATION_CSV: ${{ runner.temp }}/validation-errors.csv
+          # Optional private gateway(s) for the gate and the CLI; masked in logs. Pull requests
+          # from forks get no secrets and use the public gateways only.
+          ATLAS_GATEWAYS: ${{ secrets.ATLAS_GATEWAYS }}
+          ELEPHANT_IPFS_GATEWAYS: ${{ secrets.ATLAS_GATEWAYS }}
         run: npm run verify
       - name: Upload validation errors
         if: failure()

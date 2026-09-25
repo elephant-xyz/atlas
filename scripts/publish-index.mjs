@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { writeIndex } from './build-index.mjs';
 import { poll, rpc } from './filebase.mjs';
 
-const GATEWAY = (process.env.ATLAS_GATEWAY ?? 'https://striped-pink-anaconda.myfilebase.com').replace(/\/$/, '');
+const GATEWAY = (process.env.ATLAS_GATEWAY || 'https://ipfs.filebase.io').replace(/\/$/, '');
 const KEY = process.env.ATLAS_IPNS_KEY ?? 'elephant-atlas';
 const ID = process.env.ATLAS_IPNS_ID ?? 'k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04';
 const IPNS_DEADLINE_MS = Number(process.env.ATLAS_IPNS_DEADLINE_MS ?? 600_000);

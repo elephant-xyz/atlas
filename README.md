@@ -54,9 +54,9 @@ transferred to the registry's own bucket before the index changes, so consumers 
 root the registry cannot serve:
 
 1. Every archive and tables root the merge added is exported from the IPFS network as CAR,
-   through a list of gateways tried in order (Elephant's dedicated gateway
-   `https://striped-pink-anaconda.myfilebase.com`, then `https://ipfs.filebase.io` and
-   `https://trustless-gateway.link`; `ATLAS_GATEWAYS` overrides),
+   through public gateways tried in order (`https://ipfs.filebase.io`, then
+   `https://trustless-gateway.link`); a private gateway can be put first through the
+   `ATLAS_GATEWAYS` repository secret, which GitHub masks in logs,
    and imported into the `elephant-atlas` Filebase bucket with `dag/import`, bounded piece by
    piece: the root block alone, then one shard (or one Parquet part) at a time through a temp
    file, then the root block again with `pin-roots=true` so the recursive pin sees a complete
