@@ -25,6 +25,8 @@ env:
   FILEBASE_ACCESS_KEY: ${{ secrets.ELEPHANT_FILEBASE_ACCESS_KEY }}
   FILEBASE_SECRET_KEY: ${{ secrets.ELEPHANT_FILEBASE_SECRET_KEY }}
   FILEBASE_BUCKET: elephant-atlas
+  # Optional private gateway(s), comma-separated, tried before the public ones; masked in logs.
+  ATLAS_GATEWAYS: ${{ secrets.ATLAS_GATEWAYS }}
   ATLAS_IPNS_KEY: elephant-atlas
   ATLAS_IPNS_ID: k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04
   # Dispatch input, else the repository variable (set it to shorten a test), else 20 minutes.

@@ -1,16 +1,17 @@
-// IPFS gateways, tried in order for every fetch. Elephant's dedicated Filebase gateway first: it
-// is public (retrieves any CID from the network), caches, and does not rate-limit. Then Filebase's
-// shared gateway and the public trustless gateway (ipfs.io, dweb.link and w3s.link only redirect
-// trustless requests there and refuse plain ones). The gateway is untrusted: callers hash every
-// block they keep. Content is "not available" only when every gateway fails.
-export const DEFAULT_GATEWAYS = ['https://striped-pink-anaconda.myfilebase.com', 'https://ipfs.filebase.io', 'https://trustless-gateway.link'];
+// Public IPFS gateways, tried in order for every fetch: Filebase's shared gateway and the public
+// trustless gateway (ipfs.io, dweb.link and w3s.link only redirect trustless requests there and
+// refuse plain ones). A private gateway comes only from the ATLAS_GATEWAYS secret and is tried
+// first. The gateway is untrusted: callers hash every block they keep. Content is "not available"
+// only when every gateway fails.
+export const DEFAULT_GATEWAYS = ['https://ipfs.filebase.io', 'https://trustless-gateway.link'];
 
-/** Origins from ATLAS_GATEWAYS (comma-separated), else the defaults. */
+/** Origins from ATLAS_GATEWAYS (comma-separated; empty means unset) first, then the defaults. */
 export function gatewayList(env = process.env) {
-  return (env.ATLAS_GATEWAYS ?? DEFAULT_GATEWAYS.join(','))
+  const custom = (env.ATLAS_GATEWAYS ?? '')
     .split(',')
     .map((s) => s.trim().replace(/\/$/, ''))
     .filter(Boolean);
+  return [...new Set([...custom, ...DEFAULT_GATEWAYS])];
 }
 
 /**
