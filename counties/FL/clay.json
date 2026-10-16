@@ -1,0 +1,12 @@
+{
+  "county": "clay",
+  "state": "FL",
+  "fips": "12019",
+  "groups": {
+    "county": {
+      "cid": "baguqeeramyolct5fyo2blgls4yh5bhozn7mkhrwtufytzstedzwhs3z3asxq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeram6hx4wu6qxeinpte2srv5kzuubor5mcdljb2bnu7ugjykwycqegq"
+    }
+  }
+}
