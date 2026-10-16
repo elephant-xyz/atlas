@@ -1,0 +1,12 @@
+{
+  "county": "pasco",
+  "state": "FL",
+  "fips": "12101",
+  "groups": {
+    "county": {
+      "cid": "baguqeerajmjaee2k4hcvunti73es6svlamzeaxm5z3bnp5eeu5okgnpaw3la",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeranaqhc2bas4toqk4x6e7llaeqcg3nbnav2qhi6suy5dvfgpp6woua"
+    }
+  }
+}
