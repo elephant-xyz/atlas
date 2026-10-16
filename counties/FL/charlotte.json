@@ -1,0 +1,12 @@
+{
+  "county": "charlotte",
+  "state": "FL",
+  "fips": "12015",
+  "groups": {
+    "county": {
+      "cid": "baguqeera6gzuyvt3mzt5e5sdrmwzbxi6kdudvp2brdwtlkygzwvwd2vuaobq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraycksr3nazzraz2dssfn533zsklcoytocrvuxzsi7pntaxdxj5wnq"
+    }
+  }
+}
