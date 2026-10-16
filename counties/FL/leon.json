@@ -1,0 +1,12 @@
+{
+  "county": "leon",
+  "state": "FL",
+  "fips": "12073",
+  "groups": {
+    "county": {
+      "cid": "baguqeera4rz35pl2buiwcjbwoqlsnegmtapxfzqnpfsqtdqh2gslxs32gcna",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeradgbotxya7ziixutq4cshshtkjcc2bznduhmxszibqzm6ydau6e4a"
+    }
+  }
+}
