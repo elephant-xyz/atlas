@@ -1,0 +1,12 @@
+{
+  "county": "citrus",
+  "state": "FL",
+  "fips": "12017",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraeq6pgg4ypouxjg47embso2ihm3gvhi7upx2amtkokwhkwa2cnmxa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerawfpjay6oayrzhmlbwbrc3x54c5zm7hh2jvfkrzqonglgebxymbiq"
+    }
+  }
+}
