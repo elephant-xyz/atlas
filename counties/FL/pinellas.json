@@ -1,0 +1,12 @@
+{
+  "county": "pinellas",
+  "state": "FL",
+  "fips": "12103",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraaaedc7puuyzgk6xp56yvq2we3vfdfxw5lqkgylibo3q3utszk3va",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerak3xutyy4plpagn7rzpgekwekfanwzqg6u552catmxcsqgvjitjnq"
+    }
+  }
+}
