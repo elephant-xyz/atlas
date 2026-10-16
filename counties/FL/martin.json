@@ -1,0 +1,12 @@
+{
+  "county": "martin",
+  "state": "FL",
+  "fips": "12085",
+  "groups": {
+    "county": {
+      "cid": "baguqeerac6p4bntwwb6xsqi5zyl5365chsvwcmiietbipr6olw2uc54thccq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraeg2npstmkbmocmkupa3v442szfot2q7rc72bfu5wb45kuogydq2q"
+    }
+  }
+}
