@@ -1,0 +1,12 @@
+{
+  "county": "osceola",
+  "state": "FL",
+  "fips": "12097",
+  "groups": {
+    "county": {
+      "cid": "baguqeera3dx7fplm3g2n2oh3pzitrmdt3jmscftplobavtqw4gkpcthatx5q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerain4u7kjqdwy4qdh5xse4hldfq7z54julgh2ort77jckz4m3p4hfa"
+    }
+  }
+}
