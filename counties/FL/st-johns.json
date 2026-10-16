@@ -1,0 +1,12 @@
+{
+  "county": "st-johns",
+  "state": "FL",
+  "fips": "12109",
+  "groups": {
+    "county": {
+      "cid": "baguqeerawt3m7gzp2l6nmkreqgkm7i3upvxzpwrqnsiryhvoyzuetabknydq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeera5vmg46kbw45ss2ldtc3abtljww4vzbv66yqrsidx65otgdep6hgq"
+    }
+  }
+}
