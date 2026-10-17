@@ -1,0 +1,12 @@
+{
+  "county": "polk",
+  "state": "FL",
+  "fips": "12105",
+  "groups": {
+    "county": {
+      "cid": "baguqeera7jxgx37jw2azzl2avavphwxz27dcir2goekcbiikhhj6lciupb4q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeracm5k36jijswyfpjwhw5ioz7z2i24i6fg74surmv6ym4333rocgha"
+    }
+  }
+}
