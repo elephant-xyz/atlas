@@ -1,0 +1,12 @@
+{
+  "county": "lake",
+  "state": "FL",
+  "fips": "12069",
+  "groups": {
+    "county": {
+      "cid": "baguqeerawbkzjxat7jdamxnwabdydcuwmi7unnryjrhl2yrhmzmmt5jnueiq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerab5tsayftyjcbco7h76f5eplm4wztyo23m2ll6bqmhkomytbidcsa"
+    }
+  }
+}
