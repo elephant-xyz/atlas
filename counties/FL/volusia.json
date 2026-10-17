@@ -1,0 +1,12 @@
+{
+  "county": "volusia",
+  "state": "FL",
+  "fips": "12127",
+  "groups": {
+    "county": {
+      "cid": "baguqeerapjlphkbr3enmknnuweexmxnjs4747y75k4lpzbhbzelxkwjlaiua",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeera4rdzpzqavsxfhw72xighvksaa6zn4hyo5a3gvbkq5pcgdmfas7ra"
+    }
+  }
+}
