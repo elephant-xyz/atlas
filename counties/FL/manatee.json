@@ -1,0 +1,12 @@
+{
+  "county": "manatee",
+  "state": "FL",
+  "fips": "12081",
+  "groups": {
+    "county": {
+      "cid": "baguqeerad5zhvuozdveekvrv7lj45a3hbxkfjhde745fzavpph3hdzine7pa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeratjdtwbedpm7h5sgncrpeu24xwqsdqyafrwvzujkkuj6oikavqata"
+    }
+  }
+}
