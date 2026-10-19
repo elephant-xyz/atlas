@@ -1,0 +1,12 @@
+{
+  "county": "nassau",
+  "state": "FL",
+  "fips": "12089",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraecfssiuwe4tfsatghymqu2w2xdehbtszuub7mtz442ag2y2znksq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraub66ud2jrfcnjdmgbok422pyjk2cmzxi4ukxzzlj3qgn5srq475a"
+    }
+  }
+}
