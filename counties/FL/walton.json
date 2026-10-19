@@ -1,0 +1,12 @@
+{
+  "county": "walton",
+  "state": "FL",
+  "fips": "12131",
+  "groups": {
+    "county": {
+      "cid": "baguqeerapa4lzpliiisiv7z24qa6jkg62l5mnsrucubvw3fhuuasbsosbxlq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerazg7n7e33ufghpfikv2tkxwwpscrjjsy6esjywidmd4kd5q2pekdq"
+    }
+  }
+}
