@@ -1,0 +1,12 @@
+{
+  "county": "collier",
+  "state": "FL",
+  "fips": "12021",
+  "groups": {
+    "county": {
+      "cid": "baguqeerao2xk7nc5kvkjf2p5l6vlz25grpn6fupvgzs6usxitkqntpuoeb5a",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeera5q3nn6ky3tk4qporzg6hkftxs7yvaigj224c65kqk67qwa3hopia"
+    }
+  }
+}
