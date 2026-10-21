@@ -1,0 +1,12 @@
+{
+  "county": "hardee",
+  "state": "FL",
+  "fips": "12049",
+  "groups": {
+    "county": {
+      "cid": "baguqeeracrt4ziqmfeus7xqsxl37pivykrxv4zudfq2h3z7b6ls5oy5lltca",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeracynepv5cmcbriwjnoafktofsbnan7stxkjbgdzlbhj7mgiem6era"
+    }
+  }
+}
