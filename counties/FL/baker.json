@@ -1,0 +1,12 @@
+{
+  "county": "baker",
+  "state": "FL",
+  "fips": "12003",
+  "groups": {
+    "county": {
+      "cid": "baguqeerajcyi52jojabadtouohbse2xevzix5fylh6yifbg6wsakqvxj4jja",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraj57mcdhnyamruqtaognrsmwbwrl6tuahf4eglg7j6vsm5gxi7lwa"
+    }
+  }
+}
