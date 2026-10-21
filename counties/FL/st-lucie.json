@@ -1,0 +1,12 @@
+{
+  "county": "st-lucie",
+  "state": "FL",
+  "fips": "12111",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraidpr6jv5ruf6v3h2uspfftdudxp7ms67yul2cbs5rqfpnbqgkrdq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraa7ypku7xpinwhg7sqlazf47ta5gefz3cono4fby6zn5jf2zolixa"
+    }
+  }
+}
