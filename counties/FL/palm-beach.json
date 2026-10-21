@@ -1,0 +1,12 @@
+{
+  "county": "palm-beach",
+  "state": "FL",
+  "fips": "12099",
+  "groups": {
+    "county": {
+      "cid": "baguqeera6o7xchfvm5kbsy4ycseybge2nysboi6gtep2fk2a5c7ozh43qvhq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeera44u4w77rkeimbqukkf6iz4dliwrbriaifa6yadunxc5tjjtdoeoq"
+    }
+  }
+}
