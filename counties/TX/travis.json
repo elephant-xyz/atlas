@@ -1,0 +1,12 @@
+{
+  "county": "travis",
+  "state": "TX",
+  "fips": "48453",
+  "groups": {
+    "property_improvement": {
+      "cid": "baguqeeraabcjfnhgmvywt4lmkldznv4jgd2bw7azec4ujpnie2w46vrmf4tq",
+      "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+      "tables": "baguqeeraddzenc37adtill3pzcxgcjanaqha5xwrnxrgbirb23qhelnmataa"
+    }
+  }
+}
