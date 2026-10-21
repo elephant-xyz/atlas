@@ -1,0 +1,12 @@
+{
+  "county": "indian-river",
+  "state": "FL",
+  "fips": "12061",
+  "groups": {
+    "county": {
+      "cid": "baguqeeravq6ouw3vbiviby4cglfzrqzeht3scbnjdjpgetcs5x3hr3h44d3a",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeran7pm3qfphv7x6eqoy2fc2l2clyycrylvwqxoon54qt2u4rzvom7a"
+    }
+  }
+}
