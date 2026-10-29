@@ -1,0 +1,17 @@
+{
+  "county": "hernando",
+  "state": "FL",
+  "fips": "12053",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraj4c767ckdud67mxqoti3vgjhgziwgca23qyf7afkxx3xpzcgkg3q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeranmfsfjvc6cpt7w77y7gtb7meeokxnncxecpvcaebwzp6ybvcyfqa"
+    },
+    "property_management": {
+      "cid": "baguqeera5e4achjobt4byqtdg5njquxsgt5lkegu26olx6aq5q46zqil76ra",
+      "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+      "tables": "baguqeerap7kq2utspgbldfic6r7lkgc3yyppgcc6x6pzst5ca4bfqmcl5otq"
+    }
+  }
+}
