@@ -1,0 +1,17 @@
+{
+  "county": "osceola",
+  "state": "FL",
+  "fips": "12097",
+  "groups": {
+    "county": {
+      "cid": "baguqeerabgubggpgxpucjmhakljp5bi7t2udzwkbos7qrzketufd5mauwfna",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeera3rodydfshvems2a3nkugrbptlshk22xveq5e2xu4b33lpbev7fsa"
+    },
+    "property_management": {
+      "cid": "baguqeerar63ilmwjr6qyaggu34pctzyyf5xdzbxmtonfadxthbce43de5bqq",
+      "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+      "tables": "baguqeerasndxtxza4f35g7f5jxi2s6lcyyxn36hwpf7tkszsybeun7skoaca"
+    }
+  }
+}
