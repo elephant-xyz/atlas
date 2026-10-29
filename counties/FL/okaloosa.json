@@ -1,0 +1,12 @@
+{
+  "county": "okaloosa",
+  "state": "FL",
+  "fips": "12091",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraitirnbyk3bctboptvd4fex6fuczgiighrv32v3t4csxzcoydz66q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraihbarj5mgcbn35bqmbz4ivjla7qws2lqapq55njl6kfxec4peela"
+    }
+  }
+}
