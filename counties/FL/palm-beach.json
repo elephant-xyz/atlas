@@ -4,9 +4,14 @@
   "fips": "12099",
   "groups": {
     "county": {
-      "cid": "baguqeera6o7xchfvm5kbsy4ycseybge2nysboi6gtep2fk2a5c7ozh43qvhq",
+      "cid": "baguqeeraihpuxmfcycbjo7wil4pwpzqg47tba2vihbqmwvyljoyveyxbxvfq",
       "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-      "tables": "baguqeera44u4w77rkeimbqukkf6iz4dliwrbriaifa6yadunxc5tjjtdoeoq"
+      "tables": "baguqeerae5zeimvnhutdqhqbnhqjv3mqxumhplzbsftlzk7wx2ybyno4dxba"
+    },
+    "property_management": {
+      "cid": "baguqeera2hlkuq2viggyjvtb52w25j5z6jzrxr6qiks2hsmxgt4x2yzg3wha",
+      "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+      "tables": "baguqeeravk2a2ogiy4mizo3lf5xvfbutgffaayebezdabhyp4haf526lfozq"
     }
   }
 }
