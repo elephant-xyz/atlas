@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "786035a4fc7656fd0fa6aac7effdd385c5c7f6ca",
+  "generated_from": "a7de914914a3a23a6827dc6bfdd9ee4b8647599e",
   "counties": [
     {
       "county": "baker",
@@ -31,6 +31,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerajt2a4irvp6isfl4ccjlk66uxeiiowcdmfupxroy2a3qwiwrglsoq",
           "published_at": "2026-11-03T17:47:20.000Z"
+        }
+      }
+    },
+    {
+      "county": "citrus",
+      "state": "FL",
+      "fips": "12017",
+      "groups": {
+        "county": {
+          "cid": "baguqeerabcbg4i5ahamouxvflrtddbgj24riyaiow5mufvltqnbbjm3tuzqa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraq7hwqongerr62jvbf4e765gtgkavflc22y5j7bbzhpbu3mmzlz2a",
+          "published_at": "2026-11-03T23:52:16.000Z"
         }
       }
     },
