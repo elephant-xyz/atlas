@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "3985741d8af7410a789e830b298d56890c59b918",
+  "generated_from": "a5ea63a1e87b649987a53fd589c3731ecd3c47ec",
   "counties": [
     {
       "county": "collier",
@@ -57,6 +57,25 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerau5cozk6j4p5p32zlsqwlc2va4eigqqptkl6xhlns5wxpl4vsilmq",
           "published_at": "2026-09-24T18:37:24.000Z"
+        }
+      }
+    },
+    {
+      "county": "lee",
+      "state": "FL",
+      "fips": "12071",
+      "groups": {
+        "county": {
+          "cid": "baguqeerah2lmffigrt5qlqfyj2djoakepokaphpxokhb2qm7aipumyu4n5jq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerave3uvj7xeo767g2lp7mt4pqf3phizp4qvivae6go36ek6bsrc6rq",
+          "published_at": "2026-11-03T17:33:49.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeerajnfzbwp72bxukma3dvhzf2bhdzipovmc22ffm6n5wusgy5x7rbwq",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeera2iogf5m6vf37kpih5la2r47xhzositnodqdy7m7dbz5y6ncffkaa",
+          "published_at": "2026-11-03T17:33:49.000Z"
         }
       }
     },
