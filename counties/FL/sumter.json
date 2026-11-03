@@ -1,0 +1,12 @@
+{
+  "county": "sumter",
+  "state": "FL",
+  "fips": "12119",
+  "groups": {
+    "county": {
+      "cid": "baguqeerauo34q2cq66ncvpubgqsadqc4rupnxhks4nkp3ytti5qdo7v4xu4q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeratoottnt6ub2ctyeftuahuimugajnyo5o3rogfp4kzkssf5g57mea"
+    }
+  }
+}
