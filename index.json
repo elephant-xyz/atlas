@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "1c004aa717272f1666c3c2307da2991c91a010c1",
+  "generated_from": "d62da7b6282ba5b5ce812a7c67aff9b8839f21b4",
   "counties": [
     {
       "county": "baker",
@@ -147,6 +147,25 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerarvnrvairkmvwuyrqajxrk6io5ohk3t6ukxjb6dprk6trokgewreq",
           "published_at": "2026-11-03T16:37:34.000Z"
+        }
+      }
+    },
+    {
+      "county": "st-lucie",
+      "state": "FL",
+      "fips": "12111",
+      "groups": {
+        "county": {
+          "cid": "baguqeerakzeldtobfjywd4wnribdsgjzp3jik2bt6jyfqs3gse6gc5zkz3gq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerakidn6eayrvqh7r5cgya4xaccxeyalcmz4x7anooptuyxxap5zqca",
+          "published_at": "2026-11-03T17:51:39.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeeram6xzfodsp574oj7jvvsz6zgdnjwadac6mknstx3fzvfmojlm2raq",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeerapf7cs4kgeycjavgnb4e7oifnaaypuqu73rn7xes2etoa4mv6ejva",
+          "published_at": "2026-11-03T17:51:39.000Z"
         }
       }
     },
