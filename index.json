@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "532c800f3aebc785e765a45938f64dcb05569fb4",
+  "generated_from": "bb975797ac04f7fa366acbf9a12438b2427b8e20",
   "counties": [
     {
       "county": "collier",
@@ -31,6 +31,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraegfm4hsmmpjklmaoejyxhw7ayh7wohckewy7ccdwgkfpcxt646ha",
           "published_at": "2026-11-03T15:45:37.000Z"
+        }
+      }
+    },
+    {
+      "county": "indian-river",
+      "state": "FL",
+      "fips": "12061",
+      "groups": {
+        "county": {
+          "cid": "baguqeerakzaoffknq4ioqou5lya5nrrt2ozp3y6bub7hfuenhfkefxx4cqqa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera6d3hqkrxzccrtsfra7q7k6wuud2cg3n66khw4v7sf2ym4yrg6fca",
+          "published_at": "2026-11-03T17:21:36.000Z"
         }
       }
     },
