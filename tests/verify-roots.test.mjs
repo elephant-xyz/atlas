@@ -85,7 +85,8 @@ test('a 2xx with an empty or root-less CAR counts as that gateway failing; the n
 test('a CLI failure stops the gate before the shape checks', async () => {
   const w = await world();
   await assert.rejects(verifyGroup(w.group, { ...w.deps, validateCar: () => ({ ok: false, report: 'lexicon errors: 25' }) }), { message: `archive ${w.index.cid}: elephant-cli validate failed; see e.csv` });
-  assert.deepEqual(w.fetched, [`${G}/ipfs/${w.index.cid}?format=raw`, `${G}/ipfs/${w.index.cid}?format=car`], 'only the archive was fetched: the root-block probe, then the CAR');
+  assert.ok(w.fetched.every((u) => u === `${G}/ipfs/${w.index.cid}?format=raw` || u === `${G}/ipfs/${w.index.cid}?format=car`), 'only the archive was fetched: the root-block probe, then the CAR: ' + w.fetched.join('\n'));
+  assert.equal(w.fetched.filter((u) => u.endsWith('?format=car')).length, 1, 'the CAR once');
 });
 
 test('a root that is not a CountyIndex fails from the local CAR', async () => {
@@ -185,4 +186,12 @@ test('parallel fetching off (ATLAS_FETCH_PARALLEL=1) keeps the whole-CAR downloa
   const w = await world();
   await verifyGroup(w.group, { ...w.deps, parallel: 1 });
   assert.deepEqual(w.fetched.slice(0, 1), [`${G}/ipfs/${w.index.cid}?format=car`]);
+});
+
+test('a rate-limited root probe waits for the gateway instead of falling back to the single stream', async () => {
+  const w = await shardedWorld();
+  let limited = 2;
+  const fetch = async (url, init) => (url.endsWith(`${w.index.cid}?format=raw`) && limited-- > 0 ? new Response('slow down', { status: 429, headers: { 'retry-after': '5' } }) : w.fetch(url, init));
+  await verifyGroup(w.group, { ...w.deps, fetch, parallel: 3 });
+  assert.ok(w.log.some((l) => l.includes('root block + 3 shard CARs')), w.log.join('\n'));
 });

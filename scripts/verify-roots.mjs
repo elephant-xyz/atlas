@@ -34,13 +34,14 @@ import { CarBlockIterator, CarIndexedReader, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
-import { fetchFromAny, gatewayClient, gatewayList } from './gateways.mjs';
+import { gatewayClient, gatewayList } from './gateways.mjs';
 import { changedGroups, pagesAt, readPages } from './lib.mjs';
 
 const CLI = process.env.ELEPHANT_CLI ?? 'elephant-cli';
 const CSV = process.env.ATLAS_VALIDATION_CSV ?? 'validation-errors.csv';
 const DEADLINE_MS = Number(process.env.ATLAS_GATEWAY_DEADLINE_MINUTES ?? 20) * 60_000;
 const PARALLEL = Number(process.env.ATLAS_FETCH_PARALLEL ?? 16);
+const ROOT_PROBE_MS = 2 * 60_000;
 
 /** Run the CLI on a CAR; returns { ok, report } where report is the CLI's stdout/stderr. */
 export function validateCar(file, csv, cli = CLI, run = spawnSync) {
@@ -97,10 +98,15 @@ async function downloadCar(gw, cid, file, d) {
   }
 }
 
-/** The archive's root block, hashed and decoded, from one pass over the gateways; undefined when none serves it at once. */
+/**
+ * The archive's root block, hashed and decoded; undefined when no gateway serves it within
+ * ROOT_PROBE_MS. Retried with the gateway client, so a 429 cools a gateway down instead of
+ * sending a large archive to the single-stream download.
+ */
 async function rootIndex(cid, d) {
   try {
-    const { res, url } = await fetchFromAny(`${cid}?format=raw`, { gateways: d.gateways, fetch: d.fetch, headers: { accept: 'application/vnd.ipld.raw' } });
+    const probe = gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: Math.min(d.deadlineMs, ROOT_PROBE_MS), sleep: d.sleep, now: d.now, log: d.log });
+    const { res, url } = await probe.get(`${cid}?format=raw`, { headers: { accept: 'application/vnd.ipld.raw' } });
     const bytes = await verified(url, new Uint8Array(await res.arrayBuffer()), cid);
     return { bytes, node: decode(bytes) };
   } catch {
@@ -148,6 +154,7 @@ async function downloadArchive(gw, cid, file, d) {
   if (d.parallel > 1) {
     const index = await rootIndex(cid, d);
     if (index?.node?.label === 'CountyIndex' && Array.isArray(index.node.shards) && index.node.shards.length > 1) return downloadByShard(gw, cid, index, file, d);
+    d.log(index ? `archive ${cid}: root is not a multi-shard CountyIndex; downloading the whole CAR` : `archive ${cid}: root block not served within ${ROOT_PROBE_MS / 60_000} min; downloading the whole CAR`);
   }
   return downloadCar(gw, cid, file, d);
 }
