@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "254f7c1abcdf58dca4447ee29cc36a99c3204123",
+  "generated_from": "c8e84a0771c0a6ba9a49270ba5e8cc4ce46b11ef",
   "counties": [
     {
       "county": "hendry",
@@ -25,6 +25,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerau5cozk6j4p5p32zlsqwlc2va4eigqqptkl6xhlns5wxpl4vsilmq",
           "published_at": "2026-09-24T18:37:24.000Z"
+        }
+      }
+    },
+    {
+      "county": "leon",
+      "state": "FL",
+      "fips": "12073",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraklonk5acaonberzxfvocah2kvlhgyehcqc2iunzenbuyntsrc6za",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerakcljgpvu2w5bdmsfhee65xn6evidmdvjimtvrdsys3yc5fpasrsa",
+          "published_at": "2026-11-03T16:40:53.000Z"
         }
       }
     },
