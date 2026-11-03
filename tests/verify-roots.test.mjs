@@ -42,7 +42,7 @@ async function world(edit = () => {}) {
   };
   w.log = [];
   let t = 0;
-  w.deps = { fetch: w.fetch, gateways: [G], deadlineMs: 60_000, validateCar: () => ({ ok: true, report: 'CAR passed every check' }), csv: 'e.csv', log: (l) => w.log.push(l), sleep: async (ms) => (t += ms), now: () => t };
+  w.deps = { fetch: w.fetch, gateways: [G], deadlineMs: 60_000, validateCar: () => ({ ok: true, report: 'CAR passed every check' }), cliParallel: 1, mirror: async () => undefined, csv: 'e.csv', log: (l) => w.log.push(l), sleep: async (ms) => (t += ms), now: () => t };
   w.group = { cid: w.index.cid.toString(), schema: w.schema.cid.toString(), tables: w.tables.cid.toString() };
   return w;
 }
@@ -206,4 +206,52 @@ test('the gateway token goes only to ATLAS_GATEWAYS, never to the public default
   await f('https://mine.myfilebase.com.evil.test/ipfs/x');
   assert.deepEqual(seen.map((s) => s[1]), ['secret', undefined, undefined]);
   assert.equal(withGatewayToken(base, { ATLAS_GATEWAYS: 'https://mine.myfilebase.com' }), base, 'no token: fetch unchanged');
+});
+
+test('a mirror object is used instead of the gateways, and still checked like a gateway download', async () => {
+  const w = await shardedWorld();
+  const { writeFile } = await import('node:fs/promises');
+  const bytes = await car(w.index.cid, [w.index, ...w.shards, ...w.props]);
+  const mirror = async (cid, file) => (await writeFile(file, bytes), { url: `s3://cars/${cid}.car` });
+  await verifyGroup(w.group, { ...w.deps, mirror });
+  assert.ok(w.log.some((l) => l.startsWith(`downloaded s3://cars/${w.index.cid}.car`)), w.log.join('\n'));
+  assert.ok(!w.fetched.some((u) => u.includes('?format=car')), 'no gateway CAR requests: ' + w.fetched.join('\n'));
+});
+
+test('a mirror object with the wrong root falls back to the gateways', async () => {
+  const w = await shardedWorld();
+  const { writeFile } = await import('node:fs/promises');
+  const other = await block({ label: 'Seed', relationships: {}, n: 7 });
+  const mirror = async (cid, file) => (await writeFile(file, await car(other.cid, [other])), { url: `s3://cars/${cid}.car` });
+  await verifyGroup(w.group, { ...w.deps, mirror, parallel: 3 });
+  assert.ok(w.log.some((l) => l.startsWith(`s3://cars/${w.index.cid}.car: CAR roots are [${other.cid}]; using the gateways`)), w.log.join('\n'));
+  assert.ok(w.log.some((l) => l.includes('root block + 3 shard CARs')), w.log.join('\n'));
+});
+
+test('records are checked as parallel slices that together cover every shard once', async () => {
+  const w = await shardedWorld();
+  const { CarIndexedReader } = await import('@ipld/car');
+  const { decode } = await import('@ipld/dag-json');
+  const slices = [];
+  const validateCarAsync = async (file) => {
+    const r = await CarIndexedReader.fromFile(file);
+    const [root] = await r.getRoots();
+    const node = decode((await r.get(root)).bytes);
+    slices.push({ shards: node.shards.map(String), properties: node.properties, label: node.label });
+    await r.close();
+    return { ok: true, report: 'CAR passed every check' };
+  };
+  await verifyGroup(w.group, { ...w.deps, parallel: 3, cliParallel: 2, validateCarAsync });
+  assert.equal(slices.length, 2);
+  assert.ok(slices.every((s) => s.label === 'CountyIndex'));
+  assert.deepEqual(slices.flatMap((s) => s.shards).sort(), w.shards.map((s) => s.cid.toString()).sort(), 'every shard exactly once');
+  assert.equal(slices.reduce((n, s) => n + s.properties, 0), 3, 'property counts add up to the index');
+  assert.ok(w.log.some((l) => l.includes('validating 3 shards as 2 slices in parallel')), w.log.join('\n'));
+});
+
+test('a failing slice fails the gate', async () => {
+  const w = await shardedWorld();
+  let i = 0;
+  const validateCarAsync = async () => (i++ === 1 ? { ok: false, report: 'lexicon errors: 3' } : { ok: true, report: 'ok' });
+  await assert.rejects(verifyGroup(w.group, { ...w.deps, parallel: 3, cliParallel: 3, validateCarAsync }), { message: `archive ${w.index.cid}: elephant-cli validate failed; see e.csv` });
 });

@@ -48,6 +48,11 @@ jobs:
           # ELEPHANT_IPFS_GATEWAYS would replace those defaults with a gateway that refuses it.
           ATLAS_GATEWAYS: ${{ secrets.ATLAS_GATEWAYS }}
           ATLAS_GATEWAY_TOKEN: ${{ secrets.ATLAS_GATEWAY_TOKEN }}
+          # Read-only use: `<cid>.car` mirror objects in ATLAS_CAR_BUCKETS (default
+          # elephant-atlas-cars) are downloaded over S3 when present, then checked like a gateway
+          # download. Without the keys (fork PRs) the gateways are used.
+          FILEBASE_ACCESS_KEY: ${{ secrets.ELEPHANT_FILEBASE_ACCESS_KEY }}
+          FILEBASE_SECRET_KEY: ${{ secrets.ELEPHANT_FILEBASE_SECRET_KEY }}
         run: npm run verify
       - name: Upload validation errors
         if: failure()

@@ -76,7 +76,7 @@ async function fixture(rpcReply) {
   };
   let t = 0;
   const tmp = await mkdtemp(join(tmpdir(), 'atlas-test-'));
-  const deps = { fetch, rpc, gateways: [G], deadlineMs: 60_000, sleep: async (ms) => (t += ms), now: () => t, log() {}, tmp };
+  const deps = { fetch, rpc, gateways: [G], deadlineMs: 60_000, sleep: async (ms) => (t += ms), now: () => t, log() {}, tmp, mirror: async () => undefined };
   return { index, shard, property, tables, part, fetched, calls, deps, tmp, G, G2 };
 }
 
@@ -192,4 +192,19 @@ test('validateCar is clean only on exit 0 and strips browserslist noise from the
   assert.deepEqual(validateCar('x.car', 'e.csv', 'cli', run(0, 'Browserslist: data is old\n  lexicon errors: 0\n')), { ok: true, report: '  lexicon errors: 0' });
   assert.deepEqual(validateCar('x.car', 'e.csv', 'cli', run(1, '  lexicon errors: 25\n')), { ok: false, report: '  lexicon errors: 25' });
   assert.equal(validateCar('x.car', 'e.csv', 'cli', () => ({ status: null, error: new Error('spawn cli ENOENT') })).ok, false);
+});
+
+test('transferArchive imports shard subtrees from a mirror CAR instead of the gateways', async () => {
+  const f = await fixture();
+  const { writeFile } = await import('node:fs/promises');
+  const bytes = await car(f.index.cid, [f.index, f.shard, f.property]);
+  const mirror = async (cid, file) => (await writeFile(file, bytes), { url: `s3://cars/${cid}.car` });
+  await transferArchive(f.index.cid.toString(), { ...f.deps, mirror });
+  assert.deepEqual(f.calls, [
+    `dag/import?pin-roots=false&stats=true root=${f.index.cid} blocks=1`,
+    `dag/import?pin-roots=false&stats=true root=${f.shard.cid} blocks=2`,
+    `dag/import?pin-roots=true&stats=true root=${f.index.cid} blocks=1`,
+  ]);
+  assert.deepEqual(f.fetched, [`${f.G}/ipfs/${f.index.cid}?format=raw`], 'only the root block from the gateways');
+  assert.deepEqual(readdirSync(f.tmp), [], 'mirror CAR deleted');
 });

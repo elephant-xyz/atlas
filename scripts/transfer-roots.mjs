@@ -24,10 +24,11 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { CarReader, CarWriter } from '@ipld/car';
+import { CarIndexedReader, CarReader, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
+import { fetchMirrorCar } from './car-mirror.mjs';
 import { rpc as filebaseRpc } from './filebase.mjs';
 import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
 import { groupsOf, pagesAt, rootsOf } from './lib.mjs';
@@ -66,6 +67,7 @@ const defaults = () => ({
   now: Date.now,
   log: console.log,
   tmp: undefined,
+  mirror: (cid, file) => fetchMirrorCar(cid, file, { log: console.log }),
 });
 
 /** GET /ipfs/<path> from the first gateway that answers, retrying the whole list with backoff until the deadline; all failing through the deadline is TransferFailed. */
@@ -191,6 +193,67 @@ async function requirePinned(root, d) {
   }
 }
 
+/** Every block reachable from `start` in a local CAR, as a CAR Blob; dag-json blocks link onward. */
+async function localSubtree(reader, start) {
+  const isLink = (v) => v && typeof v === 'object' && v.asCID === v;
+  const links = (v, out) => {
+    if (isLink(v)) out.push(v);
+    else if (Array.isArray(v)) v.forEach((x) => links(x, out));
+    else if (v && typeof v === 'object') Object.values(v).forEach((x) => links(x, out));
+    return out;
+  };
+  const { writer, out } = CarWriter.create([start]);
+  const chunks = [];
+  const collected = (async () => {
+    for await (const chunk of out) chunks.push(chunk);
+  })();
+  const seen = new Set();
+  const stack = [start];
+  while (stack.length) {
+    const cid = stack.pop();
+    const key = cid.toString();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const block = await reader.get(cid);
+    if (!block) throw new Error(`block ${key} is not in the mirror CAR`);
+    await writer.put(block);
+    if (cid.code === 0x0129) links(decode(block.bytes), stack);
+  }
+  await writer.close();
+  await collected;
+  return new Blob([Buffer.concat(chunks)], { type: 'application/vnd.ipld.car' });
+}
+
+/**
+ * When the archive's CAR is in a mirror bucket, import it from that local copy instead of the
+ * gateways: each shard subtree as its own CAR (block counts checked by importCar), d.parallel at
+ * a time. Resolves true when it did, false when there is no usable mirror object.
+ */
+async function transferFromMirror(root, index, tally, d) {
+  d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
+  const file = join(d.tmp, `${root}.mirror.car`);
+  const mirror = d.mirror ? await d.mirror(root, file) : undefined;
+  if (!mirror) return false;
+  const reader = await CarIndexedReader.fromFile(file);
+  try {
+    const roots = (await reader.getRoots()).map(String);
+    if (!roots.includes(root)) {
+      d.log(`${mirror.url}: CAR roots are [${roots.join(', ')}]; using the gateways`);
+      return false;
+    }
+    d.log(`importing ${root} from ${mirror.url}`);
+    await pool(index.shards.map((shard) => async () => {
+      const blob = await localSubtree(reader, shard);
+      const count = await carBlocks(new Uint8Array(await blob.arrayBuffer()), tally);
+      d.log(`imported shard ${shard} from the mirror: ${await importCar(root, blob, shard.toString(), count, false, d)}`);
+    }), d.parallel);
+    return true;
+  } finally {
+    await reader.close();
+    await unlink(file).catch(() => {});
+  }
+}
+
 export async function transferArchive(root, deps = {}) {
   const d = { ...defaults(), ...deps };
   const bytes = await rawBlock(root, root, d);
@@ -200,7 +263,7 @@ export async function transferArchive(root, deps = {}) {
   const tally = { seen: new Set([root]), bytes: bytes.length };
   d.log(`archive ${root}: ${index.shards.length} shard(s), ${index.properties} properties, ${d.parallel} subtree(s) at a time`);
   d.log(`imported ${root} (root block): ${await importCar(root, block, root, 1, false, d)}`);
-  await pool(index.shards.map((s, i) => () => transferSubtree(root, `${root}/shards/${i}`, s.toString(), tally, d)), d.parallel);
+  if (!(await transferFromMirror(root, index, tally, d))) await pool(index.shards.map((s, i) => () => transferSubtree(root, `${root}/shards/${i}`, s.toString(), tally, d)), d.parallel);
   d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
   await requirePinned(root, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);

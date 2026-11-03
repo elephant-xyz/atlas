@@ -19,21 +19,29 @@
 //      cid. Gateways walk a DAG block by block, so one stream per archive is the bottleneck for
 //      archives of millions of small blocks; parallel shard requests add up. The CLI then checks
 //      every block of the assembled CAR exactly as before.
+//      Fastest: when `<cid>.car` exists in a mirror bucket (see car-mirror.mjs), it is read over
+//      S3 instead of the gateways, then checked exactly like a gateway download.
+//      The record checks run as ATLAS_CLI_PARALLEL CLI processes (default: one per CPU) over
+//      slices of the archive: each slice is a CAR holding a subset of the shards under its own
+//      CountyIndex root (property count summed from those shards); together the slices hold
+//      every shard of the real index, and the real root is checked in step 2.
 // Gateways: first that answers wins, a 429 puts a gateway on cooldown, the gateway that served
 // the CAR is preferred afterwards, one deadline (ATLAS_GATEWAY_DEADLINE_MINUTES) per group.
 // The CAR is deleted after the checks. The CLI comes from ELEPHANT_CLI (default: elephant-cli).
-import { spawnSync } from 'node:child_process';
-import { createReadStream, createWriteStream, statSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { createReadStream, createWriteStream, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { CarBlockIterator, CarIndexedReader, CarWriter } from '@ipld/car';
+import * as dagJson from '@ipld/dag-json';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
+import { fetchMirrorCar } from './car-mirror.mjs';
 import { gatewayClient, gatewayList, withGatewayToken } from './gateways.mjs';
 import { changedGroups, pagesAt, readPages } from './lib.mjs';
 
@@ -42,12 +50,25 @@ const CSV = process.env.ATLAS_VALIDATION_CSV ?? 'validation-errors.csv';
 const DEADLINE_MS = Number(process.env.ATLAS_GATEWAY_DEADLINE_MINUTES ?? 20) * 60_000;
 const PARALLEL = Number(process.env.ATLAS_FETCH_PARALLEL ?? 32);
 const ROOT_PROBE_MS = 2 * 60_000;
+const CLI_PARALLEL = Number(process.env.ATLAS_CLI_PARALLEL ?? availableParallelism());
 
 /** Run the CLI on a CAR; returns { ok, report } where report is the CLI's stdout/stderr. */
 export function validateCar(file, csv, cli = CLI, run = spawnSync) {
   const r = run(cli, ['validate', file, '--output-csv', csv], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const report = `${r.stdout ?? ''}${r.stderr ?? ''}`.split('\n').filter((l) => l && !/browserslist|update-browserslist-db|unknown format/i.test(l)).join('\n');
   return { ok: r.status === 0, report: r.error ? `${r.error.message}\n${report}` : report };
+}
+
+/** The same, without blocking, so several slices validate at once. */
+export function validateCarAsync(file, csv, cli = CLI, run = spawn) {
+  return new Promise((resolve) => {
+    const child = run(cli, ['validate', file, '--output-csv', csv], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (b) => (out += b));
+    child.stderr.on('data', (b) => (out += b));
+    child.on('error', (e) => resolve({ ok: false, report: e.message }));
+    child.on('close', (code) => resolve({ ok: code === 0, report: out.split('\n').filter((l) => l && !/browserslist|update-browserslist-db|unknown format/i.test(l)).join('\n') }));
+  });
 }
 
 async function verified(what, bytes, expectCid) {
@@ -74,27 +95,30 @@ async function downloadCar(gw, cid, file, d) {
     const { res, url } = await gw.get(`${cid}?format=car`, { headers: { accept: 'application/vnd.ipld.car' }, requestMs: 60 * 60_000 });
     await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
     const size = statSync(file).size;
-    let problem;
-    if (!size) problem = 'empty body';
-    else {
-      try {
-        const reader = await CarIndexedReader.fromFile(file);
-        try {
-          const roots = (await reader.getRoots()).map(String);
-          const block = await reader.get(CID.parse(cid));
-          if (!roots.includes(cid)) problem = `CAR roots are [${roots.join(', ')}]`;
-          else if (!block) problem = 'root block missing from the CAR';
-          else await verified(url, block.bytes, cid);
-        } finally {
-          await reader.close();
-        }
-      } catch (e) {
-        problem = e.message.startsWith(url) ? e.message.slice(url.length + 2) : `not a CAR (${e.message})`;
-      }
-    }
+    const problem = await carProblem(file, cid, url);
     if (!problem) return { url, size };
     d.log(`${url}: ${problem} (${size} bytes)`);
     gw.reject(url);
+  }
+}
+
+/** Why `file` is not a CAR rooted at `cid` whose root block hashes to it; undefined when it is. */
+async function carProblem(file, cid, url) {
+  if (!statSync(file).size) return 'empty body';
+  try {
+    const reader = await CarIndexedReader.fromFile(file);
+    try {
+      const roots = (await reader.getRoots()).map(String);
+      const block = await reader.get(CID.parse(cid));
+      if (!roots.includes(cid)) return `CAR roots are [${roots.join(', ')}]`;
+      if (!block) return 'root block missing from the CAR';
+      await verified(url, block.bytes, cid);
+      return undefined;
+    } finally {
+      await reader.close();
+    }
+  } catch (e) {
+    return e.message.startsWith(url) ? e.message.slice(url.length + 2) : `not a CAR (${e.message})`;
   }
 }
 
@@ -151,12 +175,105 @@ async function downloadByShard(gw, cid, index, file, d) {
 
 /** Shard by shard when the root is a CountyIndex with several shards and parallel fetches are enabled; else the whole CAR by root. */
 async function downloadArchive(gw, cid, file, d) {
+  const mirror = d.mirror ? await d.mirror(cid, file) : undefined;
+  if (mirror) {
+    const problem = await carProblem(file, cid, mirror.url);
+    if (!problem) return { url: mirror.url, size: statSync(file).size };
+    d.log(`${mirror.url}: ${problem}; using the gateways`);
+  }
   if (d.parallel > 1) {
     const index = await rootIndex(cid, d);
     if (index?.node?.label === 'CountyIndex' && Array.isArray(index.node.shards) && index.node.shards.length > 1) return downloadByShard(gw, cid, index, file, d);
     d.log(index ? `archive ${cid}: root is not a multi-shard CountyIndex; downloading the whole CAR` : `archive ${cid}: root block not served within ${ROOT_PROBE_MS / 60_000} min; downloading the whole CAR`);
   }
   return downloadCar(gw, cid, file, d);
+}
+
+/**
+ * Write slice CARs of the archive at `file`: each holds a contiguous run of the real index's
+ * shards, every block reachable from them, and its own CountyIndex root declaring the summed
+ * property count. Together the slices cover every shard exactly once.
+ */
+async function writeSlices(file, cid, k, dir) {
+  const reader = await CarIndexedReader.fromFile(file);
+  const isLink = (v) => v && typeof v === 'object' && v.asCID === v;
+  const links = (v, out) => {
+    if (isLink(v)) out.push(v);
+    else if (Array.isArray(v)) v.forEach((x) => links(x, out));
+    else if (v && typeof v === 'object') Object.values(v).forEach((x) => links(x, out));
+    return out;
+  };
+  try {
+    const index = decode((await reader.get(CID.parse(cid))).bytes);
+    const size = Math.ceil(index.shards.length / k);
+    const files = [];
+    for (let s = 0; s < index.shards.length; s += size) {
+      const part = index.shards.slice(s, s + size);
+      const shardKeys = new Set(part.map(String));
+      const order = [];
+      const seen = new Set();
+      const stack = [...part];
+      let properties = 0;
+      // The root needs the property count, so walk first and stream the blocks afterwards.
+      while (stack.length) {
+        const c = stack.pop();
+        const key = c.toString();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        order.push(c);
+        if (c.code === dagJson.code) {
+          const node = decode((await reader.get(c)).bytes);
+          if (shardKeys.has(key)) properties += Array.isArray(node.properties) ? node.properties.length : 0;
+          links(node, stack);
+        }
+      }
+      const rootBytes = dagJson.encode({ label: 'CountyIndex', properties, shards: part, version: index.version });
+      const rootCid = CID.create(1, dagJson.code, await sha256.digest(rootBytes));
+      const out = join(dir, `slice-${files.length}.car`);
+      const { writer, out: stream } = CarWriter.create([rootCid]);
+      const written = pipeline(Readable.from(stream), createWriteStream(out));
+      await writer.put({ cid: rootCid, bytes: rootBytes });
+      for (const c of order) await writer.put(await reader.get(c));
+      await writer.close();
+      await written;
+      files.push(out);
+    }
+    return files;
+  } finally {
+    await reader.close();
+  }
+}
+
+/** The CLI over the whole archive, or over slices in parallel when it has several shards and ATLAS_CLI_PARALLEL > 1. */
+async function validateArchive(file, cid, d) {
+  if (d.cliParallel > 1 && d.validateCarAsync) {
+    const reader = await CarIndexedReader.fromFile(file);
+    let shards = 0;
+    try {
+      const node = decode((await reader.get(CID.parse(cid))).bytes);
+      shards = node?.label === 'CountyIndex' && Array.isArray(node.shards) ? node.shards.length : 0;
+    } finally {
+      await reader.close();
+    }
+    if (shards > 1) {
+      const slices = await writeSlices(file, cid, Math.min(d.cliParallel, shards), dirname(file));
+      d.log(`archive ${cid}: validating ${shards} shards as ${slices.length} slices in parallel`);
+      const results = await Promise.all(slices.map((f, i) => d.validateCarAsync(f, `${d.csv}.${i}`)));
+      const rows = [];
+      for (let i = 0; i < slices.length; i++) {
+        try {
+          const lines = readFileSync(`${d.csv}.${i}`, 'utf8').split('\n').filter(Boolean);
+          if (!rows.length && lines.length) rows.push(lines[0]);
+          rows.push(...lines.slice(1));
+        } catch {}
+        await rm(slices[i], { force: true });
+        await rm(`${d.csv}.${i}`, { force: true });
+      }
+      if (rows.length) writeFileSync(d.csv, rows.join('\n') + '\n');
+      return { ok: results.every((r) => r.ok), report: results.map((r, i) => `slice ${i}: ${r.report}`).join('\n') };
+    }
+  }
+  return d.validateCar(file);
 }
 
 /** A hashed, decoded block out of the local CAR. */
@@ -173,7 +290,7 @@ async function fetchBlock(gw, cid) {
 }
 
 export async function verifyGroup({ cid, schema, tables }, deps = {}) {
-  const d = { fetch: withGatewayToken(), gateways: gatewayList(), deadlineMs: DEADLINE_MS, validateCar: (file) => validateCar(file, CSV), csv: CSV, log: console.log, sleep: undefined, now: undefined, parallel: PARALLEL, ...deps };
+  const d = { fetch: withGatewayToken(), gateways: gatewayList(), deadlineMs: DEADLINE_MS, validateCar: (file) => validateCar(file, CSV), csv: CSV, log: console.log, sleep: undefined, now: undefined, parallel: PARALLEL, cliParallel: CLI_PARALLEL, validateCarAsync: (file, csv) => validateCarAsync(file, csv), mirror: (cid, file) => fetchMirrorCar(cid, file, { log: console.log }), ...deps };
   const gw = gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: d.deadlineMs, sleep: d.sleep, now: d.now, log: d.log });
   d.shardClient ??= () => gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: d.deadlineMs, sleep: d.sleep, now: d.now, log: d.log });
 
@@ -183,7 +300,7 @@ export async function verifyGroup({ cid, schema, tables }, deps = {}) {
   try {
     const { url, size } = await downloadArchive(gw, cid, file, d);
     d.log(`downloaded ${url} (${size} bytes, root block verified)`);
-    const { ok, report } = d.validateCar(file);
+    const { ok, report } = await validateArchive(file, cid, d);
     d.log(report);
     require_(ok, `archive ${cid}`, `elephant-cli validate failed; see ${d.csv}`);
 
