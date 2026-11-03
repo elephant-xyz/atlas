@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "97ca59368ef039a67027e8b63a72e2846bb557fe",
+  "generated_from": "1c004aa717272f1666c3c2307da2991c91a010c1",
   "counties": [
     {
       "county": "baker",
@@ -18,6 +18,19 @@
           "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
           "tables": "baguqeeraoasyso5uyr6qtpmtwt7chcoydocyhnar7jmss4q3z2bm3sqdgfja",
           "published_at": "2026-11-03T17:41:08.000Z"
+        }
+      }
+    },
+    {
+      "county": "charlotte",
+      "state": "FL",
+      "fips": "12015",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraxxfxxwnmlo4c7di5x45ymnfud4cghoy57qyu66wz2hhwe32zkova",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerajt2a4irvp6isfl4ccjlk66uxeiiowcdmfupxroy2a3qwiwrglsoq",
+          "published_at": "2026-11-03T17:47:20.000Z"
         }
       }
     },
