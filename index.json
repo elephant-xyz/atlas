@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "f17e76d036a477370fd7294f94d9bc9881c32ecf",
+  "generated_from": "c8e84a0771c0a6ba9a49270ba5e8cc4ce46b11ef",
   "counties": [
     {
       "county": "hendry",
@@ -25,6 +25,45 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerau5cozk6j4p5p32zlsqwlc2va4eigqqptkl6xhlns5wxpl4vsilmq",
           "published_at": "2026-09-24T18:37:24.000Z"
+        }
+      }
+    },
+    {
+      "county": "leon",
+      "state": "FL",
+      "fips": "12073",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraklonk5acaonberzxfvocah2kvlhgyehcqc2iunzenbuyntsrc6za",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerakcljgpvu2w5bdmsfhee65xn6evidmdvjimtvrdsys3yc5fpasrsa",
+          "published_at": "2026-11-03T16:40:53.000Z"
+        }
+      }
+    },
+    {
+      "county": "okaloosa",
+      "state": "FL",
+      "fips": "12091",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraitirnbyk3bctboptvd4fex6fuczgiighrv32v3t4csxzcoydz66q",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraihbarj5mgcbn35bqmbz4ivjla7qws2lqapq55njl6kfxec4peela",
+          "published_at": "2026-11-03T16:34:19.000Z"
+        }
+      }
+    },
+    {
+      "county": "putnam",
+      "state": "FL",
+      "fips": "12107",
+      "groups": {
+        "county": {
+          "cid": "baguqeeratssrqvumi5pltovqrqk24564iaxdz2ifmeo66ktgklt2n3gnegea",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerarvnrvairkmvwuyrqajxrk6io5ohk3t6ukxjb6dprk6trokgewreq",
+          "published_at": "2026-11-03T16:37:34.000Z"
         }
       }
     }
