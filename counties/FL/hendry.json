@@ -1,0 +1,12 @@
+{
+  "county": "hendry",
+  "state": "FL",
+  "fips": "12051",
+  "groups": {
+    "county": {
+      "cid": "baguqeerauqdnotl446o5ttzrxzkuj7ki7cbnpt4e3n3hvbenmf7xyz465aha",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraegfm4hsmmpjklmaoejyxhw7ayh7wohckewy7ccdwgkfpcxt646ha"
+    }
+  }
+}
