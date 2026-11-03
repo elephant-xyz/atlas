@@ -1,7 +1,26 @@
 {
   "version": 1,
-  "generated_from": "c8e84a0771c0a6ba9a49270ba5e8cc4ce46b11ef",
+  "generated_from": "b585e876d7c7197efee5f605cb6d356b41b7f823",
   "counties": [
+    {
+      "county": "collier",
+      "state": "FL",
+      "fips": "12021",
+      "groups": {
+        "county": {
+          "cid": "baguqeerapd2ihtd5cgqeldmjrla7osbslvjnh55zoznaeemiplsz2cj3eyta",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraaj67aeq2k4iz5lf7bppwgwkrlupgdzamrlvc4wgck35wij6w257q",
+          "published_at": "2026-11-03T17:17:43.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeeraammbjlhb3f3kotoiwpnms23k73rflrntxjpl7d5j42kdu6t5jxqa",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeerabwqsjpi6e2az4q535yf6a3aj2ftjkimsdryzcimhiwhb572wysna",
+          "published_at": "2026-11-03T17:17:43.000Z"
+        }
+      }
+    },
     {
       "county": "hendry",
       "state": "FL",
