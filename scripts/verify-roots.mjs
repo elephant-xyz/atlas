@@ -15,7 +15,7 @@
 //      the cid, and every part of every table must serve its root block by its own CID (`?format=raw`, hashed).
 //      An archive with several shards is downloaded faster: its root block by CID (hashed), then
 //      every shard's subtree (`/ipfs/<shard cid>?format=car`, root checked and hashed) with
-//      ATLAS_FETCH_PARALLEL requests at a time (default 16), written into one CAR rooted at the
+//      ATLAS_FETCH_PARALLEL requests at a time (default 32), written into one CAR rooted at the
 //      cid. Gateways walk a DAG block by block, so one stream per archive is the bottleneck for
 //      archives of millions of small blocks; parallel shard requests add up. The CLI then checks
 //      every block of the assembled CAR exactly as before.
@@ -34,13 +34,13 @@ import { CarBlockIterator, CarIndexedReader, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
-import { gatewayClient, gatewayList } from './gateways.mjs';
+import { gatewayClient, gatewayList, withGatewayToken } from './gateways.mjs';
 import { changedGroups, pagesAt, readPages } from './lib.mjs';
 
 const CLI = process.env.ELEPHANT_CLI ?? 'elephant-cli';
 const CSV = process.env.ATLAS_VALIDATION_CSV ?? 'validation-errors.csv';
 const DEADLINE_MS = Number(process.env.ATLAS_GATEWAY_DEADLINE_MINUTES ?? 20) * 60_000;
-const PARALLEL = Number(process.env.ATLAS_FETCH_PARALLEL ?? 16);
+const PARALLEL = Number(process.env.ATLAS_FETCH_PARALLEL ?? 32);
 const ROOT_PROBE_MS = 2 * 60_000;
 
 /** Run the CLI on a CAR; returns { ok, report } where report is the CLI's stdout/stderr. */
@@ -173,7 +173,7 @@ async function fetchBlock(gw, cid) {
 }
 
 export async function verifyGroup({ cid, schema, tables }, deps = {}) {
-  const d = { fetch: globalThis.fetch, gateways: gatewayList(), deadlineMs: DEADLINE_MS, validateCar: (file) => validateCar(file, CSV), csv: CSV, log: console.log, sleep: undefined, now: undefined, parallel: PARALLEL, ...deps };
+  const d = { fetch: withGatewayToken(), gateways: gatewayList(), deadlineMs: DEADLINE_MS, validateCar: (file) => validateCar(file, CSV), csv: CSV, log: console.log, sleep: undefined, now: undefined, parallel: PARALLEL, ...deps };
   const gw = gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: d.deadlineMs, sleep: d.sleep, now: d.now, log: d.log });
   d.shardClient ??= () => gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: d.deadlineMs, sleep: d.sleep, now: d.now, log: d.log });
 

@@ -195,3 +195,15 @@ test('a rate-limited root probe waits for the gateway instead of falling back to
   await verifyGroup(w.group, { ...w.deps, fetch, parallel: 3 });
   assert.ok(w.log.some((l) => l.includes('root block + 3 shard CARs')), w.log.join('\n'));
 });
+
+test('the gateway token goes only to ATLAS_GATEWAYS, never to the public defaults', async () => {
+  const { withGatewayToken } = await import('../scripts/gateways.mjs');
+  const seen = [];
+  const base = async (url, init = {}) => (seen.push([url, init.headers?.['x-filebase-gateway-token']]), new Response('ok'));
+  const f = withGatewayToken(base, { ATLAS_GATEWAYS: 'https://mine.myfilebase.com/', ATLAS_GATEWAY_TOKEN: 'secret' });
+  await f('https://mine.myfilebase.com/ipfs/x?format=raw', { headers: { accept: 'application/vnd.ipld.raw' } });
+  await f('https://ipfs.filebase.io/ipfs/x?format=raw');
+  await f('https://mine.myfilebase.com.evil.test/ipfs/x');
+  assert.deepEqual(seen.map((s) => s[1]), ['secret', undefined, undefined]);
+  assert.equal(withGatewayToken(base, { ATLAS_GATEWAYS: 'https://mine.myfilebase.com' }), base, 'no token: fetch unchanged');
+});

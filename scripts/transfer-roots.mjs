@@ -29,7 +29,7 @@ import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { rpc as filebaseRpc } from './filebase.mjs';
-import { fetchFromAny, gatewayList } from './gateways.mjs';
+import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
 import { groupsOf, pagesAt, rootsOf } from './lib.mjs';
 
 export class TransferFailed extends Error {
@@ -54,14 +54,14 @@ export function rootsToTransfer(headPages, basePages) {
 }
 
 const defaults = () => ({
-  fetch: globalThis.fetch,
+  fetch: withGatewayToken(),
   rpc: filebaseRpc,
   gateways: gatewayList(),
   deadlineMs: Number(process.env.ATLAS_GATEWAY_DEADLINE_MINUTES ?? 20) * 60_000,
   // One request streams a whole shard subtree; gateways walk it block by block, so a large shard
   // can take longer than 15 minutes on a shared gateway.
   requestMs: Number(process.env.ATLAS_REQUEST_MINUTES ?? 60) * 60_000,
-  parallel: Number(process.env.ATLAS_TRANSFER_PARALLEL ?? 8),
+  parallel: Number(process.env.ATLAS_TRANSFER_PARALLEL ?? 32),
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   now: Date.now,
   log: console.log,
