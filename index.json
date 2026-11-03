@@ -1,7 +1,39 @@
 {
   "version": 1,
-  "generated_from": "e01fbcb479f5829f057e03aa3dda0533edb814f8",
+  "generated_from": "532c800f3aebc785e765a45938f64dcb05569fb4",
   "counties": [
+    {
+      "county": "collier",
+      "state": "FL",
+      "fips": "12021",
+      "groups": {
+        "county": {
+          "cid": "baguqeerapd2ihtd5cgqeldmjrla7osbslvjnh55zoznaeemiplsz2cj3eyta",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraaj67aeq2k4iz5lf7bppwgwkrlupgdzamrlvc4wgck35wij6w257q",
+          "published_at": "2026-11-03T17:17:43.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeeraammbjlhb3f3kotoiwpnms23k73rflrntxjpl7d5j42kdu6t5jxqa",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeerabwqsjpi6e2az4q535yf6a3aj2ftjkimsdryzcimhiwhb572wysna",
+          "published_at": "2026-11-03T17:17:43.000Z"
+        }
+      }
+    },
+    {
+      "county": "hendry",
+      "state": "FL",
+      "fips": "12051",
+      "groups": {
+        "county": {
+          "cid": "baguqeerauqdnotl446o5ttzrxzkuj7ki7cbnpt4e3n3hvbenmf7xyz465aha",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraegfm4hsmmpjklmaoejyxhw7ayh7wohckewy7ccdwgkfpcxt646ha",
+          "published_at": "2026-11-03T15:45:37.000Z"
+        }
+      }
+    },
     {
       "county": "jackson",
       "state": "FL",
@@ -12,6 +44,58 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerau5cozk6j4p5p32zlsqwlc2va4eigqqptkl6xhlns5wxpl4vsilmq",
           "published_at": "2026-09-24T18:37:24.000Z"
+        }
+      }
+    },
+    {
+      "county": "leon",
+      "state": "FL",
+      "fips": "12073",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraklonk5acaonberzxfvocah2kvlhgyehcqc2iunzenbuyntsrc6za",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerakcljgpvu2w5bdmsfhee65xn6evidmdvjimtvrdsys3yc5fpasrsa",
+          "published_at": "2026-11-03T16:40:53.000Z"
+        }
+      }
+    },
+    {
+      "county": "okaloosa",
+      "state": "FL",
+      "fips": "12091",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraitirnbyk3bctboptvd4fex6fuczgiighrv32v3t4csxzcoydz66q",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraihbarj5mgcbn35bqmbz4ivjla7qws2lqapq55njl6kfxec4peela",
+          "published_at": "2026-11-03T16:34:19.000Z"
+        }
+      }
+    },
+    {
+      "county": "putnam",
+      "state": "FL",
+      "fips": "12107",
+      "groups": {
+        "county": {
+          "cid": "baguqeeratssrqvumi5pltovqrqk24564iaxdz2ifmeo66ktgklt2n3gnegea",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerarvnrvairkmvwuyrqajxrk6io5ohk3t6ukxjb6dprk6trokgewreq",
+          "published_at": "2026-11-03T16:37:34.000Z"
+        }
+      }
+    },
+    {
+      "county": "walton",
+      "state": "FL",
+      "fips": "12131",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraopu7iqdnkw5iwzrmhugfcpikppopbjwnoupba3eawumnhcivcvaq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera73aun5e5z6bvkvvrwvo5pzdo2qasqyzjsvp2ki6faqy32m2i6iaq",
+          "published_at": "2026-11-03T17:19:48.000Z"
         }
       }
     }
