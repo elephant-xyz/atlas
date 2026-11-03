@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "a7de914914a3a23a6827dc6bfdd9ee4b8647599e",
+  "generated_from": "c0e88bfdb4a34b7cfc70558b8c3606d18e26188c",
   "counties": [
     {
       "county": "baker",
@@ -76,6 +76,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraegfm4hsmmpjklmaoejyxhw7ayh7wohckewy7ccdwgkfpcxt646ha",
           "published_at": "2026-11-03T15:45:37.000Z"
+        }
+      }
+    },
+    {
+      "county": "highlands",
+      "state": "FL",
+      "fips": "12055",
+      "groups": {
+        "county": {
+          "cid": "baguqeerazhvaazpwibbg6iwnkmd3oiiyc4immpwh7lr4ygisrjxag33crz7q",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera7z7kzkcnfc4uextclcaqcgoxtd7f5ir3n3i722ixurvpz3hzr5sq",
+          "published_at": "2026-11-03T23:54:18.000Z"
         }
       }
     },
