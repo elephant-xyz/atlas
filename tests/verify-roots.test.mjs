@@ -85,7 +85,7 @@ test('a 2xx with an empty or root-less CAR counts as that gateway failing; the n
 test('a CLI failure stops the gate before the shape checks', async () => {
   const w = await world();
   await assert.rejects(verifyGroup(w.group, { ...w.deps, validateCar: () => ({ ok: false, report: 'lexicon errors: 25' }) }), { message: `archive ${w.index.cid}: elephant-cli validate failed; see e.csv` });
-  assert.equal(w.fetched.length, 1, 'only the CAR was fetched');
+  assert.deepEqual(w.fetched, [`${G}/ipfs/${w.index.cid}?format=raw`, `${G}/ipfs/${w.index.cid}?format=car`], 'only the archive was fetched: the root-block probe, then the CAR');
 });
 
 test('a root that is not a CountyIndex fails from the local CAR', async () => {
@@ -137,4 +137,52 @@ test('gatewayClient: a 429 puts the gateway on cooldown and is not an attempt; t
   assert.equal(r.url, `${G2}/ipfs/z`, 'preferred gateway still first once G is back');
   const onlyG = gatewayClient({ gateways: [G], fetch: async () => new Response('', { status: 429, headers: { 'retry-after': '5' } }), deadlineMs: 12_000, sleep: async (ms) => (t += ms), now: () => t });
   await assert.rejects(onlyG.get('q'), (e) => e.message.includes('every gateway is rate limiting'));
+});
+
+/** A three-shard archive whose gateway serves the root block and each shard CAR, but not the whole archive in one stream. */
+async function shardedWorld() {
+  const w = await world();
+  w.props = await Promise.all([1, 2, 3].map((n) => block({ label: 'Seed', relationships: {}, n })));
+  w.shards = await Promise.all(w.props.map((p) => block({ properties: [{ property_cid: p.cid, data_groups: { [w.schema.cid.toString()]: p.cid } }] })));
+  w.index = await block({ label: 'CountyIndex', properties: 3, shards: w.shards.map((s) => s.cid), version: 1 });
+  w.tables = await block({ label: 'CountyTables', county_root: w.index.cid, codec: 'zstd', tables: { address: { rows: 1, parts: [{ cid: w.partA.cid, bytes: 9, rows: 1 }] } } });
+  w.routes = {
+    [`${w.index.cid}?format=raw`]: () => new Response(w.index.bytes),
+    [`${w.schema.cid}?format=raw`]: () => new Response(w.schema.bytes),
+    [`${w.tables.cid}?format=raw`]: () => new Response(w.tables.bytes),
+    [`${w.partA.cid}?format=raw`]: () => new Response(w.partA.bytes),
+  };
+  for (const [i, s] of w.shards.entries()) {
+    const bytes = await car(s.cid, [s, w.props[i]]);
+    w.routes[`${s.cid}?format=car`] = () => new Response(bytes);
+  }
+  w.group = { cid: w.index.cid.toString(), schema: w.schema.cid.toString(), tables: w.tables.cid.toString() };
+  return w;
+}
+
+test('a multi-shard archive downloads shard by shard in parallel and validates one assembled CAR', async () => {
+  const w = await shardedWorld();
+  const seen = [];
+  const validateCar = (file) => (seen.push(file), { ok: true, report: 'CAR passed every check' });
+  await verifyGroup(w.group, { ...w.deps, parallel: 2, validateCar });
+  assert.equal(seen.length, 1, 'the CLI runs once, on the assembled archive');
+  assert.ok(w.log.some((l) => l.includes('root block + 3 shard CARs, 2 at a time')), w.log.join('\n'));
+  assert.ok(!w.fetched.includes(`${G}/ipfs/${w.index.cid}?format=car`), 'the whole archive is never requested as one stream');
+  assert.ok(w.shards.every((s) => w.fetched.includes(`${G}/ipfs/${s.cid}?format=car`)), 'every shard CAR is fetched by its own CID');
+  assert.ok(w.log.some((l) => l.startsWith(`archive ${w.index.cid}: CountyIndex, 3 shard(s)`)), 'shape checks run on the assembled CAR: ' + w.log.join('\n'));
+});
+
+test('a shard CAR with the wrong root moves to the next gateway', async () => {
+  const w = await shardedWorld();
+  const other = await block({ label: 'Seed', relationships: {}, n: 99 });
+  const bad = await car(other.cid, [other]);
+  const fetch = async (url, init) => (url.startsWith(G) && url.endsWith(`${w.shards[1].cid}?format=car`) ? new Response(bad) : w.fetch(url.replace(G2, G), init));
+  await verifyGroup(w.group, { ...w.deps, fetch, gateways: [G, G2], parallel: 3 });
+  assert.ok(w.log.some((l) => l.startsWith(`${G}/ipfs/${w.shards[1].cid}?format=car: CAR roots are [${other.cid}]`)), w.log.join('\n'));
+});
+
+test('parallel fetching off (ATLAS_FETCH_PARALLEL=1) keeps the whole-CAR download', async () => {
+  const w = await world();
+  await verifyGroup(w.group, { ...w.deps, parallel: 1 });
+  assert.deepEqual(w.fetched.slice(0, 1), [`${G}/ipfs/${w.index.cid}?format=car`]);
 });
