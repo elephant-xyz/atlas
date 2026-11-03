@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "1c004aa717272f1666c3c2307da2991c91a010c1",
+  "generated_from": "c0e88bfdb4a34b7cfc70558b8c3606d18e26188c",
   "counties": [
     {
       "county": "baker",
@@ -35,6 +35,19 @@
       }
     },
     {
+      "county": "citrus",
+      "state": "FL",
+      "fips": "12017",
+      "groups": {
+        "county": {
+          "cid": "baguqeerabcbg4i5ahamouxvflrtddbgj24riyaiow5mufvltqnbbjm3tuzqa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraq7hwqongerr62jvbf4e765gtgkavflc22y5j7bbzhpbu3mmzlz2a",
+          "published_at": "2026-11-03T23:52:16.000Z"
+        }
+      }
+    },
+    {
       "county": "collier",
       "state": "FL",
       "fips": "12021",
@@ -63,6 +76,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraegfm4hsmmpjklmaoejyxhw7ayh7wohckewy7ccdwgkfpcxt646ha",
           "published_at": "2026-11-03T15:45:37.000Z"
+        }
+      }
+    },
+    {
+      "county": "highlands",
+      "state": "FL",
+      "fips": "12055",
+      "groups": {
+        "county": {
+          "cid": "baguqeerazhvaazpwibbg6iwnkmd3oiiyc4immpwh7lr4ygisrjxag33crz7q",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera7z7kzkcnfc4uextclcaqcgoxtd7f5ir3n3i722ixurvpz3hzr5sq",
+          "published_at": "2026-11-03T23:54:18.000Z"
         }
       }
     },
@@ -138,6 +164,44 @@
       }
     },
     {
+      "county": "osceola",
+      "state": "FL",
+      "fips": "12097",
+      "groups": {
+        "county": {
+          "cid": "baguqeerabgubggpgxpucjmhakljp5bi7t2udzwkbos7qrzketufd5mauwfna",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera3rodydfshvems2a3nkugrbptlshk22xveq5e2xu4b33lpbev7fsa",
+          "published_at": "2026-11-03T19:10:55.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeerar63ilmwjr6qyaggu34pctzyyf5xdzbxmtonfadxthbce43de5bqq",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeerasndxtxza4f35g7f5jxi2s6lcyyxn36hwpf7tkszsybeun7skoaca",
+          "published_at": "2026-11-03T19:10:55.000Z"
+        }
+      }
+    },
+    {
+      "county": "palm-beach",
+      "state": "FL",
+      "fips": "12099",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraihpuxmfcycbjo7wil4pwpzqg47tba2vihbqmwvyljoyveyxbxvfq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerae5zeimvnhutdqhqbnhqjv3mqxumhplzbsftlzk7wx2ybyno4dxba",
+          "published_at": "2026-11-03T17:59:58.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeera2hlkuq2viggyjvtb52w25j5z6jzrxr6qiks2hsmxgt4x2yzg3wha",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeeravk2a2ogiy4mizo3lf5xvfbutgffaayebezdabhyp4haf526lfozq",
+          "published_at": "2026-11-03T17:59:58.000Z"
+        }
+      }
+    },
+    {
       "county": "putnam",
       "state": "FL",
       "fips": "12107",
@@ -147,6 +211,44 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerarvnrvairkmvwuyrqajxrk6io5ohk3t6ukxjb6dprk6trokgewreq",
           "published_at": "2026-11-03T16:37:34.000Z"
+        }
+      }
+    },
+    {
+      "county": "sarasota",
+      "state": "FL",
+      "fips": "12115",
+      "groups": {
+        "county": {
+          "cid": "baguqeerarrsgyxjvweqp45dlyqfrp4dzluufg6goj5znn5svyqpfuhxwupla",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera2mqieolbypcxsjabqvrtelr7nls63y5ng2lp5qyx2irirynngifa",
+          "published_at": "2026-11-03T18:33:36.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeeratfmldyr5jfiirnocxxplonnoe5u6tqpvse3rmgwxvwjigodtdasa",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeera7lzufhhbcbhsvme6fe2puaahx43oycy3ywxjco7qghoehiu6zpfa",
+          "published_at": "2026-11-03T18:33:36.000Z"
+        }
+      }
+    },
+    {
+      "county": "st-lucie",
+      "state": "FL",
+      "fips": "12111",
+      "groups": {
+        "county": {
+          "cid": "baguqeerakzeldtobfjywd4wnribdsgjzp3jik2bt6jyfqs3gse6gc5zkz3gq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerakidn6eayrvqh7r5cgya4xaccxeyalcmz4x7anooptuyxxap5zqca",
+          "published_at": "2026-11-03T17:51:39.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeeram6xzfodsp574oj7jvvsz6zgdnjwadac6mknstx3fzvfmojlm2raq",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeerapf7cs4kgeycjavgnb4e7oifnaaypuqu73rn7xes2etoa4mv6ejva",
+          "published_at": "2026-11-03T17:51:39.000Z"
         }
       }
     },
