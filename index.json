@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "42e58a783c7823e39abd686c0976bbc890a2dfb4",
+  "generated_from": "786035a4fc7656fd0fa6aac7effdd385c5c7f6ca",
   "counties": [
     {
       "county": "baker",
@@ -134,6 +134,25 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraihbarj5mgcbn35bqmbz4ivjla7qws2lqapq55njl6kfxec4peela",
           "published_at": "2026-11-03T16:34:19.000Z"
+        }
+      }
+    },
+    {
+      "county": "osceola",
+      "state": "FL",
+      "fips": "12097",
+      "groups": {
+        "county": {
+          "cid": "baguqeerabgubggpgxpucjmhakljp5bi7t2udzwkbos7qrzketufd5mauwfna",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera3rodydfshvems2a3nkugrbptlshk22xveq5e2xu4b33lpbev7fsa",
+          "published_at": "2026-11-03T19:10:55.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeerar63ilmwjr6qyaggu34pctzyyf5xdzbxmtonfadxthbce43de5bqq",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeerasndxtxza4f35g7f5jxi2s6lcyyxn36hwpf7tkszsybeun7skoaca",
+          "published_at": "2026-11-03T19:10:55.000Z"
         }
       }
     },
