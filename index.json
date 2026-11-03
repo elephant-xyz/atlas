@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "d62da7b6282ba5b5ce812a7c67aff9b8839f21b4",
+  "generated_from": "b3892d403f11c2ded403656addae1e48536c7306",
   "counties": [
     {
       "county": "baker",
@@ -134,6 +134,25 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraihbarj5mgcbn35bqmbz4ivjla7qws2lqapq55njl6kfxec4peela",
           "published_at": "2026-11-03T16:34:19.000Z"
+        }
+      }
+    },
+    {
+      "county": "palm-beach",
+      "state": "FL",
+      "fips": "12099",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraihpuxmfcycbjo7wil4pwpzqg47tba2vihbqmwvyljoyveyxbxvfq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerae5zeimvnhutdqhqbnhqjv3mqxumhplzbsftlzk7wx2ybyno4dxba",
+          "published_at": "2026-11-03T17:59:58.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeera2hlkuq2viggyjvtb52w25j5z6jzrxr6qiks2hsmxgt4x2yzg3wha",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeeravk2a2ogiy4mizo3lf5xvfbutgffaayebezdabhyp4haf526lfozq",
+          "published_at": "2026-11-03T17:59:58.000Z"
         }
       }
     },
