@@ -1,0 +1,12 @@
+{
+  "county": "highlands",
+  "state": "FL",
+  "fips": "12055",
+  "groups": {
+    "county": {
+      "cid": "baguqeerazhvaazpwibbg6iwnkmd3oiiyc4immpwh7lr4ygisrjxag33crz7q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeera7z7kzkcnfc4uextclcaqcgoxtd7f5ir3n3i722ixurvpz3hzr5sq"
+    }
+  }
+}
