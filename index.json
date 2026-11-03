@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "bb975797ac04f7fa366acbf9a12438b2427b8e20",
+  "generated_from": "3985741d8af7410a789e830b298d56890c59b918",
   "counties": [
     {
       "county": "collier",
@@ -96,6 +96,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerarvnrvairkmvwuyrqajxrk6io5ohk3t6ukxjb6dprk6trokgewreq",
           "published_at": "2026-11-03T16:37:34.000Z"
+        }
+      }
+    },
+    {
+      "county": "sumter",
+      "state": "FL",
+      "fips": "12119",
+      "groups": {
+        "county": {
+          "cid": "baguqeerauo34q2cq66ncvpubgqsadqc4rupnxhks4nkp3ytti5qdo7v4xu4q",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeratoottnt6ub2ctyeftuahuimugajnyo5o3rogfp4kzkssf5g57mea",
+          "published_at": "2026-11-03T17:28:01.000Z"
         }
       }
     },
