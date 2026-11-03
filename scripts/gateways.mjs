@@ -5,6 +5,21 @@
 // only when every gateway fails.
 export const DEFAULT_GATEWAYS = ['https://ipfs.filebase.io', 'https://trustless-gateway.link'];
 
+/**
+ * A fetch that adds `x-filebase-gateway-token: ATLAS_GATEWAY_TOKEN` to requests for the private
+ * gateways listed in ATLAS_GATEWAYS (a restricted Filebase dedicated gateway), and never to the
+ * public defaults. Without a token it is `fetch` unchanged.
+ */
+export function withGatewayToken(fetch = globalThis.fetch, env = process.env) {
+  const token = (env.ATLAS_GATEWAY_TOKEN ?? '').trim();
+  const custom = (env.ATLAS_GATEWAYS ?? '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean);
+  if (!token || !custom.length) return fetch;
+  return (url, init = {}) => {
+    if (!custom.some((g) => String(url).startsWith(`${g}/`))) return fetch(url, init);
+    return fetch(url, { ...init, headers: { ...(init.headers ?? {}), 'x-filebase-gateway-token': token } });
+  };
+}
+
 /** Origins from ATLAS_GATEWAYS (comma-separated; empty means unset) first, then the defaults. */
 export function gatewayList(env = process.env) {
   const custom = (env.ATLAS_GATEWAYS ?? '')

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "b3892d403f11c2ded403656addae1e48536c7306",
+  "generated_from": "786035a4fc7656fd0fa6aac7effdd385c5c7f6ca",
   "counties": [
     {
       "county": "baker",
@@ -138,6 +138,25 @@
       }
     },
     {
+      "county": "osceola",
+      "state": "FL",
+      "fips": "12097",
+      "groups": {
+        "county": {
+          "cid": "baguqeerabgubggpgxpucjmhakljp5bi7t2udzwkbos7qrzketufd5mauwfna",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera3rodydfshvems2a3nkugrbptlshk22xveq5e2xu4b33lpbev7fsa",
+          "published_at": "2026-11-03T19:10:55.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeerar63ilmwjr6qyaggu34pctzyyf5xdzbxmtonfadxthbce43de5bqq",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeerasndxtxza4f35g7f5jxi2s6lcyyxn36hwpf7tkszsybeun7skoaca",
+          "published_at": "2026-11-03T19:10:55.000Z"
+        }
+      }
+    },
+    {
       "county": "palm-beach",
       "state": "FL",
       "fips": "12099",
@@ -166,6 +185,25 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerarvnrvairkmvwuyrqajxrk6io5ohk3t6ukxjb6dprk6trokgewreq",
           "published_at": "2026-11-03T16:37:34.000Z"
+        }
+      }
+    },
+    {
+      "county": "sarasota",
+      "state": "FL",
+      "fips": "12115",
+      "groups": {
+        "county": {
+          "cid": "baguqeerarrsgyxjvweqp45dlyqfrp4dzluufg6goj5znn5svyqpfuhxwupla",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera2mqieolbypcxsjabqvrtelr7nls63y5ng2lp5qyx2irirynngifa",
+          "published_at": "2026-11-03T18:33:36.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeeratfmldyr5jfiirnocxxplonnoe5u6tqpvse3rmgwxvwjigodtdasa",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeera7lzufhhbcbhsvme6fe2puaahx43oycy3ywxjco7qghoehiu6zpfa",
+          "published_at": "2026-11-03T18:33:36.000Z"
         }
       }
     },
