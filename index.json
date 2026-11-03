@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "b3892d403f11c2ded403656addae1e48536c7306",
+  "generated_from": "42e58a783c7823e39abd686c0976bbc890a2dfb4",
   "counties": [
     {
       "county": "baker",
@@ -166,6 +166,25 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerarvnrvairkmvwuyrqajxrk6io5ohk3t6ukxjb6dprk6trokgewreq",
           "published_at": "2026-11-03T16:37:34.000Z"
+        }
+      }
+    },
+    {
+      "county": "sarasota",
+      "state": "FL",
+      "fips": "12115",
+      "groups": {
+        "county": {
+          "cid": "baguqeerarrsgyxjvweqp45dlyqfrp4dzluufg6goj5znn5svyqpfuhxwupla",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera2mqieolbypcxsjabqvrtelr7nls63y5ng2lp5qyx2irirynngifa",
+          "published_at": "2026-11-03T18:33:36.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeeratfmldyr5jfiirnocxxplonnoe5u6tqpvse3rmgwxvwjigodtdasa",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeera7lzufhhbcbhsvme6fe2puaahx43oycy3ywxjco7qghoehiu6zpfa",
+          "published_at": "2026-11-03T18:33:36.000Z"
         }
       }
     },
