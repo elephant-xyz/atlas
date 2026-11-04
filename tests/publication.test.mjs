@@ -92,11 +92,10 @@ test('transferArchive imports the root block, each shard, then the root block pi
   assert.deepEqual(readdirSync(f.tmp), [], 'temp CAR deleted');
 });
 
-test('transferTables imports the tables block, each part by path, then the tables block pinned', async () => {
+test('transferTables imports each part by path, then the tables block pinned (never the tables block first)', async () => {
   const f = await fixture();
   await transferTables(f.tables.cid.toString(), f.deps);
   assert.deepEqual(f.calls, [
-    `dag/import?pin-roots=false&stats=true root=${f.tables.cid} blocks=1`,
     `dag/import?pin-roots=false&stats=true root=${f.part.cid} blocks=2`,
     `dag/import?pin-roots=true&stats=true root=${f.tables.cid} blocks=1`,
   ]);
