@@ -20,6 +20,7 @@ A page is the current state of one county, nothing else. History lives in git.
 | `groups.<key>.cid` | CID of the `CountyIndex` block that roots the archive; this is the archive's identity |
 | `groups.<key>.schema` | CID of the data-group schema from the lexicon manifest that the archive's properties carry |
 | `groups.<key>.tables` | CID of the `CountyTables` block that roots the archive's Parquet part set |
+| `groups.<key>.car` | optional: CID of the same archive as one CARv1 file (rooted at `cid`), added to IPFS as a file. `validate` and `publish` download it in one request instead of exporting the DAG block by block; every block is still hashed and the DAG checked complete. Not copied into `index.json` |
 
 One archive per county per data group. The seed group rides inside every archive as property
 identity and is never a registry group. Supersede an archive by changing `cid` (and `tables`);

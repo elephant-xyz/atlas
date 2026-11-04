@@ -16,6 +16,12 @@
 // root or the copy is incomplete (the workflow reverts); exit 2 on any other error
 // (credentials, RPC; re-dispatch). --all transfers every root on the page, not only new ones.
 //
+// A group with `car` (the archive as one CARv1 file, by its own CID) is copied from that file
+// instead: one request downloads it, then the same pieces are cut locally and imported with the
+// same checks (every block a piece names is in the file, each import stores exactly the blocks
+// sent, the pinned root import and pin/ls prove the DAG complete). Pieces are cut in post-order,
+// each block after the blocks it links to, at most ATLAS_PIECE_MB (default 8) each.
+//
 // TODO: unpin roots of withdrawn groups; nothing is unpinned yet.
 import { appendFileSync, createWriteStream, openAsBlob, readFileSync } from 'node:fs';
 import { mkdtemp, unlink } from 'node:fs/promises';
@@ -24,7 +30,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { CarReader, CarWriter } from '@ipld/car';
+import { CarIndexedReader, CarReader, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
@@ -46,7 +52,7 @@ export function rootsToTransfer(headPages, basePages) {
   const out = [];
   for (const { page } of headPages) {
     for (const [key, g] of groupsOf(page)) {
-      if (!known.has(g.cid)) out.push({ county: `${page.state}/${page.county}`, key: `${key}.cid`, kind: 'archive', cid: g.cid });
+      if (!known.has(g.cid)) out.push({ county: `${page.state}/${page.county}`, key: `${key}.cid`, kind: 'archive', cid: g.cid, ...(g.car ? { car: g.car } : {}) });
       if (!known.has(g.tables)) out.push({ county: `${page.state}/${page.county}`, key: `${key}.tables`, kind: 'tables', cid: g.tables });
     }
   }
@@ -62,6 +68,7 @@ const defaults = () => ({
   // can take longer than 15 minutes on a shared gateway.
   requestMs: Number(process.env.ATLAS_REQUEST_MINUTES ?? 60) * 60_000,
   parallel: Number(process.env.ATLAS_TRANSFER_PARALLEL ?? 32),
+  pieceBytes: Number(process.env.ATLAS_PIECE_MB ?? 8) * 1024 * 1024,
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   now: Date.now,
   log: console.log,
@@ -206,6 +213,104 @@ export async function transferArchive(root, deps = {}) {
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);
 }
 
+const DAG_JSON = 0x0129;
+const RAW = 0x55;
+
+/** Every CID a decoded dag-json value links to, in order. */
+function linksOf(value, out = []) {
+  const cid = CID.asCID(value);
+  if (cid) out.push(cid);
+  else if (Array.isArray(value)) for (const v of value) linksOf(v, out);
+  else if (value && typeof value === 'object' && !(value instanceof Uint8Array)) for (const v of Object.values(value)) linksOf(v, out);
+  return out;
+}
+
+/** CAR of `blocks` rooted at the last one (in post-order, the subtree's top), as a Blob. */
+async function piecesCar(blocks) {
+  const { writer, out } = CarWriter.create([blocks.at(-1).cid]);
+  const chunks = [];
+  const collected = (async () => {
+    for await (const chunk of out) chunks.push(chunk);
+  })();
+  for (const b of blocks) await writer.put(b);
+  await writer.close();
+  await collected;
+  return new Blob([Buffer.concat(chunks)], { type: 'application/vnd.ipld.car' });
+}
+
+/**
+ * Import the subtree under `top` out of the local CAR, in post-order pieces of at most
+ * `d.pieceBytes`. A block already claimed by another subtree (`sent`) is skipped; a block the file
+ * lacks is TransferFailed.
+ */
+async function transferLocalSubtree(root, reader, top, sent, tally, d) {
+  let piece = [];
+  let size = 0;
+  const flush = async () => {
+    if (!piece.length) return;
+    const blocks = piece;
+    piece = [];
+    size = 0;
+    await importCar(root, await piecesCar(blocks), blocks.at(-1).cid.toString(), blocks.length, false, d);
+  };
+  // Iterative post-order: a block is emitted after every block it links to.
+  const stack = [{ cid: top, expanded: false }];
+  while (stack.length) {
+    const entry = stack.pop();
+    const key = entry.cid.toString();
+    if (!entry.expanded) {
+      if (sent.has(key)) continue;
+      sent.add(key);
+      const block = await reader.get(entry.cid);
+      if (!block) throw new TransferFailed(root, `the car file is missing block ${key}`);
+      entry.block = block;
+      entry.expanded = true;
+      stack.push(entry);
+      const code = entry.cid.code;
+      if (code === DAG_JSON) for (const link of linksOf(decode(block.bytes)).reverse()) stack.push({ cid: link, expanded: false });
+      else if (code !== RAW) throw new TransferFailed(root, `block ${key} has codec 0x${code.toString(16)}, which the car transfer does not walk`);
+      continue;
+    }
+    piece.push(entry.block);
+    size += entry.block.bytes.length;
+    tally.seen.add(key);
+    tally.bytes += entry.block.bytes.length;
+    if (size >= d.pieceBytes) await flush();
+  }
+  await flush();
+}
+
+/** Copy an archive from its `car` file: download it once, then import it shard by shard in post-order pieces, then pin the root. */
+export async function transferArchiveFromCar(root, car, deps = {}) {
+  const d = { ...defaults(), ...deps };
+  d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
+  const file = join(d.tmp, `${root}.car`);
+  const res = await gatewayGet(root, car, '*/*', d);
+  await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+  const reader = await CarIndexedReader.fromFile(file);
+  try {
+    const roots = (await reader.getRoots()).map(String);
+    if (!roots.includes(root)) throw new TransferFailed(root, `car file ${car} has roots [${roots.join(', ')}]`);
+    const rootBlock = await reader.get(CID.parse(root));
+    if (!rootBlock) throw new TransferFailed(root, `car file ${car} lacks the root block`);
+    const digest = await sha256.digest(rootBlock.bytes);
+    if (Buffer.compare(digest.bytes, CID.parse(root).multihash.bytes) !== 0) throw new TransferFailed(root, `car file ${car}: root block does not hash to the CID`);
+    const index = decode(rootBlock.bytes);
+    if (index.label !== 'CountyIndex' || !Array.isArray(index.shards)) throw new TransferFailed(root, 'not a CountyIndex block');
+    const block = await singleBlockCar(root, rootBlock.bytes);
+    const tally = { seen: new Set([root]), bytes: rootBlock.bytes.length };
+    const sent = new Set([root]);
+    d.log(`archive ${root} from car file ${car}: ${index.shards.length} shard(s), ${index.properties} properties, ${d.parallel} shard(s) at a time, pieces up to ${d.pieceBytes} bytes`);
+    await pool(index.shards.map((s) => () => transferLocalSubtree(root, reader, CID.asCID(s) ?? CID.parse(String(s)), sent, tally, d)), d.parallel);
+    d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
+    await requirePinned(root, d);
+    d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);
+  } finally {
+    await reader.close();
+    await unlink(file).catch(() => {});
+  }
+}
+
 export async function transferTables(root, deps = {}) {
   const d = { ...defaults(), ...deps };
   const bytes = await rawBlock(root, root, d);
@@ -229,9 +334,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const targets = rootsToTransfer(pagesAt('HEAD', root), all ? [] : (pagesAt('HEAD~1', root) ?? []));
   if (!targets.length) console.log('no new roots to transfer');
   for (const t of targets) {
-    console.log(`transferring ${t.county} ${t.key} ${t.cid}`);
+    console.log(`transferring ${t.county} ${t.key} ${t.cid}${t.car ? ` from car file ${t.car}` : ''}`);
     try {
-      await (t.kind === 'tables' ? transferTables : transferArchive)(t.cid);
+      if (t.kind === 'tables') await transferTables(t.cid);
+      else if (t.car) await transferArchiveFromCar(t.cid, t.car);
+      else await transferArchive(t.cid);
     } catch (e) {
       if (!(e instanceof TransferFailed)) {
         console.error(e.stack ?? e.message);

@@ -207,3 +207,25 @@ test('the gateway token goes only to ATLAS_GATEWAYS, never to the public default
   assert.deepEqual(seen.map((s) => s[1]), ['secret', undefined, undefined]);
   assert.equal(withGatewayToken(base, { ATLAS_GATEWAYS: 'https://mine.myfilebase.com' }), base, 'no token: fetch unchanged');
 });
+
+test('a group with car downloads that one file instead of exporting the DAG, and the CLI checks it', async () => {
+  const w = await shardedWorld();
+  const file = await car(w.index.cid, [w.index, ...w.shards, ...w.props]);
+  const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+  w.routes[CAR] = () => new Response(file);
+  const seen = [];
+  await verifyGroup({ ...w.group, car: CAR }, { ...w.deps, parallel: 4, validateCar: (f) => (seen.push(f), { ok: true, report: 'ok' }) });
+  assert.equal(seen.length, 1);
+  assert.deepEqual(w.fetched.filter((u) => u.includes('format=car') || u.endsWith(CAR)), [`${G}/ipfs/${CAR}`], 'only the car file is downloaded');
+  assert.ok(w.log.some((l) => l.startsWith(`archive ${w.index.cid}: CountyIndex, 3 shard(s)`)), w.log.join('\n'));
+});
+
+test('a car file rooted elsewhere is rejected like a bad gateway export', async () => {
+  const w = await shardedWorld();
+  const other = await block({ label: 'Seed', relationships: {}, n: 7 });
+  const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+  const bad = await car(other.cid, [other]);
+  w.routes[CAR] = () => new Response(bad);
+  await assert.rejects(verifyGroup({ ...w.group, car: CAR }, { ...w.deps, deadlineMs: 1 }));
+  assert.ok(w.log.some((l) => l.startsWith(`${G}/ipfs/${CAR}: CAR roots are [${other.cid}]`)), w.log.join('\n'));
+});

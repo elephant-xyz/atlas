@@ -24,6 +24,9 @@ is not publishable, whatever the upload logs say.
    (`tables`). The `schema` is the data group's CID in the lexicon manifest
    (`https://lexicon.elephant.xyz/api/manifest`, e.g. `County` → `ipfsCid`), the same key the
    archive's properties carry in `data_groups`.
+   For a large archive (millions of blocks), also add the CAR file itself to IPFS as a file
+   (for example, upload it to a Filebase bucket; the object's CID is its `car`) and set `car`
+   on the group: gateways export a DAG of millions of small blocks too slowly for `validate`.
 2. Clone Atlas and branch from `main`:
 
    ```bash
