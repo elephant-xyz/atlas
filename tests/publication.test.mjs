@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { CarReader } from '@ipld/car';
+import * as dagJson from '@ipld/dag-json';
 import * as raw from 'multiformats/codecs/raw';
 import { poll, token } from '../scripts/filebase.mjs';
 import { DEFAULT_GATEWAYS, fetchFromAny, gatewayList } from '../scripts/gateways.mjs';
@@ -224,10 +225,45 @@ test('transferArchiveFromCar downloads the car file once, imports post-order pie
   assert.deepEqual(fetched, [`${f.G}/ipfs/${CAR}`], 'one request');
   const at_ = (c) => order.indexOf(c.cid.toString());
   assert.ok(at_(leafA) < at_(property) && at_(leafB) < at_(property) && at_(property) < at_(shard0), 'every block is imported after the blocks it links to');
-  assert.equal(order.filter((c) => c === leafA.cid.toString()).length, 1, 'a block two shards share is imported once');
+  assert.equal(order.filter((c) => c === leafA.cid.toString()).length, 1, 'a block two shards share is imported once when shards run one at a time');
   assert.equal(f.calls.at(-1), `dag/import?pin-roots=true root=${index.cid} blocks=1`);
   assert.equal(f.calls.length, 6, f.calls.join('\n'));
   assert.deepEqual(readdirSync(f.tmp), [], 'temp CAR deleted');
+});
+
+test('shards in parallel never import a piece linking a block that is only queued elsewhere (Filebase holds such imports)', async () => {
+  const f = await fixture();
+  const shared = await block({ label: 'Seed', relationships: {}, n: 2 });
+  const shards = [];
+  for (let k = 0; k < 4; k++) {
+    const own = await block({ label: 'Seed', relationships: { s: shared.cid }, k });
+    shards.push({ own, shard: await block({ properties: [{ property_cid: own.cid, data_groups: {} }] }) });
+  }
+  const index = await block({ label: 'CountyIndex', properties: 4, shards: shards.map((s) => s.shard.cid), version: 1 });
+  const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+  const file = await car(index.cid, [index, shared, ...shards.flatMap((s) => [s.own, s.shard])]);
+  const stored = new Set();
+  const hung = [];
+  const rpc = async (path, { body } = {}) => {
+    if (path.startsWith('pin/ls')) return [{ Keys: { [index.cid.toString()]: { Type: 'recursive' } } }];
+    const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
+    const here = [];
+    for await (const b of reader.blocks()) here.push(b);
+    await new Promise((r) => setTimeout(r, 5)); // imports overlap
+    const inCar = new Set(here.map((b) => b.cid.toString()));
+    for (const b of here) {
+      if (b.cid.code !== dagJson.code) continue;
+      const links = JSON.stringify(dagJson.decode(b.bytes)).match(/"\/":"(ba[a-z0-9]+)"/g) ?? [];
+      for (const l of links.map((x) => x.split('"')[3])) if (!inCar.has(l) && !stored.has(l)) throw (hung.push(l), new Error(`import would hang: ${b.cid} links missing ${l}`));
+    }
+    for (const b of here) stored.add(b.cid.toString());
+    const [root] = await reader.getRoots();
+    return [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: here.length, BlockBytesCount: 0 } }];
+  };
+  const fetch = async (url) => (url === `${f.G}/ipfs/${CAR}` ? new Response(file) : new Response('no', { status: 404 }));
+  await transferArchiveFromCar(index.cid.toString(), CAR, { ...f.deps, fetch, rpc, parallel: 4, pieceBytes: 1, sleep: async () => {} });
+  assert.deepEqual(hung, [], 'no import linked a block the bucket lacked');
+  assert.ok(stored.has(index.cid.toString()) && stored.has(shared.cid.toString()));
 });
 
 test('a car file that lacks a block is a TransferFailed', async () => {

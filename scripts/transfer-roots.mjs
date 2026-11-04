@@ -246,6 +246,12 @@ async function piecesCar(blocks) {
  * lacks is TransferFailed.
  */
 async function transferLocalSubtree(root, reader, top, sent, tally, d) {
+  // `sent[i]` marks a block Filebase has confirmed (its piece imported). A block only queued in
+  // another shard's unconfirmed piece is not sent: Filebase holds an import open while any block in
+  // it links to a block the bucket lacks, so two shards skipping each other's queued blocks
+  // deadlock. Blocks shared across shards are therefore sent by each shard that needs them before
+  // they are confirmed (imports are idempotent). `mine` dedups within this shard's walk.
+  const mine = new Uint8Array(reader.size);
   let piece = [];
   let size = 0;
   const flush = async () => {
@@ -253,9 +259,16 @@ async function transferLocalSubtree(root, reader, top, sent, tally, d) {
     const blocks = piece;
     piece = [];
     size = 0;
-    await importCar(root, await piecesCar(blocks), blocks.at(-1).cid.toString(), blocks.length, false, d);
+    await importCar(root, await piecesCar(blocks.map((e) => e.block)), blocks.at(-1).block.cid.toString(), blocks.length, false, d);
+    for (const { slot, block } of blocks) {
+      if (sent[slot]) continue;
+      sent[slot] = 1;
+      tally.blocks++;
+      tally.bytes += block.bytes.length;
+    }
   };
-  // Iterative post-order: a block is emitted after every block it links to.
+  // Iterative post-order: a block is emitted after every block it links to, and pieces of one
+  // shard import in order, so every link of a piece is in it or already confirmed.
   const stack = [{ cid: top, expanded: false }];
   while (stack.length) {
     const entry = stack.pop();
@@ -263,10 +276,11 @@ async function transferLocalSubtree(root, reader, top, sent, tally, d) {
     if (!entry.expanded) {
       const i = reader.slotOf(key);
       if (i === undefined) throw new TransferFailed(root, `the car file is missing block ${key}`);
-      if (sent[i]) continue;
-      sent[i] = 1;
+      if (sent[i] || mine[i]) continue;
+      mine[i] = 1;
       const block = await reader.get(key);
       entry.block = block;
+      entry.slot = i;
       entry.expanded = true;
       stack.push(entry);
       const code = entry.cid.code;
@@ -274,13 +288,12 @@ async function transferLocalSubtree(root, reader, top, sent, tally, d) {
       else if (code !== RAW) throw new TransferFailed(root, `block ${key} has codec 0x${code.toString(16)}, which the car transfer does not walk`);
       continue;
     }
-    piece.push(entry.block);
+    piece.push({ slot: entry.slot, block: entry.block });
     size += entry.block.bytes.length;
-    tally.blocks++;
-    tally.bytes += entry.block.bytes.length;
     if (size >= d.pieceBytes) await flush();
   }
   await flush();
+  d.log?.(`shard ${top} confirmed (${tally.blocks} distinct blocks so far)`);
 }
 
 /** Copy an archive from its `car` file: download it once, then import it shard by shard in post-order pieces, then pin the root. */
