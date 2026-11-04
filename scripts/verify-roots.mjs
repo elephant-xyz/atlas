@@ -13,27 +13,35 @@
 //   3. The schema block is fetched by CID, hashed, and must be a data-group JSON Schema.
 //   4. The tables block is fetched by CID, hashed, must be a CountyTables whose county_root is
 //      the cid, and every part of every table must serve its root block by its own CID (`?format=raw`, hashed).
+//      An archive with several shards is downloaded faster: its root block by CID (hashed), then
+//      every shard's subtree (`/ipfs/<shard cid>?format=car`, root checked and hashed) with
+//      ATLAS_FETCH_PARALLEL requests at a time (default 32), written into one CAR rooted at the
+//      cid. Gateways walk a DAG block by block, so one stream per archive is the bottleneck for
+//      archives of millions of small blocks; parallel shard requests add up. The CLI then checks
+//      every block of the assembled CAR exactly as before.
 // Gateways: first that answers wins, a 429 puts a gateway on cooldown, the gateway that served
 // the CAR is preferred afterwards, one deadline (ATLAS_GATEWAY_DEADLINE_MINUTES) per group.
 // The CAR is deleted after the checks. The CLI comes from ELEPHANT_CLI (default: elephant-cli).
 import { spawnSync } from 'node:child_process';
-import { createWriteStream, statSync } from 'node:fs';
+import { createReadStream, createWriteStream, statSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { CarIndexedReader } from '@ipld/car';
+import { CarBlockIterator, CarIndexedReader, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
-import { gatewayClient, gatewayList } from './gateways.mjs';
+import { gatewayClient, gatewayList, withGatewayToken } from './gateways.mjs';
 import { changedGroups, pagesAt, readPages } from './lib.mjs';
 
 const CLI = process.env.ELEPHANT_CLI ?? 'elephant-cli';
 const CSV = process.env.ATLAS_VALIDATION_CSV ?? 'validation-errors.csv';
 const DEADLINE_MS = Number(process.env.ATLAS_GATEWAY_DEADLINE_MINUTES ?? 20) * 60_000;
+const PARALLEL = Number(process.env.ATLAS_FETCH_PARALLEL ?? 32);
+const ROOT_PROBE_MS = 2 * 60_000;
 
 /** Run the CLI on a CAR; returns { ok, report } where report is the CLI's stdout/stderr. */
 export function validateCar(file, csv, cli = CLI, run = spawnSync) {
@@ -61,7 +69,7 @@ function require_(cond, what, msg) {
 }
 
 /** Stream `<cid>?format=car` to `file` from a gateway whose CAR actually carries the hashed root; loop until one does or the deadline passes. */
-async function downloadArchive(gw, cid, file, d) {
+async function downloadCar(gw, cid, file, d) {
   for (;;) {
     const { res, url } = await gw.get(`${cid}?format=car`, { headers: { accept: 'application/vnd.ipld.car' }, requestMs: 60 * 60_000 });
     await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
@@ -90,6 +98,67 @@ async function downloadArchive(gw, cid, file, d) {
   }
 }
 
+/**
+ * The archive's root block, hashed and decoded; undefined when no gateway serves it within
+ * ROOT_PROBE_MS. Retried with the gateway client, so a 429 cools a gateway down instead of
+ * sending a large archive to the single-stream download.
+ */
+async function rootIndex(cid, d) {
+  try {
+    const probe = gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: Math.min(d.deadlineMs, ROOT_PROBE_MS), sleep: d.sleep, now: d.now, log: d.log });
+    const { res, url } = await probe.get(`${cid}?format=raw`, { headers: { accept: 'application/vnd.ipld.raw' } });
+    const bytes = await verified(url, new Uint8Array(await res.arrayBuffer()), cid);
+    return { bytes, node: decode(bytes) };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Download every shard's subtree as its own CAR, `d.parallel` at a time, then write one CAR rooted
+ * at `cid`: the root block, then each shard CAR's blocks in shard order. A block two shards share
+ * appears twice, which a CAR allows. The CLI hashes every block of the result.
+ */
+async function downloadByShard(gw, cid, index, file, d) {
+  const shards = index.node.shards.map(String);
+  const dir = dirname(file);
+  const parts = new Array(shards.length);
+  let next = 0;
+  let done = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= shards.length) return;
+      parts[i] = join(dir, `shard-${i}.car`);
+      // Each shard gets its own gateway client, so the retry deadline bounds one shard, not the whole archive.
+      await downloadCar(d.shardClient ? d.shardClient() : gw, shards[i], parts[i], d);
+      if (++done % 25 === 0 || done === shards.length) d.log(`downloaded ${done}/${shards.length} shard CARs`);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(d.parallel, shards.length) }, worker));
+  const root = CID.parse(cid);
+  const { writer, out } = CarWriter.create([root]);
+  const written = pipeline(Readable.from(out), createWriteStream(file));
+  await writer.put({ cid: root, bytes: index.bytes });
+  for (const part of parts) {
+    for await (const blk of await CarBlockIterator.fromIterable(createReadStream(part))) await writer.put(blk);
+    await rm(part, { force: true });
+  }
+  await writer.close();
+  await written;
+  return { url: `${d.gateways[0]}/ipfs/${cid} (root block + ${shards.length} shard CARs, ${Math.min(d.parallel, shards.length)} at a time)`, size: statSync(file).size };
+}
+
+/** Shard by shard when the root is a CountyIndex with several shards and parallel fetches are enabled; else the whole CAR by root. */
+async function downloadArchive(gw, cid, file, d) {
+  if (d.parallel > 1) {
+    const index = await rootIndex(cid, d);
+    if (index?.node?.label === 'CountyIndex' && Array.isArray(index.node.shards) && index.node.shards.length > 1) return downloadByShard(gw, cid, index, file, d);
+    d.log(index ? `archive ${cid}: root is not a multi-shard CountyIndex; downloading the whole CAR` : `archive ${cid}: root block not served within ${ROOT_PROBE_MS / 60_000} min; downloading the whole CAR`);
+  }
+  return downloadCar(gw, cid, file, d);
+}
+
 /** A hashed, decoded block out of the local CAR. */
 async function carNode(reader, cid, what) {
   const block = await reader.get(CID.parse(cid));
@@ -104,8 +173,9 @@ async function fetchBlock(gw, cid) {
 }
 
 export async function verifyGroup({ cid, schema, tables }, deps = {}) {
-  const d = { fetch: globalThis.fetch, gateways: gatewayList(), deadlineMs: DEADLINE_MS, validateCar: (file) => validateCar(file, CSV), csv: CSV, log: console.log, sleep: undefined, now: undefined, ...deps };
+  const d = { fetch: withGatewayToken(), gateways: gatewayList(), deadlineMs: DEADLINE_MS, validateCar: (file) => validateCar(file, CSV), csv: CSV, log: console.log, sleep: undefined, now: undefined, parallel: PARALLEL, ...deps };
   const gw = gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: d.deadlineMs, sleep: d.sleep, now: d.now, log: d.log });
+  d.shardClient ??= () => gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: d.deadlineMs, sleep: d.sleep, now: d.now, log: d.log });
 
   // 1. The whole archive by root, then the CLI.
   const dir = await mkdtemp(join(tmpdir(), 'atlas-verify-'));

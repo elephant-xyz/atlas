@@ -29,7 +29,7 @@ import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { rpc as filebaseRpc } from './filebase.mjs';
-import { fetchFromAny, gatewayList } from './gateways.mjs';
+import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
 import { groupsOf, pagesAt, rootsOf } from './lib.mjs';
 
 export class TransferFailed extends Error {
@@ -54,11 +54,14 @@ export function rootsToTransfer(headPages, basePages) {
 }
 
 const defaults = () => ({
-  fetch: globalThis.fetch,
+  fetch: withGatewayToken(),
   rpc: filebaseRpc,
   gateways: gatewayList(),
   deadlineMs: Number(process.env.ATLAS_GATEWAY_DEADLINE_MINUTES ?? 20) * 60_000,
-  requestMs: 15 * 60_000,
+  // One request streams a whole shard subtree; gateways walk it block by block, so a large shard
+  // can take longer than 15 minutes on a shared gateway.
+  requestMs: Number(process.env.ATLAS_REQUEST_MINUTES ?? 60) * 60_000,
+  parallel: Number(process.env.ATLAS_TRANSFER_PARALLEL ?? 32),
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   now: Date.now,
   log: console.log,
@@ -152,6 +155,15 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
   return `${stats.BlockCount} blocks, ${stats.BlockBytesCount} bytes`;
 }
 
+/** Run `jobs` (functions returning promises), `n` at a time; the first rejection rejects. */
+async function pool(jobs, n) {
+  let next = 0;
+  const worker = async () => {
+    while (next < jobs.length) await jobs[next++]();
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(n, jobs.length)) }, worker));
+}
+
 /** Export <path>?format=car to a temp file, count its blocks, import it (pin-roots=false), delete the file. */
 async function transferSubtree(root, path, expect, tally, d) {
   const res = await gatewayGet(root, `${path}?format=car`, 'application/vnd.ipld.car', d);
@@ -186,9 +198,9 @@ export async function transferArchive(root, deps = {}) {
   if (index.label !== 'CountyIndex' || !Array.isArray(index.shards)) throw new TransferFailed(root, 'not a CountyIndex block');
   const block = await singleBlockCar(root, bytes);
   const tally = { seen: new Set([root]), bytes: bytes.length };
-  d.log(`archive ${root}: ${index.shards.length} shard(s), ${index.properties} properties`);
+  d.log(`archive ${root}: ${index.shards.length} shard(s), ${index.properties} properties, ${d.parallel} subtree(s) at a time`);
   d.log(`imported ${root} (root block): ${await importCar(root, block, root, 1, false, d)}`);
-  for (let i = 0; i < index.shards.length; i++) await transferSubtree(root, `${root}/shards/${i}`, index.shards[i].toString(), tally, d);
+  await pool(index.shards.map((s, i) => () => transferSubtree(root, `${root}/shards/${i}`, s.toString(), tally, d)), d.parallel);
   d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
   await requirePinned(root, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);
@@ -204,10 +216,8 @@ export async function transferTables(root, deps = {}) {
   const names = Object.keys(tables.tables).sort();
   d.log(`tables ${root}: ${names.length} table(s), ${names.reduce((n, t) => n + tables.tables[t].parts.length, 0)} part(s)`);
   d.log(`imported ${root} (root block): ${await importCar(root, block, root, 1, false, d)}`);
-  for (const name of names) {
-    const parts = tables.tables[name].parts;
-    for (let i = 0; i < parts.length; i++) await transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, parts[i].cid.toString(), tally, d);
-  }
+  const jobs = names.flatMap((name) => tables.tables[name].parts.map((part, i) => () => transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, part.cid.toString(), tally, d)));
+  await pool(jobs, d.parallel);
   d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
   await requirePinned(root, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied (the county_root link is pinned by the archive transfer)`);
