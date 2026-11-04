@@ -1,5 +1,7 @@
 // Filebase access for the publish workflow: one place for the token, the Kubo RPC, and the
 // poll loop.
+import { request } from 'node:https';
+
 const RPC = process.env.FILEBASE_RPC ?? 'https://rpc.filebase.io';
 
 /** Kubo RPC bearer token: base64 of ACCESS:SECRET:BUCKET. Never log it. */
@@ -9,11 +11,32 @@ export function token(env = process.env) {
   return Buffer.from(`${access}:${secret}:${bucket}`).toString('base64');
 }
 
-/** POST /api/v0/<path>; returns the response's JSON objects (Kubo streams one per line). */
+/**
+ * POST /api/v0/<path>; returns the response's JSON objects (Kubo streams one per line).
+ * node:https, not fetch: fetch's dispatcher gives up on any response whose headers take more than
+ * 5 minutes, whatever the abort signal says, and a loaded Filebase can take longer than that to
+ * answer a dag/import. Here `timeoutMs` is the only limit.
+ */
 export async function rpc(path, { body, timeoutMs = 60_000 } = {}) {
-  const res = await fetch(`${RPC}/api/v0/${path}`, { method: 'POST', headers: { authorization: `Bearer ${token()}` }, body, signal: AbortSignal.timeout(timeoutMs) });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${path.split('?')[0]}: HTTP ${res.status} ${text.slice(0, 200)}`);
+  const headers = { authorization: `Bearer ${token()}` };
+  let payload;
+  if (body) {
+    const encoded = new Response(body);
+    headers['content-type'] = encoded.headers.get('content-type') ?? 'application/octet-stream';
+    payload = Buffer.from(await encoded.arrayBuffer());
+    headers['content-length'] = payload.length;
+  } else headers['content-length'] = 0;
+  const { status, text } = await new Promise((resolve, reject) => {
+    const req = request(`${RPC}/api/v0/${path}`, { method: 'POST', headers, signal: AbortSignal.timeout(timeoutMs) }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf8') }));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.end(payload);
+  });
+  if (status < 200 || status >= 300) throw new Error(`${path.split('?')[0]}: HTTP ${status} ${text.slice(0, 200)}`);
   return text.split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
 

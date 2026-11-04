@@ -10,6 +10,9 @@ on:
       gateway_deadline_minutes:
         description: Minutes to keep retrying a gateway export before calling the content unavailable (default 20)
         required: false
+      county:
+        description: Transfer only this county's roots on main, e.g. TX/travis (idempotent)
+        required: false
       transfer_all:
         description: Transfer every root on main again (idempotent), not only the ones this push added
         type: boolean
@@ -30,6 +33,8 @@ env:
   ATLAS_GATEWAY_TOKEN: ${{ secrets.ATLAS_GATEWAY_TOKEN }}
   # A transfer from a `car` file indexes the whole CAR (about 2.3 GB of heap for 11M blocks).
   NODE_OPTIONS: --max-old-space-size=12288
+  # Shards imported at once. 32 overloaded the Filebase RPC on Travis (connection resets, HTTP 500).
+  ATLAS_TRANSFER_PARALLEL: ${{ vars.ATLAS_TRANSFER_PARALLEL || '8' }}
   ATLAS_IPNS_KEY: elephant-atlas
   ATLAS_IPNS_ID: k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04
   # Dispatch input, else the repository variable (set it to shorten a test), else 20 minutes.
@@ -62,7 +67,9 @@ jobs:
       # 1-2. Export every root this push published from the public gateway and import it into
       # the elephant-atlas bucket, shard by shard and part by part, then pin the root.
       - id: transfer
-        run: node scripts/transfer-roots.mjs ${{ inputs.transfer_all && '--all' || '' }}
+        env:
+          COUNTY: ${{ inputs.county }}
+        run: node scripts/transfer-roots.mjs ${{ inputs.transfer_all && '--all' || '' }} ${COUNTY:+--county "$COUNTY"}
 
       # 3. A root the gateway cannot serve is not publishable: revert the push. A deploy-key push
       # does trigger workflows, and the revert touches counties/**, so its message carries

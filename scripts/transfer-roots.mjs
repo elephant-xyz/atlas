@@ -146,9 +146,10 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
       lines = await d.rpc(`dag/import?pin-roots=${pinRoots}&stats=true`, { body: form, timeoutMs: 15 * 60_000 });
       break;
     } catch (e) {
-      if (attempt === 3) throw e;
+      // Filebase drops connections and answers 500 under load; back off and try again.
+      if (attempt === 6) throw e;
       d.log(`dag/import attempt ${attempt}: ${e.message}`);
-      await d.sleep(10_000 * attempt);
+      await d.sleep(15_000 * attempt);
     }
   }
   const rootLine = lines.find((l) => l.Root)?.Root;
@@ -335,7 +336,9 @@ export async function transferTables(root, deps = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.cwd();
   const all = process.argv.includes('--all');
-  const targets = rootsToTransfer(pagesAt('HEAD', root), all ? [] : (pagesAt('HEAD~1', root) ?? []));
+  // --county ST/name: every root of that county on HEAD (re-runs one publication after a fix).
+  const only = process.argv.includes('--county') ? process.argv[process.argv.indexOf('--county') + 1] : undefined;
+  const targets = rootsToTransfer(pagesAt('HEAD', root), all || only ? [] : (pagesAt('HEAD~1', root) ?? [])).filter((t) => !only || t.county === only);
   if (!targets.length) console.log('no new roots to transfer');
   for (const t of targets) {
     console.log(`transferring ${t.county} ${t.key} ${t.cid}${t.car ? ` from car file ${t.car}` : ''}`);
