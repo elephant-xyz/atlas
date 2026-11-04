@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "07b0c9182ec457c8017ee5c47298646cba09fc89",
+  "generated_from": "0cb885982e845e1ee3e644945aef2e01e67b05e0",
   "counties": [
     {
       "county": "baker",
@@ -365,6 +365,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeera73aun5e5z6bvkvvrwvo5pzdo2qasqyzjsvp2ki6faqy32m2i6iaq",
           "published_at": "2026-11-03T17:19:48.000Z"
+        }
+      }
+    },
+    {
+      "county": "travis",
+      "state": "TX",
+      "fips": "48453",
+      "groups": {
+        "county": {
+          "cid": "baguqeerab4tomoh53pxzdg4hf2c77ysqjhtd57aprg2i2p275c4mme55pwxq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerac2fzcbmcpepqcjinln7nzobztzv2tag5kim46jgwzrzgfli7o5fa",
+          "published_at": "2026-11-04T18:46:16.000Z"
         }
       }
     }
