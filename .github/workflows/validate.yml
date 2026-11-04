@@ -37,6 +37,13 @@ jobs:
           mkdir -p ~/elephant-cli && cd ~/elephant-cli
           npm init -y >/dev/null
           npm i --no-audit --no-fund "github:elephant-xyz/elephant-cli#${{ steps.cli.outputs.sha }}"
+      # elephant-cli validate indexes the whole CAR with @ipld/car, which runs out of a 12 GB heap
+      # on Node 22 and 24 for an archive of 11M blocks (Travis County) and takes 2.6 GB on Node 26.
+      # The CLI's git install does not build on Node 26, so it is installed above on Node 22 and
+      # run on Node 26.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
       - name: Verify every changed group
         env:
           ELEPHANT_CLI: /home/runner/elephant-cli/node_modules/.bin/elephant-cli
