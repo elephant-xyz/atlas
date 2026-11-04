@@ -336,7 +336,9 @@ export async function transferTables(root, deps = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.cwd();
   const all = process.argv.includes('--all');
-  const targets = rootsToTransfer(pagesAt('HEAD', root), all ? [] : (pagesAt('HEAD~1', root) ?? []));
+  // --county ST/name: every root of that county on HEAD (re-runs one publication after a fix).
+  const only = process.argv.includes('--county') ? process.argv[process.argv.indexOf('--county') + 1] : undefined;
+  const targets = rootsToTransfer(pagesAt('HEAD', root), all || only ? [] : (pagesAt('HEAD~1', root) ?? [])).filter((t) => !only || t.county === only);
   if (!targets.length) console.log('no new roots to transfer');
   for (const t of targets) {
     console.log(`transferring ${t.county} ${t.key} ${t.cid}${t.car ? ` from car file ${t.car}` : ''}`);
