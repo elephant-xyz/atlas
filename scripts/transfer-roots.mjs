@@ -325,7 +325,8 @@ export async function transferTables(root, deps = {}) {
   const tally = { seen: new Set([root]), bytes: bytes.length };
   const names = Object.keys(tables.tables).sort();
   d.log(`tables ${root}: ${names.length} table(s), ${names.reduce((n, t) => n + tables.tables[t].parts.length, 0)} part(s)`);
-  d.log(`imported ${root} (root block): ${await importCar(root, block, root, 1, false, d)}`);
+  // The tables block goes in last: Filebase holds a dag/import open while any block it carries
+  // links to something the bucket lacks, so importing it before its parts never returns.
   const jobs = names.flatMap((name) => tables.tables[name].parts.map((part, i) => () => transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, part.cid.toString(), tally, d)));
   await pool(jobs, d.parallel);
   d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
@@ -343,6 +344,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const t of targets) {
     console.log(`transferring ${t.county} ${t.key} ${t.cid}${t.car ? ` from car file ${t.car}` : ''}`);
     try {
+      // A root an earlier run already pinned is done; skip it (a re-run after a later root failed).
+      const [ls] = await filebaseRpc(`pin/ls?arg=${t.cid}&type=recursive`).catch(() => []);
+      if (ls?.Keys?.[t.cid]) {
+        console.log(`already pinned ${t.cid}; skipped`);
+        continue;
+      }
       if (t.kind === 'tables') await transferTables(t.cid);
       else if (t.car) await transferArchiveFromCar(t.cid, t.car);
       else await transferArchive(t.cid);
