@@ -22,7 +22,8 @@
           "properties": {
             "cid": { "$ref": "#/definitions/cid", "description": "CountyIndex root of the archive" },
             "schema": { "$ref": "#/definitions/cid", "description": "CID of the data-group schema from the lexicon manifest that the archive's properties carry" },
-            "tables": { "$ref": "#/definitions/cid", "description": "CountyTables root written by export-tables for this archive" }
+            "tables": { "$ref": "#/definitions/cid", "description": "CountyTables root written by export-tables for this archive" },
+            "car": { "$ref": "#/definitions/cid", "description": "optional: the same archive as one CARv1 file (rooted at cid), added to IPFS as a file; validate and publish download it in one request instead of exporting the DAG block by block. Not part of index.json" }
           }
         }
       }

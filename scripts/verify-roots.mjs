@@ -19,6 +19,10 @@
 //      cid. Gateways walk a DAG block by block, so one stream per archive is the bottleneck for
 //      archives of millions of small blocks; parallel shard requests add up. The CLI then checks
 //      every block of the assembled CAR exactly as before.
+//      A group with `car` (the same archive as one CARv1 file, by its own CID) is downloaded as that
+//      file in one request instead: its roots must include the cid and the root block must hash to
+//      it, and the CLI checks every block and that the DAG is complete, so the file is trusted no
+//      more than a gateway export.
 // Gateways: first that answers wins, a 429 puts a gateway on cooldown, the gateway that served
 // the CAR is preferred afterwards, one deadline (ATLAS_GATEWAY_DEADLINE_MINUTES) per group.
 // The CAR is deleted after the checks. The CLI comes from ELEPHANT_CLI (default: elephant-cli).
@@ -68,10 +72,14 @@ function require_(cond, what, msg) {
   if (!cond) throw new Error(`${what}: ${msg}`);
 }
 
-/** Stream `<cid>?format=car` to `file` from a gateway whose CAR actually carries the hashed root; loop until one does or the deadline passes. */
-async function downloadCar(gw, cid, file, d) {
+/**
+ * Stream a CAR to `file` from a gateway whose CAR actually carries the hashed root `cid`; loop until
+ * one does or the deadline passes. By default the CAR is the gateway's export `<cid>?format=car`;
+ * with `path` it is a file the gateway serves as-is (a page's `car`, a single-file copy).
+ */
+async function downloadCar(gw, cid, file, d, path) {
   for (;;) {
-    const { res, url } = await gw.get(`${cid}?format=car`, { headers: { accept: 'application/vnd.ipld.car' }, requestMs: 60 * 60_000 });
+    const { res, url } = await gw.get(path ?? `${cid}?format=car`, { headers: path ? {} : { accept: 'application/vnd.ipld.car' }, requestMs: 60 * 60_000 });
     await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
     const size = statSync(file).size;
     let problem;
@@ -149,8 +157,13 @@ async function downloadByShard(gw, cid, index, file, d) {
   return { url: `${d.gateways[0]}/ipfs/${cid} (root block + ${shards.length} shard CARs, ${Math.min(d.parallel, shards.length)} at a time)`, size: statSync(file).size };
 }
 
-/** Shard by shard when the root is a CountyIndex with several shards and parallel fetches are enabled; else the whole CAR by root. */
-async function downloadArchive(gw, cid, file, d) {
+/**
+ * The page's `car` file when it has one (one request; the CLI still hashes every block and checks
+ * the DAG is complete), else shard by shard when the root is a CountyIndex with several shards and
+ * parallel fetches are enabled, else the whole CAR by root.
+ */
+async function downloadArchive(gw, cid, file, d, car) {
+  if (car) return downloadCar(gw, cid, file, d, car);
   if (d.parallel > 1) {
     const index = await rootIndex(cid, d);
     if (index?.node?.label === 'CountyIndex' && Array.isArray(index.node.shards) && index.node.shards.length > 1) return downloadByShard(gw, cid, index, file, d);
@@ -172,7 +185,7 @@ async function fetchBlock(gw, cid) {
   return { url, bytes: await verified(url, new Uint8Array(await res.arrayBuffer()), cid) };
 }
 
-export async function verifyGroup({ cid, schema, tables }, deps = {}) {
+export async function verifyGroup({ cid, schema, tables, car }, deps = {}) {
   const d = { fetch: withGatewayToken(), gateways: gatewayList(), deadlineMs: DEADLINE_MS, validateCar: (file) => validateCar(file, CSV), csv: CSV, log: console.log, sleep: undefined, now: undefined, parallel: PARALLEL, ...deps };
   const gw = gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: d.deadlineMs, sleep: d.sleep, now: d.now, log: d.log });
   d.shardClient ??= () => gatewayClient({ gateways: d.gateways, fetch: d.fetch, deadlineMs: d.deadlineMs, sleep: d.sleep, now: d.now, log: d.log });
@@ -181,7 +194,7 @@ export async function verifyGroup({ cid, schema, tables }, deps = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'atlas-verify-'));
   const file = join(dir, `${cid}.car`);
   try {
-    const { url, size } = await downloadArchive(gw, cid, file, d);
+    const { url, size } = await downloadArchive(gw, cid, file, d, car);
     d.log(`downloaded ${url} (${size} bytes, root block verified)`);
     const { ok, report } = d.validateCar(file);
     d.log(report);
@@ -257,7 +270,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else console.log(`gateways, in order: ${gatewayList().join(', ')}`);
   let failed = 0;
   for (const t of targets) {
-    console.log(`verifying ${t.path} group ${t.key} cid ${t.cid} schema ${t.schema} tables ${t.tables}`);
+    console.log(`verifying ${t.path} group ${t.key} cid ${t.cid} schema ${t.schema} tables ${t.tables}${t.car ? ` car ${t.car}` : ''}`);
     try {
       await verifyGroup(t);
       console.log(`ok ${t.path} group ${t.key}`);

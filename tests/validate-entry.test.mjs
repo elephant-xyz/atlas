@@ -92,3 +92,13 @@ test('newArchives picks groups whose cid no base group held', () => {
   assert.deepEqual(newArchives(superseded, base).map((t) => t.cid), [CID_C]);
   assert.deepEqual(newArchives(base, null).map((t) => t.cid), [CID_A]);
 });
+
+test('an optional car CID is accepted, kept out of index.json, and a change to it re-verifies the group', () => {
+  const lee = page({ groups: { county: group({ car: CID_D }) } });
+  assert.deepEqual(check(withIndex({ 'counties/FL/lee.json': lee }, lee)), []);
+  assert.deepEqual(Object.keys(buildEntries([{ path: 'counties/FL/lee.json', page: lee }], stamps())[0].groups.county).sort(), ['cid', 'published_at', 'schema', 'tables']);
+  const bad = page({ groups: { county: group({ car: 'nope' }) } });
+  assert.ok(check(withIndex({ 'counties/FL/lee.json': bad }, bad)).some((p) => p.includes('car')));
+  const before = [{ path: 'counties/FL/lee.json', page: page() }];
+  assert.equal(changedGroups([{ path: 'counties/FL/lee.json', page: lee }], before).length, 1);
+});

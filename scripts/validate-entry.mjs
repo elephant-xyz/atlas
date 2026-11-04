@@ -29,7 +29,7 @@ export function validateRegistry(root, basePages) {
     }
     if (path !== `counties/${page.state}/${page.county}.json`) say(`path must be counties/${page.state}/${page.county}.json`);
     for (const [key, g] of groupsOf(page)) {
-      for (const field of ['cid', 'schema', 'tables']) {
+      for (const field of ['cid', 'schema', 'tables', ...(g.car === undefined ? [] : ['car'])]) {
         try {
           CID.parse(g[field]);
         } catch {

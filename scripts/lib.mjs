@@ -78,14 +78,14 @@ export function rootsOf(pages) {
   return roots;
 }
 
-/** Groups whose (cid, schema, tables) differ from the same group on the base pages: [{ path, key, ...group }]. */
+/** Groups whose (cid, schema, tables, car) differ from the same group on the base pages: [{ path, key, ...group }]. */
 export function changedGroups(pages, basePages) {
   const base = new Map((basePages ?? []).map(({ path, page }) => [path, page]));
   const out = [];
   for (const { path, page } of pages) {
     for (const [key, g] of groupsOf(page)) {
       const before = base.get(path)?.groups?.[key];
-      if (!before || before.cid !== g.cid || before.schema !== g.schema || before.tables !== g.tables) out.push({ path, key, ...g });
+      if (!before || before.cid !== g.cid || before.schema !== g.schema || before.tables !== g.tables || before.car !== g.car) out.push({ path, key, ...g });
     }
   }
   return out;

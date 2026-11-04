@@ -8,7 +8,7 @@ import { CarReader } from '@ipld/car';
 import * as raw from 'multiformats/codecs/raw';
 import { poll, token } from '../scripts/filebase.mjs';
 import { DEFAULT_GATEWAYS, fetchFromAny, gatewayList } from '../scripts/gateways.mjs';
-import { TransferFailed, rootsToTransfer, transferArchive, transferTables } from '../scripts/transfer-roots.mjs';
+import { TransferFailed, rootsToTransfer, transferArchive, transferArchiveFromCar, transferTables } from '../scripts/transfer-roots.mjs';
 import { validateCar } from '../scripts/verify-roots.mjs';
 import { CID_A, CID_B, CID_C, block, car, group, page } from './helpers.mjs';
 
@@ -192,4 +192,49 @@ test('validateCar is clean only on exit 0 and strips browserslist noise from the
   assert.deepEqual(validateCar('x.car', 'e.csv', 'cli', run(0, 'Browserslist: data is old\n  lexicon errors: 0\n')), { ok: true, report: '  lexicon errors: 0' });
   assert.deepEqual(validateCar('x.car', 'e.csv', 'cli', run(1, '  lexicon errors: 25\n')), { ok: false, report: '  lexicon errors: 25' });
   assert.equal(validateCar('x.car', 'e.csv', 'cli', () => ({ status: null, error: new Error('spawn cli ENOENT') })).ok, false);
+});
+
+test('a group with car carries it to the transfer', () => {
+  const head = [at(LEE, page({ groups: { county: group({ car: CID_C }) } }))];
+  assert.deepEqual(rootsToTransfer(head, []).map((r) => r.car), [CID_C, undefined]);
+});
+
+test('transferArchiveFromCar downloads the car file once, imports post-order pieces, then pins the root', async () => {
+  const f = await fixture();
+  const leafA = await block({ label: 'Seed', relationships: {}, n: 1 });
+  const leafB = await block(new TextEncoder().encode('leaf'), raw);
+  const property = await block({ label: 'Seed', relationships: { a: leafA.cid, b: leafB.cid } });
+  const shard0 = await block({ properties: [{ property_cid: property.cid, data_groups: {} }] });
+  const shard1 = await block({ properties: [{ property_cid: leafA.cid, data_groups: {} }] });
+  const index = await block({ label: 'CountyIndex', properties: 2, shards: [shard0.cid, shard1.cid], version: 1 });
+  const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+  const file = await car(index.cid, [index, shard0, property, leafA, leafB, shard1]);
+  const fetched = [];
+  const order = [];
+  const rpc = async (path, { body } = {}) => {
+    if (path.startsWith('pin/ls')) return [{ Keys: { [index.cid.toString()]: { Type: 'recursive' } } }];
+    const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
+    let n = 0;
+    for await (const b of reader.blocks()) (n++, order.push(b.cid.toString()));
+    const [root] = await reader.getRoots();
+    f.calls.push(`${path.split('&')[0]} root=${root} blocks=${n}`);
+    return [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }];
+  };
+  const fetch = async (url) => (fetched.push(url), url === `${f.G}/ipfs/${CAR}` ? new Response(file) : new Response('no', { status: 404 }));
+  await transferArchiveFromCar(index.cid.toString(), CAR, { ...f.deps, fetch, rpc, parallel: 1, pieceBytes: 1 });
+  assert.deepEqual(fetched, [`${f.G}/ipfs/${CAR}`], 'one request');
+  const at_ = (c) => order.indexOf(c.cid.toString());
+  assert.ok(at_(leafA) < at_(property) && at_(leafB) < at_(property) && at_(property) < at_(shard0), 'every block is imported after the blocks it links to');
+  assert.equal(order.filter((c) => c === leafA.cid.toString()).length, 1, 'a block two shards share is imported once');
+  assert.equal(f.calls.at(-1), `dag/import?pin-roots=true root=${index.cid} blocks=1`);
+  assert.equal(f.calls.length, 6, f.calls.join('\n'));
+  assert.deepEqual(readdirSync(f.tmp), [], 'temp CAR deleted');
+});
+
+test('a car file that lacks a block is a TransferFailed', async () => {
+  const f = await fixture();
+  const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+  const file = await car(f.index.cid, [f.index, f.shard]);
+  const fetch = async (url) => (url.endsWith(CAR) ? new Response(file) : new Response('no', { status: 404 }));
+  await assert.rejects(transferArchiveFromCar(f.index.cid.toString(), CAR, { ...f.deps, fetch }), (e) => e instanceof TransferFailed && /missing block/.test(e.reason));
 });
