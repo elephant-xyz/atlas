@@ -30,10 +30,11 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { CarIndexedReader, CarReader, CarWriter } from '@ipld/car';
+import { CarReader, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
+import { openCar } from './car-file.mjs';
 import { rpc as filebaseRpc } from './filebase.mjs';
 import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
 import { groupsOf, pagesAt, rootsOf } from './lib.mjs';
@@ -259,10 +260,11 @@ async function transferLocalSubtree(root, reader, top, sent, tally, d) {
     const entry = stack.pop();
     const key = entry.cid.toString();
     if (!entry.expanded) {
-      if (sent.has(key)) continue;
-      sent.add(key);
-      const block = await reader.get(entry.cid);
-      if (!block) throw new TransferFailed(root, `the car file is missing block ${key}`);
+      const i = reader.slotOf(key);
+      if (i === undefined) throw new TransferFailed(root, `the car file is missing block ${key}`);
+      if (sent[i]) continue;
+      sent[i] = 1;
+      const block = await reader.get(key);
       entry.block = block;
       entry.expanded = true;
       stack.push(entry);
@@ -273,7 +275,7 @@ async function transferLocalSubtree(root, reader, top, sent, tally, d) {
     }
     piece.push(entry.block);
     size += entry.block.bytes.length;
-    tally.seen.add(key);
+    tally.blocks++;
     tally.bytes += entry.block.bytes.length;
     if (size >= d.pieceBytes) await flush();
   }
@@ -287,7 +289,7 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
   const file = join(d.tmp, `${root}.car`);
   const res = await gatewayGet(root, car, '*/*', d);
   await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
-  const reader = await CarIndexedReader.fromFile(file);
+  const reader = await openCar(file);
   try {
     const roots = (await reader.getRoots()).map(String);
     if (!roots.includes(root)) throw new TransferFailed(root, `car file ${car} has roots [${roots.join(', ')}]`);
@@ -298,13 +300,15 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
     const index = decode(rootBlock.bytes);
     if (index.label !== 'CountyIndex' || !Array.isArray(index.shards)) throw new TransferFailed(root, 'not a CountyIndex block');
     const block = await singleBlockCar(root, rootBlock.bytes);
-    const tally = { seen: new Set([root]), bytes: rootBlock.bytes.length };
-    const sent = new Set([root]);
+    // One flag per distinct block (a Set of 11M CID strings would double the index's memory).
+    const tally = { blocks: 1, bytes: rootBlock.bytes.length };
+    const sent = new Uint8Array(reader.size);
+    sent[reader.slotOf(root)] = 1;
     d.log(`archive ${root} from car file ${car}: ${index.shards.length} shard(s), ${index.properties} properties, ${d.parallel} shard(s) at a time, pieces up to ${d.pieceBytes} bytes`);
     await pool(index.shards.map((s) => () => transferLocalSubtree(root, reader, CID.asCID(s) ?? CID.parse(String(s)), sent, tally, d)), d.parallel);
     d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
     await requirePinned(root, d);
-    d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);
+    d.log(`pinned ${root}: ${tally.blocks} distinct blocks, ${tally.bytes} bytes copied`);
   } finally {
     await reader.close();
     await unlink(file).catch(() => {});
