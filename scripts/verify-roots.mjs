@@ -34,10 +34,11 @@ import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { CarBlockIterator, CarIndexedReader, CarWriter } from '@ipld/car';
+import { CarBlockIterator, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
+import { openCar } from './car-file.mjs';
 import { gatewayClient, gatewayList, withGatewayToken } from './gateways.mjs';
 import { changedGroups, pagesAt, readPages } from './lib.mjs';
 
@@ -86,7 +87,7 @@ async function downloadCar(gw, cid, file, d, path) {
     if (!size) problem = 'empty body';
     else {
       try {
-        const reader = await CarIndexedReader.fromFile(file);
+        const reader = await openCar(file);
         try {
           const roots = (await reader.getRoots()).map(String);
           const block = await reader.get(CID.parse(cid));
@@ -201,7 +202,7 @@ export async function verifyGroup({ cid, schema, tables, car }, deps = {}) {
     require_(ok, `archive ${cid}`, `elephant-cli validate failed; see ${d.csv}`);
 
     // 2. Shape and schema claim, from the local CAR only.
-    const reader = await CarIndexedReader.fromFile(file);
+    const reader = await openCar(file);
     try {
       const roots = (await reader.getRoots()).map(String);
       require_(roots.includes(cid), `archive ${cid}`, `CAR roots are [${roots.join(', ')}]`);
