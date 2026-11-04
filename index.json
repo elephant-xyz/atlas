@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "7014baa52bebe0b1f885567015b9947f0656e7ac",
+  "generated_from": "07b0c9182ec457c8017ee5c47298646cba09fc89",
   "counties": [
     {
       "county": "baker",
@@ -301,6 +301,25 @@
           "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
           "tables": "baguqeera7lzufhhbcbhsvme6fe2puaahx43oycy3ywxjco7qghoehiu6zpfa",
           "published_at": "2026-11-03T18:33:36.000Z"
+        }
+      }
+    },
+    {
+      "county": "st-johns",
+      "state": "FL",
+      "fips": "12109",
+      "groups": {
+        "county": {
+          "cid": "baguqeerahqwklxvhczmurzis4bklntnwdikgbb3tfjsabrhv4gog4dauuc7q",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerapdhefw2tp757dlsoo67kuso3igcgplxwpm7xnq4m6jaj5dbo3rja",
+          "published_at": "2026-11-04T01:41:16.000Z"
+        },
+        "property_management": {
+          "cid": "baguqeerairfcc45nho7ndjcv66efz4rqt4l4s5vbfk64yuc5aw4vody65maq",
+          "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
+          "tables": "baguqeerags2csagi6gwq572gfndqgf6i5avlikzqvoxk7n5un3ex3g5mlgqa",
+          "published_at": "2026-11-04T01:41:16.000Z"
         }
       }
     },
