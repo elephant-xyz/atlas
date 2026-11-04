@@ -48,6 +48,8 @@ jobs:
           # ELEPHANT_IPFS_GATEWAYS would replace those defaults with a gateway that refuses it.
           ATLAS_GATEWAYS: ${{ secrets.ATLAS_GATEWAYS }}
           ATLAS_GATEWAY_TOKEN: ${{ secrets.ATLAS_GATEWAY_TOKEN }}
+          # Same as publish.yml: the per-request retry window, from the repository variable.
+          ATLAS_GATEWAY_DEADLINE_MINUTES: ${{ vars.ATLAS_GATEWAY_DEADLINE_MINUTES || '20' }}
         run: npm run verify
       - name: Upload validation errors
         if: failure()
