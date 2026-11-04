@@ -266,6 +266,37 @@ test('shards in parallel never import a piece linking a block that is only queue
   assert.ok(stored.has(index.cid.toString()) && stored.has(shared.cid.toString()));
 });
 
+test('a re-run skips shards whose root the bucket already holds and gives the pinned import the pin timeout', async () => {
+  const f = await fixture();
+  const a = await block({ label: 'Seed', relationships: {}, n: 7 });
+  const b = await block({ label: 'Seed', relationships: {}, n: 8 });
+  const shard0 = await block({ properties: [{ property_cid: a.cid, data_groups: {} }] });
+  const shard1 = await block({ properties: [{ property_cid: b.cid, data_groups: {} }] });
+  const index = await block({ label: 'CountyIndex', properties: 2, shards: [shard0.cid, shard1.cid], version: 1 });
+  const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+  const file = await car(index.cid, [index, shard0, a, shard1, b]);
+  const imported = [];
+  const timeouts = [];
+  const rpc = async (path, { body, timeoutMs } = {}) => {
+    if (path.startsWith('pin/ls')) return [{ Keys: { [index.cid.toString()]: { Type: 'recursive' } } }];
+    if (path.startsWith('block/get')) {
+      if (path.includes(shard0.cid.toString())) return [{}];
+      throw new Error('The operation was aborted');
+    }
+    const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
+    let n = 0;
+    for await (const blk of reader.blocks()) (n++, imported.push(blk.cid.toString()));
+    const [root] = await reader.getRoots();
+    if (path.includes('pin-roots=true')) timeouts.push(timeoutMs);
+    return [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }];
+  };
+  const fetch = async (url) => (url === `${f.G}/ipfs/${CAR}` ? new Response(file) : new Response('no', { status: 404 }));
+  await transferArchiveFromCar(index.cid.toString(), CAR, { ...f.deps, fetch, rpc, parallel: 2, pieceBytes: 1, pinMs: 123 });
+  assert.ok(!imported.includes(shard0.cid.toString()) && !imported.includes(a.cid.toString()), 'shard 0 skipped');
+  assert.ok(imported.includes(shard1.cid.toString()) && imported.includes(b.cid.toString()), 'shard 1 sent');
+  assert.deepEqual(timeouts, [123]);
+});
+
 test('a car file that lacks a block is a TransferFailed', async () => {
   const f = await fixture();
   const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';

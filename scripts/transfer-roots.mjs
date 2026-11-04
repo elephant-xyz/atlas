@@ -70,6 +70,9 @@ const defaults = () => ({
   requestMs: Number(process.env.ATLAS_REQUEST_MINUTES ?? 60) * 60_000,
   parallel: Number(process.env.ATLAS_TRANSFER_PARALLEL ?? 32),
   pieceBytes: Number(process.env.ATLAS_PIECE_MB ?? 8) * 1024 * 1024,
+  // A pinned import makes Filebase pin the whole DAG before it answers: over 30 minutes for
+  // Travis's 11.3M blocks.
+  pinMs: Number(process.env.ATLAS_PIN_MINUTES ?? 180) * 60_000,
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   now: Date.now,
   log: console.log,
@@ -143,7 +146,7 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
   let lines;
   for (let attempt = 1; ; attempt++) {
     try {
-      lines = await d.rpc(`dag/import?pin-roots=${pinRoots}&stats=true`, { body: form, timeoutMs: 15 * 60_000 });
+      lines = await d.rpc(`dag/import?pin-roots=${pinRoots}&stats=true`, { body: form, timeoutMs: pinRoots ? d.pinMs : 15 * 60_000 });
       break;
     } catch (e) {
       // Filebase drops connections and answers 500 under load; back off and try again.
@@ -162,6 +165,16 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
   const stats = lines.find((l) => l.Stats)?.Stats;
   if (!stats || stats.BlockCount !== count) throw new TransferFailed(root, `dag/import of ${expect} stored ${stats?.BlockCount ?? 'no'} blocks, sent ${count}`);
   return `${stats.BlockCount} blocks, ${stats.BlockBytesCount} bytes`;
+}
+
+/** Whether the bucket holds `cid`: block/get answers at once for a stored block and hangs for a missing one. */
+async function hasBlock(cid, d) {
+  try {
+    await d.rpc(`block/get?arg=${cid}`, { timeoutMs: d.presenceMs ?? 30_000 });
+    return true;
+  } catch (e) {
+    return e instanceof SyntaxError; // the block came back but is not JSON lines (rpc parses them)
+  }
 }
 
 /** Run `jobs` (functions returning promises), `n` at a time; the first rejection rejects. */
@@ -319,7 +332,14 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
     const sent = new Uint8Array(reader.size);
     sent[reader.slotOf(root)] = 1;
     d.log(`archive ${root} from car file ${car}: ${index.shards.length} shard(s), ${index.properties} properties, ${d.parallel} shard(s) at a time, pieces up to ${d.pieceBytes} bytes`);
-    await pool(index.shards.map((s) => () => transferLocalSubtree(root, reader, CID.asCID(s) ?? CID.parse(String(s)), sent, tally, d)), d.parallel);
+    // A shard root Filebase holds means its whole subtree is there: an import that links a block
+    // the bucket lacks never returns, so every block was stored only after everything it links to.
+    // Checked 4 at a time before any upload (many at once time out; a miss only re-sends the shard).
+    const shards = index.shards.map((s) => CID.asCID(s) ?? CID.parse(String(s)));
+    const held = new Set();
+    await pool(shards.map((s) => async () => (await hasBlock(s.toString(), d)) && held.add(s.toString())), 4);
+    d.log(`${held.size}/${shards.length} shard(s) already in the bucket; sending the rest`);
+    await pool(shards.filter((s) => !held.has(s.toString())).map((s) => () => transferLocalSubtree(root, reader, s, sent, tally, d)), d.parallel);
     d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
     await requirePinned(root, d);
     d.log(`pinned ${root}: ${tally.blocks} distinct blocks, ${tally.bytes} bytes copied`);
