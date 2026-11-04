@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "10bed9c6e018a504247b3d9ad4c1f957e86a4691",
+  "generated_from": "7014baa52bebe0b1f885567015b9947f0656e7ac",
   "counties": [
     {
       "county": "baker",
@@ -179,6 +179,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerakcljgpvu2w5bdmsfhee65xn6evidmdvjimtvrdsys3yc5fpasrsa",
           "published_at": "2026-11-03T16:40:53.000Z"
+        }
+      }
+    },
+    {
+      "county": "manatee",
+      "state": "FL",
+      "fips": "12081",
+      "groups": {
+        "county": {
+          "cid": "baguqeerad5zhvuozdveekvrv7lj45a3hbxkfjhde745fzavpph3hdzine7pa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeratjdtwbedpm7h5sgncrpeu24xwqsdqyafrwvzujkkuj6oikavqata",
+          "published_at": "2026-11-04T01:31:43.000Z"
         }
       }
     },
