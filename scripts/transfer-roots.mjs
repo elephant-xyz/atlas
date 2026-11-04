@@ -146,9 +146,10 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
       lines = await d.rpc(`dag/import?pin-roots=${pinRoots}&stats=true`, { body: form, timeoutMs: 15 * 60_000 });
       break;
     } catch (e) {
-      if (attempt === 3) throw e;
+      // Filebase drops connections and answers 500 under load; back off and try again.
+      if (attempt === 6) throw e;
       d.log(`dag/import attempt ${attempt}: ${e.message}`);
-      await d.sleep(10_000 * attempt);
+      await d.sleep(15_000 * attempt);
     }
   }
   const rootLine = lines.find((l) => l.Root)?.Root;
