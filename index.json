@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "c0e88bfdb4a34b7cfc70558b8c3606d18e26188c",
+  "generated_from": "964d9819769b8ba3d39b44080506190d95afa41c",
   "counties": [
     {
       "county": "baker",
@@ -18,6 +18,19 @@
           "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
           "tables": "baguqeeraoasyso5uyr6qtpmtwt7chcoydocyhnar7jmss4q3z2bm3sqdgfja",
           "published_at": "2026-11-03T17:41:08.000Z"
+        }
+      }
+    },
+    {
+      "county": "brevard",
+      "state": "FL",
+      "fips": "12009",
+      "groups": {
+        "county": {
+          "cid": "baguqeerarmragaewfc6idg6njhvqo7s7wrmq5nk3d5qdshla4pnrqt7mkyiq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerarih2zautgyrmohgygeday2k2z7inufyojr7zjhjqzoho3jyuemtq",
+          "published_at": "2026-11-04T01:07:56.000Z"
         }
       }
     },
@@ -147,6 +160,32 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerakcljgpvu2w5bdmsfhee65xn6evidmdvjimtvrdsys3yc5fpasrsa",
           "published_at": "2026-11-03T16:40:53.000Z"
+        }
+      }
+    },
+    {
+      "county": "martin",
+      "state": "FL",
+      "fips": "12085",
+      "groups": {
+        "county": {
+          "cid": "baguqeera5shesgl2ffdhikaj3y6xch725tgbgarlh6erebzidm72fjin4i2a",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerazsxigdfzuause3geqjzyh642ahls7suniyxu44x4sfnrss4dbbda",
+          "published_at": "2026-11-03T23:55:49.000Z"
+        }
+      }
+    },
+    {
+      "county": "nassau",
+      "state": "FL",
+      "fips": "12089",
+      "groups": {
+        "county": {
+          "cid": "baguqeera6m7g6afz3tdbwak2ei33d7rbep6tmyvizepuztl5ljolyqeahzva",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerai3piujidns346b7klwfbydc2fhjbfyvkvcccm3hoqjswcib2bh7q",
+          "published_at": "2026-11-04T01:12:03.000Z"
         }
       }
     },
