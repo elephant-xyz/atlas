@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "c0e88bfdb4a34b7cfc70558b8c3606d18e26188c",
+  "generated_from": "d0f11de8b8c4ac35a88d3ffb123fc99dafd732e1",
   "counties": [
     {
       "county": "baker",
@@ -147,6 +147,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerakcljgpvu2w5bdmsfhee65xn6evidmdvjimtvrdsys3yc5fpasrsa",
           "published_at": "2026-11-03T16:40:53.000Z"
+        }
+      }
+    },
+    {
+      "county": "martin",
+      "state": "FL",
+      "fips": "12085",
+      "groups": {
+        "county": {
+          "cid": "baguqeera5shesgl2ffdhikaj3y6xch725tgbgarlh6erebzidm72fjin4i2a",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerazsxigdfzuause3geqjzyh642ahls7suniyxu44x4sfnrss4dbbda",
+          "published_at": "2026-11-03T23:55:49.000Z"
         }
       }
     },
