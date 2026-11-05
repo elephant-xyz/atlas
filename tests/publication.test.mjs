@@ -244,7 +244,9 @@ test('shards in parallel never import a piece linking a block that is only queue
   const file = await car(index.cid, [index, shared, ...shards.flatMap((s) => [s.own, s.shard])]);
   const stored = new Set();
   const hung = [];
+  const paths = [];
   const rpc = async (path, { body } = {}) => {
+    paths.push(path);
     if (path.startsWith('pin/ls')) return [{ Keys: { [index.cid.toString()]: { Type: 'recursive' } } }];
     const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
     const here = [];
@@ -263,6 +265,7 @@ test('shards in parallel never import a piece linking a block that is only queue
   const fetch = async (url) => (url === `${f.G}/ipfs/${CAR}` ? new Response(file) : new Response('no', { status: 404 }));
   await transferArchiveFromCar(index.cid.toString(), CAR, { ...f.deps, fetch, rpc, parallel: 4, pieceBytes: 1, sleep: async () => {} });
   assert.deepEqual(hung, [], 'no import linked a block the bucket lacked');
+  assert.ok(!paths.some((p) => p.startsWith('block/get')), 'no block/get presence check unless ATLAS_SKIP_STORED_SHARDS=1');
   assert.ok(stored.has(index.cid.toString()) && stored.has(shared.cid.toString()));
 });
 
@@ -291,7 +294,7 @@ test('a re-run skips shards whose root the bucket already holds and gives the pi
     return [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }];
   };
   const fetch = async (url) => (url === `${f.G}/ipfs/${CAR}` ? new Response(file) : new Response('no', { status: 404 }));
-  await transferArchiveFromCar(index.cid.toString(), CAR, { ...f.deps, fetch, rpc, parallel: 2, pieceBytes: 1, pinMs: 123 });
+  await transferArchiveFromCar(index.cid.toString(), CAR, { ...f.deps, fetch, rpc, parallel: 2, pieceBytes: 1, pinMs: 123, skipStored: true });
   assert.ok(!imported.includes(shard0.cid.toString()) && !imported.includes(a.cid.toString()), 'shard 0 skipped');
   assert.ok(imported.includes(shard1.cid.toString()) && imported.includes(b.cid.toString()), 'shard 1 sent');
   assert.deepEqual(timeouts, [123]);

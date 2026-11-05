@@ -73,6 +73,7 @@ const defaults = () => ({
   // A pinned import makes Filebase pin the whole DAG before it answers: over 30 minutes for
   // Travis's 11.3M blocks.
   pinMs: Number(process.env.ATLAS_PIN_MINUTES ?? 180) * 60_000,
+  skipStored: process.env.ATLAS_SKIP_STORED_SHARDS === '1',
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   now: Date.now,
   log: console.log,
@@ -167,7 +168,7 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
   return `${stats.BlockCount} blocks, ${stats.BlockBytesCount} bytes`;
 }
 
-/** Whether the bucket holds `cid`: block/get answers at once for a stored block and hangs for a missing one. */
+/** Whether Filebase can serve `cid` at once (not only from this bucket: block/get also finds network blocks). */
 async function hasBlock(cid, d) {
   try {
     await d.rpc(`block/get?arg=${cid}`, { timeoutMs: d.presenceMs ?? 30_000 });
@@ -336,8 +337,10 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
     // the bucket lacks never returns, so every block was stored only after everything it links to.
     // Checked 4 at a time before any upload (many at once time out; a miss only re-sends the shard).
     const shards = index.shards.map((s) => CID.asCID(s) ?? CID.parse(String(s)));
+    // Off unless ATLAS_SKIP_STORED_SHARDS=1: block/get also answers for blocks Filebase finds on the
+    // IPFS network, so on an empty bucket it reported all 48 Travis permit shards stored.
     const held = new Set();
-    await pool(shards.map((s) => async () => (await hasBlock(s.toString(), d)) && held.add(s.toString())), 4);
+    if (d.skipStored) await pool(shards.map((s) => async () => (await hasBlock(s.toString(), d)) && held.add(s.toString())), 4);
     d.log(`${held.size}/${shards.length} shard(s) already in the bucket; sending the rest`);
     await pool(shards.filter((s) => !held.has(s.toString())).map((s) => () => transferLocalSubtree(root, reader, s, sent, tally, d)), d.parallel);
     d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
