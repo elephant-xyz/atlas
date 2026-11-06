@@ -1,0 +1,13 @@
+{
+  "county": "rock-island",
+  "state": "IL",
+  "fips": "17161",
+  "groups": {
+    "county": {
+      "cid": "baguqeerauvtt4lzqtkhmjrtcbbfz47ocfvq5xkx4bhhkaqhdq4wdbirmopza",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerag6mmb4uddjeto3cdo25q7l7aksd6hjpm52ll6v5t46vphkiyzn5a",
+      "car": "bafybeig3nslficpelqpmbeqs2zdybadd2faw6ukodwp5krjrzqce2hmnwa"
+    }
+  }
+}
