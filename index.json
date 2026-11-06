@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "0cb885982e845e1ee3e644945aef2e01e67b05e0",
+  "generated_from": "37c60f0dd8a5192c6132fe3a88599f894ea609bf",
   "counties": [
     {
       "county": "baker",
@@ -365,6 +365,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeera73aun5e5z6bvkvvrwvo5pzdo2qasqyzjsvp2ki6faqy32m2i6iaq",
           "published_at": "2026-11-03T17:19:48.000Z"
+        }
+      }
+    },
+    {
+      "county": "rock-island",
+      "state": "IL",
+      "fips": "17161",
+      "groups": {
+        "county": {
+          "cid": "baguqeerauvtt4lzqtkhmjrtcbbfz47ocfvq5xkx4bhhkaqhdq4wdbirmopza",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerag6mmb4uddjeto3cdo25q7l7aksd6hjpm52ll6v5t46vphkiyzn5a",
+          "published_at": "2026-11-06T20:26:50.000Z"
         }
       }
     },
