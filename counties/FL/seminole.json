@@ -1,0 +1,12 @@
+{
+  "county": "seminole",
+  "state": "FL",
+  "fips": "12117",
+  "groups": {
+    "county": {
+      "cid": "baguqeerayo3ynqqsle6cqzruevlzpbjig5v24nr5jrqpapmurmej3l3rxreq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerakcqkdfralmwxrhgdfedsgbadcq7yb5fqaysmpm6gxncacwyta64q"
+    }
+  }
+}
