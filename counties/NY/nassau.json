@@ -1,0 +1,13 @@
+{
+  "county": "nassau",
+  "state": "NY",
+  "fips": "36059",
+  "groups": {
+    "county": {
+      "cid": "baguqeeramzkynqbz5kjf7qq6vcd6zohagcegk44lwpl7drcqrtikpcvry5na",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraj3saodwm7jk2bthn5eazb4ygd4eksiic3ki7txhpxvm2flwmjfrq",
+      "car": "bafybeichiwe72mltw5qrisazq3ho2mduo3zh5bskf7no7svfs7gfem7uni"
+    }
+  }
+}
