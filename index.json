@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "4d982d71bb1de930ca5c92fe962f6bc79c155153",
+  "generated_from": "640f001ea3aec2c7c3ea41c1d631c9c1e7303dea",
   "counties": [
     {
       "county": "baker",
@@ -404,6 +404,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerac2fzcbmcpepqcjinln7nzobztzv2tag5kim46jgwzrzgfli7o5fa",
           "published_at": "2026-11-04T18:46:16.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerah3asyaq3ditrj46rjcmibukd7ktxeqksqdylhpqtwqlgo2rjsmpq",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeraaixjsbyifs5gzxd4dqjtcog3cahm7u3bwj3sqnisyocyfksbcnba",
+          "published_at": "2026-11-10T23:04:57.000Z"
         }
       }
     }
