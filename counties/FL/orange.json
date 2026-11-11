@@ -1,0 +1,12 @@
+{
+  "county": "orange",
+  "state": "FL",
+  "fips": "12095",
+  "groups": {
+    "county": {
+      "cid": "baguqeera2ogmvc7c64tc4ezjkj2okl252qs2grgy2mo7debordhnpaw6nx5q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerab774m5wakaojkvpvfbawew3gu3isjkxpw64fc66mgyqlmro6o63a"
+    }
+  }
+}
