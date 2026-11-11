@@ -1,0 +1,13 @@
+{
+  "county": "new-castle",
+  "state": "DE",
+  "fips": "10003",
+  "groups": {
+    "county": {
+      "cid": "baguqeerahh2vqhshog4snyz4xg5uhbhacgcddaczlzgqf5wfjykloztqflzq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerasydknaarycpykmonkp3vuc3hqb7vh57tuuxhotgccnywju7rv5kq",
+      "car": "bafybeibcju22umuo4edge4blpf6v6tfiirbbotfjakbujzf2teq3gkilna"
+    }
+  }
+}
