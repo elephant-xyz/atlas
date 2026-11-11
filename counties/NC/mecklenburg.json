@@ -1,0 +1,13 @@
+{
+  "county": "mecklenburg",
+  "state": "NC",
+  "fips": "37119",
+  "groups": {
+    "county": {
+      "cid": "baguqeerauujzyet66rnrr7ebaiel5flyuzjtzet6ehddffvzirnq5tbfcgwa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerawwv3u56npyzytzwpfbdrsgecvzdr5mi7qvtbvecrinb7bjlu6yfq",
+      "car": "bafybeiagqjrm7zc7mzaezfrv3kfwgsiqhbfefsbhrx2phbaj72e4gj7x7e"
+    }
+  }
+}
