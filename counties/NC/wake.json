@@ -1,0 +1,13 @@
+{
+  "county": "wake",
+  "state": "NC",
+  "fips": "37183",
+  "groups": {
+    "county": {
+      "cid": "baguqeerarvhjtenamfz23wknirj6c2ngojynibomqltvjgv6jxctqzuvo3za",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeragynintxgjwhkkcqtasgmttxrxdhiuzkad777odf75tydz7tbsg2q",
+      "car": "bafybeigfgmn53hyot7pi7vopkpzblpp4d4lbguuymv4rqr445x422loc2m"
+    }
+  }
+}
