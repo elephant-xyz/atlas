@@ -1,0 +1,12 @@
+{
+  "county": "hillsborough",
+  "state": "FL",
+  "fips": "12057",
+  "groups": {
+    "county": {
+      "cid": "baguqeerasjvsidusn4qsrr2gsnfsulyvj24rn5ej3xqfdfefpadybyl5y7oa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeralej2kz7xv7d7ui6oo63tfjbob34uuzf4x5uw5dmr4z7ana4veijq"
+    }
+  }
+}
