@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "640f001ea3aec2c7c3ea41c1d631c9c1e7303dea",
+  "generated_from": "e57fdb3b4f63ef6896dd5cfff43c952ba1129ff0",
   "counties": [
     {
       "county": "baker",
@@ -76,6 +76,19 @@
           "schema": "bafkreigqszh64fy5ra7lrkjytsaefr5iauv36fta2vkscniom4echf2v4y",
           "tables": "baguqeerabwqsjpi6e2az4q535yf6a3aj2ftjkimsdryzcimhiwhb572wysna",
           "published_at": "2026-11-03T17:17:43.000Z"
+        }
+      }
+    },
+    {
+      "county": "duval",
+      "state": "FL",
+      "fips": "12031",
+      "groups": {
+        "county": {
+          "cid": "baguqeerazuedrno6gn6b22456iuoxmehtmcud3n3m3tx6ipusnu6nidjz7iq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerahcj6dfqm3phyu3r76ynj3vpnfyvt3fgt66n3ozsmbvv7au34neqq",
+          "published_at": "2026-11-11T02:20:17.000Z"
         }
       }
     },
