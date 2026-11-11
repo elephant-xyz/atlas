@@ -73,6 +73,36 @@ root the registry cannot serve:
    pointed at its CID. The job ends only when the name resolves to that CID and
    <https://ipfs.filebase.io/ipns/k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04>
    serves the committed bytes. A failure at this step is not a revert: re-run the workflow.
+4. Optionally, the published `index.json` is copied to S3 (see below).
+
+### Copy to S3 (optional)
+
+Consumers that read the index from a bucket rather than through IPNS, such as Persist's
+registered IPFS indexes, get a copy from the publish workflow's `index-s3` job. Persist computes
+the UnixFS CID of the object's exact bytes (Kubo `add --cid-version=1 --raw-leaves`) and, when
+it changes, copies the Parquet parts the index names from IPFS, checking every CID; so the
+object must be the published bytes, never a re-serialization.
+
+The job is off unless the `ATLAS_INDEX_S3_URI` repository variable is set; without it, publish
+behaves as before. It runs only after the `publish` job succeeded, that is after the IPNS name
+serves the new index, and uploads `main`'s `index.json` only when `scripts/unixfs.mjs` computes
+the CID `publish-index` published for it; otherwise (a later publication superseded the run)
+it fails without writing. The object gets `Content-Type: application/json`,
+`Cache-Control: no-cache`, `Content-MD5` and `x-amz-meta-ipfs-cid: <cid>`. A failed upload
+never touches the IPFS publication: the run shows red, and re-running the failed job puts the
+same bytes again.
+
+| Repository variable | Value |
+| --- | --- |
+| `ATLAS_INDEX_S3_URI` | `s3://<bucket>/<key>`, e.g. `s3://<persist index bucket>/atlas/index.json`; turns the job on |
+| `ATLAS_INDEX_S3_ROLE_ARN` | IAM role the job assumes through GitHub OIDC; no access keys are stored |
+| `ATLAS_INDEX_S3_REGION` | the bucket's region (default `us-east-1`) |
+
+The role trusts `token.actions.githubusercontent.com` with `aud` `sts.amazonaws.com` and `sub`
+`repo:elephant-xyz/atlas:ref:refs/heads/main`, and may only `s3:PutObject` on
+`arn:aws:s3:::<bucket>/<key>` (plus `kms:GenerateDataKey` on the bucket's key if it uses
+SSE-KMS). Only the `index-s3` job gets `id-token: write`. Point the Persist registration's
+`index_uri` at the same `s3://<bucket>/<key>`.
 
 Withdrawn roots are not unpinned yet. `docs/ipns-names-removed-2026-09-21.json` records the IPNS
 names removed from the account on 2026-09-21 to free quota for `elephant-atlas`.
@@ -93,6 +123,8 @@ atlas/
 │   ├── build-index.mjs             regenerate index.json from counties/
 │   ├── transfer-roots.mjs          export new roots from the gateway, import them into the bucket
 │   ├── publish-index.mjs           commit index.json, add it, point the IPNS name at it
+│   ├── upload-index-s3.mjs         optional: copy the published index.json to S3, held to its CID
+│   ├── unixfs.mjs                  the CID Kubo gives a file (add --cid-version=1 --raw-leaves)
 │   └── filebase.mjs                token, Kubo RPC, poll loop
 ├── docs/
 │   └── ipns-names-removed-2026-09-21.json
@@ -100,7 +132,7 @@ atlas/
 │   ├── CODEOWNERS                  who must approve a publication
 │   └── workflows/
 │       ├── validate.yml            on pull request: validate-entry, index check, verify-roots
-│       └── publish.yml             on merge to main: transfer roots, build-index, commit, publish to IPNS
+│       └── publish.yml             on merge to main: transfer roots, build-index, commit, publish to IPNS, optional S3 copy
 └── CONTRIBUTING.md                 how an archive becomes a pull request
 ```
 
