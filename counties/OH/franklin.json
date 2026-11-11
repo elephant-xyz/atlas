@@ -1,0 +1,13 @@
+{
+  "county": "franklin",
+  "state": "OH",
+  "fips": "39049",
+  "groups": {
+    "county": {
+      "cid": "baguqeeradc73lxojjpdb354s5w456cuhkdxxujozpys3pa4l7xi5o7xpozga",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraukavcvlfxlnmthgra7nau6tijeixafkvyqqijgopvnpzj7ayv2ca",
+      "car": "bafybeiaxhkhk3jgrxsbjhtroj2wcyzlkyiru57ykprmba4w6cj2imyxvzm"
+    }
+  }
+}
