@@ -1,0 +1,13 @@
+{
+  "county": "king",
+  "state": "WA",
+  "fips": "53033",
+  "groups": {
+    "county": {
+      "cid": "baguqeera2g3w5yduyo7lhws7x3tvzvedl5yo3oyyji7hwrvgouygtqvf6csa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeragnat5gr4unjrnx545yyp2vpdvehctpajqkdpb7ktofbme5rn4sea",
+      "car": "bafybeihltvsem3cntslfla45wt7vxlqizdmrf4iyvwz5alqh7sbdnx7dbu"
+    }
+  }
+}
