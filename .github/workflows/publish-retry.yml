@@ -8,11 +8,13 @@ name: publish-retry
 # It only decides and dispatches. The decision needs no secrets and no dependencies: whether
 # index.json says what the pages say, and whether the IPNS name serves that index.json.
 #
-# ponytail: a fixed 3-hour cadence. Re-queuing from publish itself would retry sooner but loops
-# without pause through an outage; do that with a retry counter if three hours proves too slow.
+# Hourly: a run handles about two large counties within ATLAS_RUN_MINUTES and defers the rest, so
+# with 18 counties merged at once (2026-11-12) a 3-hour cadence left main idle up to 3 hours
+# between runs. Still not re-queued from publish itself, which would loop without pause through an
+# outage: an outage ends a run at its first check, so an hourly try costs one short run.
 on:
   schedule:
-    - cron: '17 */3 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
