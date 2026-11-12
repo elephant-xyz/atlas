@@ -1,0 +1,13 @@
+{
+  "county": "oakland",
+  "state": "MI",
+  "fips": "26125",
+  "groups": {
+    "county": {
+      "cid": "baguqeera3hx3wyoexpqlzctowo3deq6a23qo2aqyerfdegi67jqhs2j33mzq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerawg62f2y6ivqiergxfoko32samnupfji54x6dsmjlyfhti3tq6mya",
+      "car": "bafybeiaujxycc7fm5msgzhlq3m6ke3hfh4fy2odcadixma4t3uk6wc277m"
+    }
+  }
+}
