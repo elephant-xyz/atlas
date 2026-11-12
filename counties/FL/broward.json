@@ -1,0 +1,12 @@
+{
+  "county": "broward",
+  "state": "FL",
+  "fips": "12011",
+  "groups": {
+    "county": {
+      "cid": "baguqeera37mqjv2ecf6lsnvo225o5nbo4hydrz3w3fs43tczriygvrpqdt4q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraz5dguojkic2e6ugelza6f77i53ibvbj4m5p5gxvnsclhjl4ug54q"
+    }
+  }
+}
