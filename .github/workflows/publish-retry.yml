@@ -1,0 +1,48 @@
+name: publish-retry
+
+# Starts `publish` when main holds something it has not published and no merge will: a group a
+# run deferred (an outage, an RPC error, a second failure in one run), or an index step that
+# failed after the transfers. Nothing else would start that run: the index commit is outside
+# publish's path filter and a withdrawal carries [skip ci].
+#
+# It only decides and dispatches. The decision needs no secrets and no dependencies: whether
+# index.json says what the pages say, and whether the IPNS name serves that index.json.
+#
+# ponytail: a fixed 3-hour cadence. Re-queuing from publish itself would retry sooner but loops
+# without pause through an outage; do that with a retry counter if three hours proves too slow.
+on:
+  schedule:
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start publish if main is ahead of what is published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The same name publish.yml sets as ATLAS_IPNS_ID.
+          IPNS: https://ipfs.filebase.io/ipns/k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04
+        run: |
+          # Never while a run is waiting or working: publish keeps one waiting run, and a new one
+          # would take the place of a maintainer's dispatch and drop its inputs.
+          busy=$(gh run list --workflow publish.yml --limit 30 --json status --jq '[.[] | select(.status != "completed")] | length')
+          if [ "$busy" != 0 ]; then echo "publish is running or queued; nothing started"; exit 0; fi
+          if [ "$(node scripts/build-index.mjs --lagging)" = true ]; then
+            why="index.json does not say what the pages on main say"
+          elif ! curl -sfL -m 60 -H 'accept: application/vnd.ipld.raw' "$IPNS?format=raw" | cmp -s - index.json; then
+            why="the IPNS name does not serve main's index.json"
+          else
+            echo "main is published; nothing started"; exit 0
+          fi
+          echo "starting publish: $why" | tee -a "$GITHUB_STEP_SUMMARY"
+          gh workflow run publish.yml --ref main

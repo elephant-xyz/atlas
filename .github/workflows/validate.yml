@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # origin/main is the baseline for "new root" and for the index check
+          fetch-depth: 0 # origin/main is the baseline for "changed group" and for the index.json check
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -19,7 +19,6 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run validate
-      - run: npm run index -- --check
 
       # Every changed group: the whole archive downloaded by root and validated with the Elephant
       # CLI from GitHub main (cached per main commit), then schema, tables and every part by CID.

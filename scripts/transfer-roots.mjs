@@ -1,6 +1,9 @@
 #!/usr/bin/env node
-// Transfer every root this push published into the elephant-atlas bucket: every group cid and
-// tables root at HEAD that no group held at HEAD~1 (first parent). Each root is exported from
+// Transfer every published root the registry does not hold yet into the elephant-atlas bucket:
+// the new roots of every group at HEAD whose cid or tables the committed index.json does not
+// list. The index is written only after a transfer, so that is every publication still owed,
+// including one whose own run was cancelled or superseded because several merges landed close
+// together; a run started by one merge finishes the others too. Each root is exported from
 // the IPFS network as CAR through the gateway list (see gateways.mjs) and imported with dag/import, bounded piece by piece so a runner
 // never holds a whole county: the root block alone (pin-roots=false), then one shard or one
 // Parquet part at a time through a temp file, then the root block again with pin-roots=true
@@ -12,9 +15,32 @@
 // (Filebase returns nothing and pins nothing when a child is missing), and pin/ls must list
 // the root recursively. Any of those failing is a publication failure.
 //
-// Exit 1 with GITHUB_OUTPUT failed_root/failed_reason/county when no gateway can serve a
-// root or the copy is incomplete (the workflow reverts); exit 2 on any other error
-// (credentials, RPC; re-dispatch). --all transfers every root on the page, not only new ones.
+// One group failing does not stop the run. A group whose roots did not all arrive is "held"
+// and the run goes on with the other counties; the index step lists only what is pinned.
+//   withdrawn  the publication itself is wrong (no gateway can serve a root, the copy is
+//              incomplete, another group holds the root): the workflow takes it off main
+//   deferred   anything that is not, or may not be, the publication's fault (credentials, RPC,
+//              an outage, a published root that would not transfer again, another county's
+//              publication in a --county run): it stays on main for the next run
+// A failure is blamed on a publication with care, because being wrong costs its author hours:
+//   - Only while the service works. After each failure, and once before the first transfer, a
+//     root the registry already published must still be served by a gateway (bytes hashed) and
+//     listed as pinned by Filebase (see `outage`). When it is not, nothing is withdrawn, the
+//     failing group is deferred and so is everything after it, unattempted. An outage before
+//     the first transfer exits 2 with nothing done.
+//   - Once per run. That check cannot see the network failing to deliver content Filebase does
+//     not hold yet, so several publications failing together prove nothing about any of them:
+//     the first is withdrawn (what a run did when it handled one merge), the rest are deferred.
+// Each root is transferred in a process of its own (see inChild), so one that exhausts the heap
+// or hangs ends that process and is deferred like any other error, and the roots after it are
+// still tried. A root gets at most ATLAS_ROOT_MINUTES (default 180) and the whole run
+// ATLAS_RUN_MINUTES (default 300), after which what is left is deferred unattempted: the step
+// ends inside the 6-hour job limit and the index step still runs.
+// The held groups are written to the file ATLAS_HELD as JSON and GITHUB_OUTPUT gets
+// `withdrawn=<n>`. Exit 1 when anything was held. --all transfers every root on
+// main again. --county ST/name transfers every root of that county again, and what the other
+// counties are owed as usual (the run replaces theirs in the queue), but a transfer that fails
+// withdraws only its own.
 //
 // A group with `car` (the archive as one CARv1 file, by its own CID) is copied from that file
 // instead: one request downloads it, then the same pieces are cut locally and imported with the
@@ -23,8 +49,9 @@
 // each block after the blocks it links to, at most ATLAS_PIECE_MB (default 8) each.
 //
 // TODO: unpin roots of withdrawn groups; nothing is unpinned yet.
-import { appendFileSync, createWriteStream, openAsBlob, readFileSync } from 'node:fs';
-import { mkdtemp, unlink } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { appendFileSync, createWriteStream, openAsBlob, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -35,9 +62,9 @@ import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { openCar } from './car-file.mjs';
-import { rpc as filebaseRpc } from './filebase.mjs';
+import { pinStatus, rpc as filebaseRpc } from './filebase.mjs';
 import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
-import { groupsOf, pagesAt, rootsOf } from './lib.mjs';
+import { claimOrder, groupsOf, heldFor, holdConflicts, holdOf, indexAt, isOwed, latestPublished, pagesAt, pool, publishedGroup, rootsOf, sleep } from './lib.mjs';
 
 export class TransferFailed extends Error {
   constructor(cid, reason) {
@@ -47,18 +74,11 @@ export class TransferFailed extends Error {
   }
 }
 
-/** [{ county: 'FL/lee', key: 'county.cid', kind: 'archive' | 'tables', cid }] for every root at HEAD that no group at base held. */
-export function rootsToTransfer(headPages, basePages) {
-  const known = rootsOf(basePages);
-  const out = [];
-  for (const { page } of headPages) {
-    for (const [key, g] of groupsOf(page)) {
-      if (!known.has(g.cid)) out.push({ county: `${page.state}/${page.county}`, key: `${key}.cid`, kind: 'archive', cid: g.cid, ...(g.car ? { car: g.car } : {}) });
-      if (!known.has(g.tables)) out.push({ county: `${page.state}/${page.county}`, key: `${key}.tables`, kind: 'tables', cid: g.tables });
-    }
-  }
-  return out;
-}
+/** The two roots of a group, archive first: [{ county: 'FL/lee', key: 'county.cid', kind: 'archive', cid, car? }, { ..., key: 'county.tables', kind: 'tables', cid }]. */
+const groupRoots = (county, key, g) => [
+  { county, key: `${key}.cid`, kind: 'archive', cid: g.cid, ...(g.car ? { car: g.car } : {}) },
+  { county, key: `${key}.tables`, kind: 'tables', cid: g.tables },
+];
 
 const defaults = () => ({
   fetch: withGatewayToken(),
@@ -74,7 +94,7 @@ const defaults = () => ({
   // Travis's 11.3M blocks.
   pinMs: Number(process.env.ATLAS_PIN_MINUTES ?? 180) * 60_000,
   skipStored: process.env.ATLAS_SKIP_STORED_SHARDS === '1',
-  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  sleep,
   now: Date.now,
   log: console.log,
   tmp: undefined,
@@ -85,11 +105,13 @@ async function gatewayGet(root, path, accept, d) {
   const started = d.now();
   let last;
   for (let wait = 5_000; ; wait = Math.min(wait * 2, 60_000)) {
+    d.signal?.throwIfAborted();
     try {
-      const { res, url } = await fetchFromAny(path, { gateways: d.gateways, fetch: d.fetch, headers: { accept }, requestMs: d.requestMs });
+      const { res, url } = await fetchFromAny(path, { gateways: d.gateways, fetch: d.fetch, headers: { accept }, requestMs: d.requestMs, signal: d.signal });
       d.log(`fetched ${url}`);
       return res;
     } catch (e) {
+      d.signal?.throwIfAborted();
       last = e.message;
     }
     d.log(`/ipfs/${path}: ${last}`);
@@ -98,11 +120,25 @@ async function gatewayGet(root, path, accept, d) {
   }
 }
 
+/**
+ * A hashed block decoded as dag-json. A block that hashes to its CID and still does not decode is
+ * the publication's own content and will never decode: a TransferFailed, not an error to retry.
+ */
+function decodeBlock(root, what, bytes) {
+  try {
+    return decode(bytes);
+  } catch (e) {
+    throw new TransferFailed(root, `${what} is not dag-json (${e.message})`);
+  }
+}
+
+/** Whether `bytes` are the block `cid` names. Gateways are not trusted: every block kept from one is checked. */
+const hashesTo = async (bytes, cid) => Buffer.compare((await sha256.digest(bytes)).bytes, CID.parse(cid).multihash.bytes) === 0;
+
 async function rawBlock(root, cid, d) {
   const res = await gatewayGet(root, `${cid}?format=raw`, 'application/vnd.ipld.raw', d);
   const bytes = new Uint8Array(await res.arrayBuffer());
-  const digest = await sha256.digest(bytes);
-  if (Buffer.compare(digest.bytes, CID.parse(cid).multihash.bytes) !== 0) throw new TransferFailed(root, `${cid}: bytes do not hash to the CID`);
+  if (!(await hashesTo(bytes, cid))) throw new TransferFailed(root, `${cid}: bytes do not hash to the CID`);
   return bytes;
 }
 
@@ -147,9 +183,11 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
   let lines;
   for (let attempt = 1; ; attempt++) {
     try {
-      lines = await d.rpc(`dag/import?pin-roots=${pinRoots}&stats=true`, { body: form, timeoutMs: pinRoots ? d.pinMs : 15 * 60_000 });
+      d.signal?.throwIfAborted();
+      lines = await d.rpc(`dag/import?pin-roots=${pinRoots}&stats=true`, { body: form, timeoutMs: pinRoots ? d.pinMs : 15 * 60_000, signal: d.signal });
       break;
     } catch (e) {
+      d.signal?.throwIfAborted();
       // Filebase drops connections and answers 500 under load; back off and try again.
       if (attempt === 6) throw e;
       d.log(`dag/import attempt ${attempt}: ${e.message}`);
@@ -178,22 +216,13 @@ async function hasBlock(cid, d) {
   }
 }
 
-/** Run `jobs` (functions returning promises), `n` at a time; the first rejection rejects. */
-async function pool(jobs, n) {
-  let next = 0;
-  const worker = async () => {
-    while (next < jobs.length) await jobs[next++]();
-  };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(n, jobs.length)) }, worker));
-}
-
 /** Export <path>?format=car to a temp file, count its blocks, import it (pin-roots=false), delete the file. */
 async function transferSubtree(root, path, expect, tally, d) {
   const res = await gatewayGet(root, `${path}?format=car`, 'application/vnd.ipld.car', d);
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
   const file = join(d.tmp, `${expect}.car`);
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
   try {
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
     const count = await carBlocks(readFileSync(file), tally);
     d.log(`imported ${path}: ${await importCar(root, await openAsBlob(file), expect, count, false, d)}`);
   } finally {
@@ -202,28 +231,22 @@ async function transferSubtree(root, path, expect, tally, d) {
 }
 
 async function requirePinned(root, d) {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      const [ls] = await d.rpc(`pin/ls?arg=${root}&type=recursive`);
-      if (ls?.Keys?.[root]) return;
-      throw new Error('not listed');
-    } catch (e) {
-      if (attempt === 3) throw new TransferFailed(root, `not pinned recursively after import (${e.message})`);
-      await d.sleep(10_000);
-    }
-  }
+  const { pinned, why } = await pinStatus(root, { call: d.rpc, tries: 3, sleep: d.sleep });
+  if (!pinned) throw new TransferFailed(root, `not pinned recursively after import (${why})`);
 }
 
 export async function transferArchive(root, deps = {}) {
   const d = { ...defaults(), ...deps };
   const bytes = await rawBlock(root, root, d);
-  const index = decode(bytes);
+  const index = decodeBlock(root, `root block ${root}`, bytes);
   if (index.label !== 'CountyIndex' || !Array.isArray(index.shards)) throw new TransferFailed(root, 'not a CountyIndex block');
   const block = await singleBlockCar(root, bytes);
   const tally = { seen: new Set([root]), bytes: bytes.length };
   d.log(`archive ${root}: ${index.shards.length} shard(s), ${index.properties} properties, ${d.parallel} subtree(s) at a time`);
   d.log(`imported ${root} (root block): ${await importCar(root, block, root, 1, false, d)}`);
-  await pool(index.shards.map((s, i) => () => transferSubtree(root, `${root}/shards/${i}`, s.toString(), tally, d)), d.parallel);
+  // One temp dir for every shard: the jobs get their own copy of the deps (for the pool's signal), so it is made first.
+  d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
+  await pool(index.shards.map((s, i) => (signal) => transferSubtree(root, `${root}/shards/${i}`, s.toString(), tally, { ...d, signal })), d.parallel);
   d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
   await requirePinned(root, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);
@@ -298,7 +321,7 @@ async function transferLocalSubtree(root, reader, top, sent, tally, d) {
       entry.expanded = true;
       stack.push(entry);
       const code = entry.cid.code;
-      if (code === DAG_JSON) for (const link of linksOf(decode(block.bytes)).reverse()) stack.push({ cid: link, expanded: false });
+      if (code === DAG_JSON) for (const link of linksOf(decodeBlock(root, `block ${key} of the car file`, block.bytes)).reverse()) stack.push({ cid: link, expanded: false });
       else if (code !== RAW) throw new TransferFailed(root, `block ${key} has codec 0x${code.toString(16)}, which the car transfer does not walk`);
       continue;
     }
@@ -315,17 +338,20 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
   const d = { ...defaults(), ...deps };
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
   const file = join(d.tmp, `${root}.car`);
-  const res = await gatewayGet(root, car, '*/*', d);
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
-  const reader = await openCar(file);
+  let reader;
+  // The download is inside the try: a run goes on after a failure, and a partial multi-GB file
+  // left behind would fill the runner's disk for the counties after it.
   try {
+    const res = await gatewayGet(root, car, '*/*', d);
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+    // The whole file arrived; if it does not open as a CAR it never will.
+    reader = await openCar(file).catch((e) => Promise.reject(new TransferFailed(root, `car file ${car} is not a readable CAR (${e.message})`)));
     const roots = (await reader.getRoots()).map(String);
     if (!roots.includes(root)) throw new TransferFailed(root, `car file ${car} has roots [${roots.join(', ')}]`);
     const rootBlock = await reader.get(CID.parse(root));
     if (!rootBlock) throw new TransferFailed(root, `car file ${car} lacks the root block`);
-    const digest = await sha256.digest(rootBlock.bytes);
-    if (Buffer.compare(digest.bytes, CID.parse(root).multihash.bytes) !== 0) throw new TransferFailed(root, `car file ${car}: root block does not hash to the CID`);
-    const index = decode(rootBlock.bytes);
+    if (!(await hashesTo(rootBlock.bytes, root))) throw new TransferFailed(root, `car file ${car}: root block does not hash to the CID`);
+    const index = decodeBlock(root, `root block of car file ${car}`, rootBlock.bytes);
     if (index.label !== 'CountyIndex' || !Array.isArray(index.shards)) throw new TransferFailed(root, 'not a CountyIndex block');
     const block = await singleBlockCar(root, rootBlock.bytes);
     // One flag per distinct block (a Set of 11M CID strings would double the index's memory).
@@ -342,20 +368,184 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
     const held = new Set();
     if (d.skipStored) await pool(shards.map((s) => async () => (await hasBlock(s.toString(), d)) && held.add(s.toString())), 4);
     d.log(`${held.size}/${shards.length} shard(s) already in the bucket; sending the rest`);
-    await pool(shards.filter((s) => !held.has(s.toString())).map((s) => () => transferLocalSubtree(root, reader, s, sent, tally, d)), d.parallel);
+    await pool(shards.filter((s) => !held.has(s.toString())).map((s) => (signal) => transferLocalSubtree(root, reader, s, sent, tally, { ...d, signal })), d.parallel);
     d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
     await requirePinned(root, d);
     d.log(`pinned ${root}: ${tally.blocks} distinct blocks, ${tally.bytes} bytes copied`);
   } finally {
-    await reader.close();
+    await reader?.close();
     await unlink(file).catch(() => {});
+  }
+}
+
+/**
+ * What a run does with every group on `pages`, given `index` (the committed index.json):
+ * `targets` are the roots to transfer, each with its page `path`, `group` key, whether the group
+ * is `owed` (the index does not list its cid and tables) and whether it is `inScope`, and `held`
+ * the groups it will not transfer because they collide on a root (see holdConflicts in lib.mjs;
+ * `claimed` gives the order the groups got their roots in). An owed group transfers the roots
+ * the index lacks. `all` transfers every root. `only` (ST/name) transfers every root of that
+ * county and leaves the others as they are, owed groups included: the run replaces theirs in
+ * the queue, so it must publish them, but they are out of scope and a failed transfer never
+ * withdraws them.
+ */
+export function planTransfers(pages, index, { all = false, only, claimed } = {}) {
+  const published = publishedGroup(index);
+  const known = rootsOf((index?.counties ?? []).map((page) => ({ page })));
+  const targets = [];
+  for (const { path, page } of pages) {
+    const county = `${page.state}/${page.county}`;
+    const inScope = !only || county === only;
+    for (const [key, g] of groupsOf(page)) {
+      const owed = isOwed(published(path, key), g);
+      const roots = groupRoots(county, key, g).map((t) => ({ ...t, path, group: key, owed, inScope }));
+      if (all || (only && inScope)) targets.push(...roots);
+      else if (owed) targets.push(...roots.filter((t) => !known.has(t.cid)));
+    }
+  }
+  const held = holdConflicts(pages, index, [], { claimed });
+  return { targets: targets.filter((t) => !heldFor(held, t.path, t.group)), held };
+}
+
+/**
+ * What is wrong with the service itself, or undefined when it works, judged on `canaries`, roots
+ * the registry already published: for one of them, some gateway must serve the root block
+ * (hashed, like every block taken from a gateway) and Filebase must list it as pinned. One is
+ * enough: a published root that has itself gone missing is that root's problem, and must not
+ * stop every publication, the re-transfer that would repair it included. Three rounds, so a
+ * blip is not an outage. Without canaries (an empty registry) there is nothing to judge by and
+ * the service is taken to work. It proves the registry's own copy is reachable, not that the
+ * network delivers content Filebase does not hold yet; runTransfers allows for that.
+ */
+export async function outage(canaries, deps = {}) {
+  const d = { ...defaults(), ...deps };
+  if (!canaries.length) return undefined;
+  const served = async (cid) => {
+    const problems = [];
+    for (const gateway of d.gateways) {
+      try {
+        const { res, url } = await fetchFromAny(`${cid}?format=raw`, { gateways: [gateway], fetch: d.fetch, headers: { accept: 'application/vnd.ipld.raw' }, requestMs: 60_000 });
+        if (await hashesTo(new Uint8Array(await res.arrayBuffer()), cid)) return undefined;
+        problems.push(`${url}: bytes do not hash to the CID`);
+      } catch (e) {
+        problems.push(e.message);
+      }
+    }
+    return `no gateway serves the published root ${cid} (${problems.join('; ')})`;
+  };
+  let problem;
+  for (let round = 1; round <= 3; round++) {
+    if (round > 1) await d.sleep(10_000);
+    for (const cid of canaries) {
+      problem = await served(cid);
+      if (problem) continue;
+      const { pinned, why } = await pinStatus(cid, { call: d.rpc });
+      if (pinned) return undefined;
+      problem = why === 'not listed' ? `Filebase does not list the published root ${cid} as pinned` : `Filebase does not answer for the published root ${cid} (${why})`;
+    }
+  }
+  return problem;
+}
+
+/**
+ * Transfer every target of a plan and return the groups held back, or undefined when the service
+ * was already down before the first transfer (nothing was done). `transfer(target, { timeoutMs })`
+ * copies one root and `down()` resolves to what is wrong with the service, if anything. A root
+ * gets `rootMs` at most and the run `budgetMs`; what does not fit is deferred unattempted.
+ */
+export async function runTransfers(pages, index, options, { transfer, down, log = console.log, error = console.error, now = Date.now, budgetMs = Infinity, rootMs = Infinity }) {
+  const started = now();
+  // The plan's collision holds only keep the losing groups out of the transfers: who really
+  // loses is settled at the end, on what the transfers did. A group that lost a root to one
+  // whose transfer then failed is publishable after all, and the next run transfers it.
+  const { targets, held: notNow } = planTransfers(pages, index, options);
+  const held = [];
+  const hold = (t, kind, reason) => held.push(holdOf(pages.find((p) => p.path === t.path), t.group, kind, t.cid, reason));
+  for (const h of notNow) log(`not transferred for now: ${h.county} ${h.key}: ${h.reason}`);
+  if (!targets.length) log('no roots to transfer');
+  else {
+    const broken = await down();
+    if (broken) {
+      error(`nothing transferred: ${broken}`);
+      return undefined;
+    }
+  }
+  let blamed = false; // this run has withdrawn a publication for failing to transfer
+  for (const [i, t] of targets.entries()) {
+    if (heldFor(held, t.path, t.group)) continue; // its archive failed: the tables root has nothing to point at
+    const rest = () => targets.slice(i).filter((r) => !heldFor(held, r.path, r.group));
+    const left = budgetMs - (now() - started);
+    if (left <= 0) {
+      for (const r of rest()) if (!heldFor(held, r.path, r.group)) hold(r, 'deferred', 'not attempted: the run was out of time');
+      break;
+    }
+    log(`transferring ${t.county} ${t.key} ${t.cid}${t.car ? ` from car file ${t.car}` : ''}`);
+    try {
+      await transfer(t, { timeoutMs: Math.min(rootMs, left) });
+    } catch (e) {
+      const broken = await down();
+      // Only a new publication of this run's own scope can be at fault, and only while the service works.
+      const atFault = !broken && t.owed && t.inScope && e instanceof TransferFailed;
+      const kind = atFault && !blamed ? 'withdrawn' : 'deferred';
+      const note = broken ? `; and ${broken}` : atFault && blamed ? '; not withdrawn: this run already withdrew a publication, and several failing together may be the network' : '';
+      if (kind === 'withdrawn') blamed = true;
+      if (!(e instanceof TransferFailed)) error(e.stack ?? e.message);
+      error(`FAIL ${t.county} ${t.key} (${kind}): ${e.message}${note}`);
+      hold(t, kind, `${t.owed ? '' : 'already published, but it would not transfer again: '}${e.reason ?? e.message}${note}`);
+      if (broken) {
+        for (const r of rest()) if (!heldFor(held, r.path, r.group)) hold(r, 'deferred', `not attempted: ${broken}`);
+        break;
+      }
+    }
+  }
+  const before = held.map((h) => h.kind);
+  holdConflicts(pages, index, held, options);
+  for (const [i, h] of held.entries()) if (h.kind !== before[i]) log(`${h.kind} ${h.county} ${h.key}: ${h.reason}`);
+  return held;
+}
+
+/** Copy one target, unless an earlier run already pinned it (a re-run after a later root failed). */
+async function transferOne(t) {
+  if ((await pinStatus(t.cid)).pinned) return console.log(`already pinned ${t.cid}; skipped`);
+  if (t.kind === 'tables') await transferTables(t.cid);
+  else if (t.car) await transferArchiveFromCar(t.cid, t.car);
+  else await transferArchive(t.cid);
+}
+
+/**
+ * Copy one target in a process of its own, with `timeoutMs` at most. Indexing a county-sized CAR
+ * can exhaust the heap, and a process that dies or hangs must cost that root only: here it is
+ * an ordinary Error (deferred), and the run goes on. The child (`argv`, this script by default,
+ * given `--one <target> --result <file>`) writes { ok } or { failed: reason } (a TransferFailed)
+ * or { error } to the file; its temp files live in a directory removed here whatever happens.
+ */
+export async function inChild(t, timeoutMs, argv = [fileURLToPath(import.meta.url)]) {
+  const dir = await mkdtemp(join(tmpdir(), 'atlas-root-'));
+  const result = join(dir, 'result.json');
+  try {
+    const child = spawn(process.execPath, [...argv, '--one', JSON.stringify(t), '--result', result], { stdio: 'inherit', env: { ...process.env, TMPDIR: dir }, ...(Number.isFinite(timeoutMs) ? { timeout: timeoutMs } : {}) });
+    const [code, signal] = await new Promise((resolve, reject) => {
+      child.on('error', reject);
+      child.on('exit', (...ended) => resolve(ended));
+    });
+    let said = {};
+    try {
+      said = JSON.parse(readFileSync(result, 'utf8'));
+    } catch {
+      // no result: the process did not get that far
+    }
+    if (code === 0 && said.ok) return;
+    if (said.failed) throw new TransferFailed(t.cid, said.failed);
+    throw new Error(said.error ?? `the transfer process ended on ${signal ?? `exit code ${code}`} without a result (out of memory, or out of time)`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 }
 
 export async function transferTables(root, deps = {}) {
   const d = { ...defaults(), ...deps };
   const bytes = await rawBlock(root, root, d);
-  const tables = decode(bytes);
+  const tables = decodeBlock(root, `tables block ${root}`, bytes);
   if (tables.label !== 'CountyTables' || !tables.tables) throw new TransferFailed(root, 'not a CountyTables block');
   const block = await singleBlockCar(root, bytes);
   const tally = { seen: new Set([root]), bytes: bytes.length };
@@ -363,7 +553,8 @@ export async function transferTables(root, deps = {}) {
   d.log(`tables ${root}: ${names.length} table(s), ${names.reduce((n, t) => n + tables.tables[t].parts.length, 0)} part(s)`);
   // The tables block goes in last: Filebase holds a dag/import open while any block it carries
   // links to something the bucket lacks, so importing it before its parts never returns.
-  const jobs = names.flatMap((name) => tables.tables[name].parts.map((part, i) => () => transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, part.cid.toString(), tally, d)));
+  d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
+  const jobs = names.flatMap((name) => tables.tables[name].parts.map((part, i) => (signal) => transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, part.cid.toString(), tally, { ...d, signal })));
   await pool(jobs, d.parallel);
   d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
   await requirePinned(root, d);
@@ -371,32 +562,33 @@ export async function transferTables(root, deps = {}) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const root = process.cwd();
-  const all = process.argv.includes('--all');
-  // --county ST/name: every root of that county on HEAD (re-runs one publication after a fix).
-  const only = process.argv.includes('--county') ? process.argv[process.argv.indexOf('--county') + 1] : undefined;
-  const targets = rootsToTransfer(pagesAt('HEAD', root), all || only ? [] : (pagesAt('HEAD~1', root) ?? [])).filter((t) => !only || t.county === only);
-  if (!targets.length) console.log('no new roots to transfer');
-  for (const t of targets) {
-    console.log(`transferring ${t.county} ${t.key} ${t.cid}${t.car ? ` from car file ${t.car}` : ''}`);
+  const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined);
+  // --one <target json> --result <file>: one root, as the child process of inChild.
+  if (arg('--one')) {
     try {
-      // A root an earlier run already pinned is done; skip it (a re-run after a later root failed).
-      const [ls] = await filebaseRpc(`pin/ls?arg=${t.cid}&type=recursive`).catch(() => []);
-      if (ls?.Keys?.[t.cid]) {
-        console.log(`already pinned ${t.cid}; skipped`);
-        continue;
-      }
-      if (t.kind === 'tables') await transferTables(t.cid);
-      else if (t.car) await transferArchiveFromCar(t.cid, t.car);
-      else await transferArchive(t.cid);
+      await transferOne(JSON.parse(arg('--one')));
+      writeFileSync(arg('--result'), JSON.stringify({ ok: true }));
+      process.exit(0);
     } catch (e) {
-      if (!(e instanceof TransferFailed)) {
-        console.error(e.stack ?? e.message);
-        process.exit(2);
-      }
-      console.error(`FAIL ${t.county} ${t.key}: ${e.message}`);
-      if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `failed_root=${t.cid}\nfailed_reason=${e.reason}\ncounty=${t.county}\n`);
+      console.error(e.stack ?? e.message);
+      writeFileSync(arg('--result'), JSON.stringify(e instanceof TransferFailed ? { failed: e.reason } : { error: e.message }));
       process.exit(1);
     }
   }
+  const root = process.cwd();
+  const all = process.argv.includes('--all');
+  // --county ST/name: every root of that county on HEAD again (re-runs one publication after a fix).
+  const only = arg('--county');
+  const index = JSON.parse(indexAt('HEAD', root) ?? 'null');
+  const minutes = (name, fallback) => Number(process.env[name] ?? fallback) * 60_000;
+  const held = await runTransfers(pagesAt('HEAD', root), index, { all, only, claimed: claimOrder(root) }, {
+    down: () => outage(latestPublished(index)),
+    transfer: (t, { timeoutMs }) => inChild(t, timeoutMs),
+    rootMs: minutes('ATLAS_ROOT_MINUTES', 180),
+    budgetMs: minutes('ATLAS_RUN_MINUTES', 300),
+  });
+  if (!held) process.exit(2);
+  if (process.env.ATLAS_HELD) writeFileSync(process.env.ATLAS_HELD, JSON.stringify(held, null, 2));
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `withdrawn=${held.filter((h) => h.kind === 'withdrawn').length}\n`);
+  process.exit(held.length ? 1 : 0);
 }

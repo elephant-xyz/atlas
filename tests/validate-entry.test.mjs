@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { validateRegistry } from '../scripts/validate-entry.mjs';
 import { VERSION } from '../scripts/build-index.mjs';
@@ -8,7 +9,8 @@ import { CID_A, CID_B, CID_C, CID_D, group, page, registry, stamps } from './hel
 const indexFor = (pages) => ({ version: VERSION, generated_from: 'x', counties: buildEntries(pages, stamps()) });
 const check = (files) => {
   const root = registry(files);
-  return validateRegistry(root, readPages(root));
+  // The registry's own index.json stands in for main's: these tests are about the pages.
+  return validateRegistry(root, files['index.json'] ? JSON.stringify(files['index.json'], null, 2) + '\n' : null);
 };
 const withIndex = (files, ...pages) => ({ ...files, 'index.json': indexFor(pages.map((page) => ({ page }))) });
 
@@ -61,12 +63,29 @@ test('a cid or tables root never appears under two groups or two pages', () => {
   assert.ok(problems.some((p) => p.includes(`groups.hoa.tables ${CID_A} is already used by counties/FL/lee.json groups.county.cid`)), problems.join('\n'));
 });
 
-test('hand-edited index fails', () => {
+test('hand-edited index fails, and so does a checkout with no main to compare with', () => {
   const lee = page();
   const index = indexFor([{ page: lee }]);
+  const mainIndex = JSON.stringify(index, null, 2) + '\n';
   index.counties[0].groups.county.cid = CID_D;
-  const problems = check({ 'counties/FL/lee.json': lee, 'index.json': index });
-  assert.deepEqual(problems, ['index.json: differs from a regeneration; never edit it by hand, it is generated on merge']);
+  const root = registry({ 'counties/FL/lee.json': lee, 'index.json': index });
+  const edited = ['index.json: differs from the one on main; never edit it by hand, it is generated on merge'];
+  assert.deepEqual(validateRegistry(root, mainIndex), edited);
+  assert.deepEqual(validateRegistry(root, undefined), ['index.json: cannot be checked, origin/main is not in this checkout; run `git fetch origin main`']);
+  // main has no index.json yet: a pull request must not bring one.
+  assert.deepEqual(validateRegistry(root, null), edited);
+  assert.deepEqual(validateRegistry(registry({ 'counties/FL/lee.json': lee }), null), []);
+});
+
+test('a pull request passes while main\'s index lags main\'s pages, and fails only when it changes index.json', () => {
+  // The window between a merge and its index commit: main holds lee and fulton, the index only lee.
+  const lee = page();
+  const fulton = page({ state: 'GA', county: 'fulton', fips: '13121', groups: { county: group({ cid: CID_C, tables: CID_D }) } });
+  const root = registry(withIndex({ 'counties/FL/lee.json': lee, 'counties/GA/fulton.json': fulton }, lee));
+  const mainIndex = readFileSync(`${root}/index.json`, 'utf8');
+  assert.deepEqual(validateRegistry(root, mainIndex), []);
+  assert.deepEqual(validateRegistry(root, mainIndex.replaceAll('\n', '\r\n')), [], 'a CRLF checkout of the same file is not an edit');
+  assert.deepEqual(validateRegistry(root, mainIndex.replace(CID_A, CID_D)), ['index.json: differs from the one on main; never edit it by hand, it is generated on merge']);
 });
 
 test('changedGroups picks groups whose cid, schema, or tables differ from main', () => {
