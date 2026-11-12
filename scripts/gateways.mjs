@@ -3,6 +3,8 @@
 // refuse plain ones). A private gateway comes only from the ATLAS_GATEWAYS secret and is tried
 // first. The gateway is untrusted: callers hash every block they keep. Content is "not available"
 // only when every gateway fails.
+import { sleep as wait, timeoutSignal } from './lib.mjs';
+
 export const DEFAULT_GATEWAYS = ['https://ipfs.filebase.io', 'https://trustless-gateway.link'];
 
 /**
@@ -12,7 +14,7 @@ export const DEFAULT_GATEWAYS = ['https://ipfs.filebase.io', 'https://trustless-
  */
 export function withGatewayToken(fetch = globalThis.fetch, env = process.env) {
   const token = (env.ATLAS_GATEWAY_TOKEN ?? '').trim();
-  const custom = (env.ATLAS_GATEWAYS ?? '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean);
+  const custom = privateGateways(env);
   if (!token || !custom.length) return fetch;
   return (url, init = {}) => {
     if (!custom.some((g) => String(url).startsWith(`${g}/`))) return fetch(url, init);
@@ -20,26 +22,32 @@ export function withGatewayToken(fetch = globalThis.fetch, env = process.env) {
   };
 }
 
-/** Origins from ATLAS_GATEWAYS (comma-separated; empty means unset) first, then the defaults. */
+/** The origins in ATLAS_GATEWAYS (comma-separated; empty means unset): private, kept in a secret. */
+export const privateGateways = (env = process.env) => (env.ATLAS_GATEWAYS ?? '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean);
+
+/** Origins from ATLAS_GATEWAYS first, then the defaults. */
 export function gatewayList(env = process.env) {
-  const custom = (env.ATLAS_GATEWAYS ?? '')
-    .split(',')
-    .map((s) => s.trim().replace(/\/$/, ''))
-    .filter(Boolean);
-  return [...new Set([...custom, ...DEFAULT_GATEWAYS])];
+  return [...new Set([...privateGateways(env), ...DEFAULT_GATEWAYS])];
 }
+
+/**
+ * `text` with every private gateway origin replaced, for anything posted where the public can
+ * read it (an issue): GitHub masks the secret in logs only, and a failure reason names every URL
+ * that was tried.
+ */
+export const redactGateways = (text, env = process.env) => privateGateways(env).reduce((out, origin) => out.replaceAll(origin, 'https://<private gateway>'), text);
 
 /**
  * GET `/ipfs/<path>` from each gateway in order; resolve with { res, url } of the first 2xx.
  * A gateway that fails (non-2xx, timeout, network error) moves to the next; when all fail,
- * throw an Error whose message lists every attempt.
+ * throw an Error whose message lists every attempt. `signal` aborts the request in flight.
  */
-export async function fetchFromAny(path, { gateways = gatewayList(), fetch = globalThis.fetch, headers = {}, requestMs = 30_000 } = {}) {
+export async function fetchFromAny(path, { gateways = gatewayList(), fetch = globalThis.fetch, headers = {}, requestMs = 30_000, signal } = {}) {
   const failures = [];
   for (const gateway of gateways) {
     const url = `${gateway}/ipfs/${path}`;
     try {
-      const res = await fetch(url, { headers, signal: AbortSignal.timeout(requestMs) });
+      const res = await fetch(url, { headers, signal: timeoutSignal(requestMs, signal) });
       if (res.ok) return { res, url };
       failures.push(`${url}: HTTP ${res.status}`);
     } catch (e) {
@@ -55,7 +63,7 @@ export async function fetchFromAny(path, { gateways = gatewayList(), fetch = glo
  * 30 s) and is not counted as an attempt; any other failure moves to the next gateway; the
  * whole list is retried with backoff until the deadline, then an Error lists the last failures.
  */
-export function gatewayClient({ gateways = gatewayList(), fetch = globalThis.fetch, deadlineMs = 20 * 60_000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now, log = () => {} } = {}) {
+export function gatewayClient({ gateways = gatewayList(), fetch = globalThis.fetch, deadlineMs = 20 * 60_000, sleep = wait, now = Date.now, log = () => {} } = {}) {
   const started = now();
   const cooldown = new Map(); // gateway -> time it may be tried again
   let preferred;

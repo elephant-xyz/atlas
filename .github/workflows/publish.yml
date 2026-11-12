@@ -11,10 +11,10 @@ on:
         description: Minutes to keep retrying a gateway export before calling the content unavailable (default 20)
         required: false
       county:
-        description: Transfer only this county's roots on main, e.g. TX/travis (idempotent)
+        description: Transfer every root of this county on main again, e.g. TX/travis (idempotent); other counties' pending publications are published as usual
         required: false
       transfer_all:
-        description: Transfer every root on main again (idempotent), not only the ones this push added
+        description: Transfer every root on main again (idempotent), not only the ones index.json lacks
         type: boolean
         default: false
 
@@ -22,6 +22,13 @@ permissions:
   contents: write
   issues: write
 
+# One run at a time. Merges can land faster than runs finish, and GitHub keeps only the newest
+# waiting run, so a run never assumes it is the only one owed: it takes main as it is when it
+# starts and transfers every root index.json does not list yet (see transfer-roots.mjs). That
+# holds for a dispatched run too, whatever its inputs: it may be the one that replaced another.
+# What a run leaves owed (a group deferred, an index step that failed) is picked up by the next
+# one; publish-retry.yml starts it when no merge does. It is a workflow of its own because a
+# schedule here would queue a run every few hours and so replace a waiting dispatch.
 concurrency: publish
 
 env:
@@ -47,11 +54,18 @@ jobs:
       index_cid: ${{ steps.index.outputs.cid }}
     steps:
       # main is protected by a ruleset that GITHUB_TOKEN cannot bypass; the bot commits (index.json,
-      # reverts) go through the write deploy key registered as a bypass actor, so the checkout's
-      # origin is SSH and every `git push origin HEAD:main` below uses it.
+      # withdrawals) go through the write deploy key registered as a bypass actor, so the checkout's
+      # origin is SSH and every `git push origin HEAD:main` below uses it. `ref` is given
+      # explicitly so the checkout is the branch as it is when the run starts, not the commit
+      # that triggered it: a run that waited behind another one must see what that run did (a
+      # withdrawal, a new index). On a push or the schedule that is main. A dispatch from another
+      # branch runs that branch's transfer step with its own workflow file, which is how a change
+      # to the transfer is tried before it merges, and stops there: the index and the
+      # withdrawal run on main only (and publish-index refuses an index that is not main's).
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # HEAD~1 for the root diff, main's history for published_at
+          ref: ${{ github.ref }}
+          fetch-depth: 0 # main's history for published_at and for a group's last published version
           ssh-key: ${{ secrets.ATLAS_DEPLOY_KEY }}
       - name: Mask the Filebase token
         run: echo "::add-mask::$(printf '%s:%s:%s' "$FILEBASE_ACCESS_KEY" "$FILEBASE_SECRET_KEY" "$FILEBASE_BUCKET" | base64 -w0)"
@@ -65,45 +79,52 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # Publication is a merge that already passed validation; this job never validates.
-      # 1-2. Export every root this push published from the public gateway and import it into
-      # the elephant-atlas bucket, shard by shard and part by part, then pin the root.
+      # Publication is a merge whose archive already passed validation; this job does not validate
+      # archives again. It does refuse a root that two merged pull requests both claim.
+      # 1-2. Export every root main holds and index.json does not list yet from the public gateway
+      # and import it into the elephant-atlas bucket, shard by shard and part by part, then pin
+      # the root. That is this push and any earlier merge whose own run did not finish. A group
+      # that fails is held back and the run goes on with the others; the step ends red when any
+      # was. When the gateways or Filebase are down nothing is blamed on a publication and the
+      # run stops (exit 2 when they are down from the start). Each root is copied in a process of
+      # its own and the step keeps to a time budget, so one archive that exhausts the heap or
+      # hangs costs only itself and the steps below still run.
       - id: transfer
         env:
           COUNTY: ${{ inputs.county }}
+          ATLAS_HELD: ${{ runner.temp }}/held.json
         run: node scripts/transfer-roots.mjs ${{ inputs.transfer_all && '--all' || '' }} ${COUNTY:+--county "$COUNTY"}
 
-      # 3. A root the gateway cannot serve is not publishable: revert the push. A deploy-key push
-      # does trigger workflows, and the revert touches counties/**, so its message carries
-      # [skip ci] to keep it from retriggering this job. index.json and the IPNS name are
-      # untouched on this path. Other failures (credentials, RPC) set no failed_root and are not
-      # reverted; re-run the workflow.
-      - name: Revert the publication
-        if: failure() && steps.transfer.outputs.failed_root != ''
+      # 3. Regenerate index.json from every group whose roots Filebase lists as pinned, commit it
+      # if it changed (pushed through the deploy key, rebased first when main moved during the
+      # run; the commit touches only index.json, outside this workflow's path filter, so it does
+      # not retrigger), add it to the bucket, point the IPNS name at it, and require the gateway
+      # to serve the committed bytes. It runs whatever the transfer step ended as, also after a
+      # crash: it asks Filebase what is pinned, so the counties that did arrive are published and
+      # nothing else is. It ends red when a group on main was left out, after publishing the
+      # rest. A failure here is not a withdrawal; re-run the workflow (workflow_dispatch) and it
+      # finishes idempotently.
+      - id: index
+        if: ${{ !cancelled() && steps.transfer.outcome != 'skipped' && github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ github.token }} # a `Publication pending` issue for a group left out too long
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/publish-index.mjs
+
+      # 4. A root the gateway cannot serve, or one another group holds, is not publishable: take
+      # that group off main (back to what was last published; see withdraw.mjs) and open an
+      # issue. Groups that failed for another reason stay on main and the next run tries them
+      # again. Only once the index step has main's index in place (it sets `indexed`, whatever
+      # the IPNS name and the gateway do afterwards, and also when it ends red over groups it
+      # left out): the withdrawal carries [skip ci], and a group the index listed after all is
+      # not withdrawn. When the index step failed before that, the next run does both.
+      - name: Withdraw what could not be published
+        if: ${{ !cancelled() && steps.index.outputs.indexed == 'true' && steps.transfer.outputs.withdrawn != '' && steps.transfer.outputs.withdrawn != '0' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          FAILED_ROOT: ${{ steps.transfer.outputs.failed_root }}
-          FAILED_REASON: ${{ steps.transfer.outputs.failed_reason }}
-          COUNTY: ${{ steps.transfer.outputs.county }}
-        run: |
-          if git rev-parse -q --verify HEAD^2 >/dev/null; then git revert --no-edit -m 1 HEAD; else git revert --no-edit HEAD; fi
-          git commit --amend --no-edit -m "$(git log -1 --format=%B) [skip ci]"
-          git push origin HEAD:main
-          REVERT=$(git rev-parse HEAD)
-          gh issue create \
-            --title "Publication reverted: $COUNTY $FAILED_ROOT" \
-            --body "$(printf 'The publish workflow could not transfer `%s` into the `elephant-atlas` bucket.\n\n- reason: %s\n- reverted in %s\n- run: %s\n\nRe-upload the archive, confirm a public gateway serves it, then open a new pull request.' \
-              "$FAILED_ROOT" "$FAILED_REASON" "$REVERT" "$RUN_URL")"
-          echo "Reverted ${{ github.sha }} in $REVERT" >> "$GITHUB_STEP_SUMMARY"
-
-      # 4. Regenerate index.json, commit it if it changed (pushed through the deploy key; the
-      # commit touches only index.json, outside this workflow's path filter, so it does not
-      # retrigger), add it to the bucket, point the IPNS name at it, and require the gateway to
-      # serve the committed bytes. A failure here is not a revert; re-run the workflow
-      # (workflow_dispatch) and it finishes idempotently.
-      - id: index
-        run: node scripts/publish-index.mjs
+          ATLAS_HELD: ${{ runner.temp }}/held.json
+        run: node scripts/withdraw.mjs
 
   # 5. Optional: copy the published index.json to S3 for consumers that read it from a bucket
   # (Persist's registered IPFS indexes). Off unless the ATLAS_INDEX_S3_URI repository variable is
@@ -114,7 +135,9 @@ jobs:
   # run shows red); re-run the failed job, or the whole workflow, and it puts the same bytes.
   index-s3:
     needs: publish
-    if: vars.ATLAS_INDEX_S3_URI != ''
+    # Whenever publish-index published an index (it then sets the CID), also when the publish job
+    # ends red over a group it could not publish: the index it did publish is what S3 must hold.
+    if: ${{ !cancelled() && needs.publish.outputs.index_cid != '' && vars.ATLAS_INDEX_S3_URI != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

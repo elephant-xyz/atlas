@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The pull-request gate for every group whose cid, schema, or tables changed relative to
-// origin/main (or every group with --all). Nothing is resolved by path: public gateways do not
+// where the branch left origin/main (or every group with --all). Nothing is resolved by path: public gateways do not
 // resolve paths reliably for content they do not pin.
 //   1. The archive is downloaded by root (`/ipfs/<cid>?format=car`) from the first gateway that
 //      answers with a CAR whose root block is the cid and hashes to it (an empty or root-less
@@ -40,7 +40,7 @@ import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { openCar } from './car-file.mjs';
 import { gatewayClient, gatewayList, withGatewayToken } from './gateways.mjs';
-import { changedGroups, pagesAt, readPages } from './lib.mjs';
+import { baseRef, changedGroups, pagesAt, readPages } from './lib.mjs';
 
 const CLI = process.env.ELEPHANT_CLI ?? 'elephant-cli';
 const CSV = process.env.ATLAS_VALIDATION_CSV ?? 'validation-errors.csv';
@@ -266,7 +266,7 @@ export async function verifyGroup({ cid, schema, tables, car }, deps = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.cwd();
   const all = process.argv.includes('--all');
-  const targets = changedGroups(readPages(root), all ? null : pagesAt('origin/main', root));
+  const targets = changedGroups(readPages(root), all ? null : pagesAt(baseRef(root), root));
   if (!targets.length) console.log('no changed groups to verify');
   else console.log(`gateways, in order: ${gatewayList().join(', ')}`);
   let failed = 0;

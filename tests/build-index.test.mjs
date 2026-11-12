@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { buildEntries, gitPublishedAt, readPages } from '../scripts/lib.mjs';
-import { VERSION, writeIndex } from '../scripts/build-index.mjs';
+import { baseRef, buildEntries, gitPublishedAt, readPages } from '../scripts/lib.mjs';
+import { VERSION, lagging, writeIndex } from '../scripts/build-index.mjs';
 import { CID_A, CID_B, CID_C, CID_D, SCHEMA, group, page, registry, stamps } from './helpers.mjs';
 
 const T_A = '2026-09-21T17:23:52.000Z';
@@ -50,6 +50,38 @@ test('gitPublishedAt is the committer date of the first main commit adding the c
   assert.equal(lookup(LEE, CID_C), '2026-09-22T00:00:00.000Z');
   assert.equal(lookup(LEE, CID_B.replace(/.$/, 'z')), undefined);
   assert.equal(gitPublishedAt('/nonexistent', 'main')(LEE, CID_A), undefined);
+});
+
+test('baseRef is where the branch left origin/main, however far main has moved since', () => {
+  const root = registry({ [LEE]: page() });
+  const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
+  git('init', '-q', '-b', 'main');
+  git('add', '-A');
+  commit(root, 'fork point', '2026-09-21T00:00:00Z');
+  const fork = git('rev-parse', 'HEAD');
+  git('switch', '-q', '-c', 'publish/x');
+  writeFileSync(`${root}/${LEE}`, JSON.stringify(page({ groups: { county: group({ cid: CID_C, tables: CID_D }) } })));
+  commit(root, 'the pull request', '2026-09-22T00:00:00Z');
+  git('switch', '-q', 'main');
+  writeFileSync(`${root}/README.md`, 'another publication merged\n');
+  git('add', '-A');
+  commit(root, 'main moved', '2026-09-23T00:00:00Z');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  git('switch', '-q', 'publish/x');
+  assert.equal(baseRef(root), fork);
+  assert.equal(baseRef('/nonexistent'), 'origin/main');
+});
+
+test('lagging says whether the index still has to catch up with the pages, dates aside', () => {
+  const lee = { path: LEE, page: page() };
+  const index = { version: VERSION, counties: buildEntries([lee], at) };
+  assert.equal(lagging([lee], index), false);
+  assert.equal(lagging([lee], null), true);
+  assert.equal(lagging([{ path: LEE, page: page({ groups: { county: group({ cid: CID_C }) } }) }], index), true, 'a new root');
+  assert.equal(lagging([{ path: LEE, page: page({ groups: { county: group({ schema: CID_D }) } }) }], index), true, 'a schema alone');
+  assert.equal(lagging([{ path: LEE, page: page({ groups: {} }) }], index), true, 'a withdrawn group');
+  assert.equal(lagging([{ path: LEE, page: page({ fips: '99999' }) }], index), true);
+  assert.equal(lagging([{ path: LEE, page: page({ groups: { county: group({ car: CID_D }) } }) }], index), false, 'car is not in the index');
 });
 
 test('generation is deterministic and a no-op on an unchanged registry', () => {

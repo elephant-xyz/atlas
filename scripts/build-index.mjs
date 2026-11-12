@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 // Regenerate index.json from every group of every county page.
-//   build-index          write index.json (exit 0 whether or not it changed)
-//   build-index --check  exit 1 if the committed index.json differs from a regeneration
+//   build-index            write index.json (exit 0 whether or not it changed)
+//   build-index --lagging  print `true` when index.json does not say what the pages say, else
+//                          `false`; writes nothing and needs no dependencies installed
+// That a pull request leaves index.json alone is checked by validate-entry.mjs.
 //
 // `published_at` per group comes from git history (see gitPublishedAt), never from the page.
 // `generated_from` is the main commit the entries were generated from. It is kept as-is when
 // the entries did not change, so re-running on an unchanged registry is a no-op.
-import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { buildEntries, gitPublishedAt, pagesAt, readPages } from './lib.mjs';
+import { buildEntries, git, gitPublishedAt, readPages } from './lib.mjs';
 
 export function readIndex(root) {
   const file = `${root}/index.json`;
@@ -23,43 +24,42 @@ export function render(index) {
   return JSON.stringify(index, null, 2) + '\n';
 }
 
-/** Problems with the committed index.json relative to a regeneration from `pages`. */
-export function checkIndex(root, pages, publishedAt = gitPublishedAt(root, mainRef(root))) {
-  const committed = readIndex(root);
-  if (!committed) return ['index.json: missing; run `npm run index`'];
-  if (body(committed) !== body({ version: VERSION, counties: buildEntries(pages, publishedAt) })) {
-    return ['index.json: differs from a regeneration; never edit it by hand, it is generated on merge'];
-  }
-  return [];
+/**
+ * Whether `index` (a parsed index.json) does not say what `pages` say: a group, a root, a schema,
+ * a fips differs, or a page or group is gone. Publication dates aside, so it needs no history.
+ * True means the publish workflow has work to do.
+ */
+export function lagging(pages, index) {
+  const bare = (counties) => (counties ?? []).map((c) => ({ ...c, groups: Object.fromEntries(Object.entries(c.groups).map(([key, g]) => [key, { cid: g.cid, schema: g.schema, tables: g.tables }])) }));
+  return JSON.stringify(bare(buildEntries(pages, () => undefined))) !== JSON.stringify(bare(index?.counties));
 }
 
 /** origin/main when the checkout has it, else HEAD (the publish job runs on main itself). */
 function mainRef(root) {
   try {
-    execFileSync('git', ['-C', root, 'rev-parse', '--verify', '--quiet', 'origin/main^{commit}'], { stdio: 'ignore' });
+    git(root, 'rev-parse', '--verify', '--quiet', 'origin/main^{commit}');
     return 'origin/main';
   } catch {
     return 'HEAD';
   }
 }
 
-export function writeIndex(root) {
-  const next = { version: VERSION, counties: buildEntries(readPages(root), gitPublishedAt(root, mainRef(root))) };
+/** Write index.json from `pages` (the working tree's by default); true when its entries changed. */
+export function writeIndex(root, pages = readPages(root)) {
+  const next = { version: VERSION, counties: buildEntries(pages, gitPublishedAt(root, mainRef(root))) };
   const current = readIndex(root);
   const unchanged = current && body(current) === body(next);
-  const sha = unchanged ? current.generated_from : execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const sha = unchanged ? current.generated_from : git(root, 'rev-parse', 'HEAD').trim();
   writeFileSync(`${root}/index.json`, render({ version: VERSION, generated_from: sha, ...next }));
   return !unchanged;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.cwd();
-  if (process.argv.includes('--check')) {
-    // On a pull request the index must match the pages already on main: the publish workflow
-    // regenerates it after merge, so a PR that changes it was edited by hand.
-    const problems = checkIndex(root, pagesAt('origin/main', root) ?? readPages(root));
-    for (const p of problems) console.error(p);
-    process.exit(problems.length ? 1 : 0);
+  // --lagging: print whether index.json lags the pages (see lagging) and change nothing.
+  if (process.argv.includes('--lagging')) {
+    console.log(String(lagging(readPages(root), readIndex(root))));
+    process.exit(0);
   }
   console.log(writeIndex(root) ? 'index.json updated' : 'index.json unchanged');
 }
