@@ -43,6 +43,8 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    outputs:
+      index_cid: ${{ steps.index.outputs.cid }}
     steps:
       # main is protected by a ruleset that GITHUB_TOKEN cannot bypass; the bot commits (index.json,
       # reverts) go through the write deploy key registered as a bypass actor, so the checkout's
@@ -100,4 +102,44 @@ jobs:
       # retrigger), add it to the bucket, point the IPNS name at it, and require the gateway to
       # serve the committed bytes. A failure here is not a revert; re-run the workflow
       # (workflow_dispatch) and it finishes idempotently.
-      - run: node scripts/publish-index.mjs
+      - id: index
+        run: node scripts/publish-index.mjs
+
+  # 5. Optional: copy the published index.json to S3 for consumers that read it from a bucket
+  # (Persist's registered IPFS indexes). Off unless the ATLAS_INDEX_S3_URI repository variable is
+  # set. It runs only after the IPNS name serves the new index, in its own job so the OIDC token
+  # (id-token: write) and the role it assumes never reach the transfer or the deploy key. It
+  # uploads main's index.json only when its UnixFS CID is the one publish-index published, so
+  # the object is those exact bytes. A failure here leaves the IPFS publication as it is (the
+  # run shows red); re-run the failed job, or the whole workflow, and it puts the same bytes.
+  index-s3:
+    needs: publish
+    if: vars.ATLAS_INDEX_S3_URI != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # This job talks to S3 only; keep the workflow's Filebase credentials out of it.
+      FILEBASE_ACCESS_KEY: ''
+      FILEBASE_SECRET_KEY: ''
+      ATLAS_GATEWAYS: ''
+      ATLAS_GATEWAY_TOKEN: ''
+      ATLAS_INDEX_S3_URI: ${{ vars.ATLAS_INDEX_S3_URI }}
+      ATLAS_INDEX_CID: ${{ needs.publish.outputs.index_cid }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main # where publish-index committed the index (or left it unchanged)
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ATLAS_INDEX_S3_ROLE_ARN }}
+          aws-region: ${{ vars.ATLAS_INDEX_S3_REGION || 'us-east-1' }}
+          role-session-name: atlas-index-s3-${{ github.run_id }}
+      - run: node scripts/upload-index-s3.mjs index.json

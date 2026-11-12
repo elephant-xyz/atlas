@@ -70,7 +70,8 @@ is not publishable, whatever the upload logs say.
    or force-pushed. Merge once both are in place.
 8. The publish workflow transfers your roots into the registry's Filebase bucket, regenerates
    `index.json`, commits it to `main`, and points the `elephant-atlas` IPNS name at it.
-   Consumers read the index through that name. The workflow's own commits (the index, a
+   Consumers read the index through that name (and, when `ATLAS_INDEX_S3_URI` is set, from a
+   byte-identical copy in S3; see the README). The workflow's own commits (the index, a
    revert) are pushed through a deploy key, the ruleset's only bypass.
 
 ## When a publication is reverted

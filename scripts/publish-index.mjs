@@ -4,6 +4,7 @@
 // Idempotent: the add is content-addressed, the commit is skipped when unchanged, and the IPNS
 // publish is skipped when the name already resolves to the CID (so a re-dispatch after a
 // network failure finishes the job). Exits 1 on any failure; nothing here is a revert.
+// On success it writes GITHUB_OUTPUT cid=<index CID>, which upload-index-s3 holds its copy to.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -82,4 +83,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const summary = `Published index.json ${cid} (${changed ? 'updated' : 'unchanged'}); ipns ${ID} -> ${want}; ${GATEWAY}/ipns/${ID}`;
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `cid=${cid}\n`);
 }
