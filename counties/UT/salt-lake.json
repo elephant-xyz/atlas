@@ -1,0 +1,13 @@
+{
+  "county": "salt-lake",
+  "state": "UT",
+  "fips": "49035",
+  "groups": {
+    "county": {
+      "cid": "baguqeera4p6ggkqyqkuhdk3snp64st2wxnsmalyba6pqwkehydqicguv5mfa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerazh2oqwjoadp5dw6y3hxaqok7ygaun2knyr36uehhaexn3qub2ina",
+      "car": "bafybeid6fsr7he6i2yr7piysxmtgseo3q2fr3qjpdkj56jstgkc7vi4t74"
+    }
+  }
+}
