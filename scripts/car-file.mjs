@@ -70,7 +70,10 @@ export async function openCar(file) {
   if (header?.version !== 1 || !Array.isArray(header.roots)) throw new Error(`${file}: not a CARv1`);
   const roots = header.roots.map((c) => CID.asCID(c) ?? CID.parse(String(c)));
   let pos = headerStart + headerLength;
-  const slot = new Map();
+  // A V8 Map holds at most 2^24 (16,777,216) entries, whatever the heap; Cook County's CAR has
+  // 31.5M blocks. Split the index over 64 Maps by the key's last byte (the end of a sha256 digest).
+  const shards = Array.from({ length: 64 }, () => new Map());
+  const shardOf = (key) => shards[key.charCodeAt(key.length - 1) & 63];
   const offsets = [];
   const lengths = [];
   while (base + pos < fileSize) {
@@ -86,8 +89,9 @@ export async function openCar(file) {
     }
     const [sectionLength, sectionStart] = v;
     const key = Buffer.from(buf.buffer, buf.byteOffset + sectionStart, cl).toString('latin1');
-    if (!slot.has(key)) {
-      slot.set(key, offsets.length);
+    const shard = shardOf(key);
+    if (!shard.has(key)) {
+      shard.set(key, offsets.length);
       offsets.push(base + sectionStart + cl);
       lengths.push(sectionLength - cl);
     }
@@ -97,9 +101,13 @@ export async function openCar(file) {
   return {
     getRoots: async () => roots,
     size: offsets.length,
-    slotOf: (cid) => slot.get(keyOf(cid)),
+    slotOf: (cid) => {
+      const key = keyOf(cid);
+      return shardOf(key).get(key);
+    },
     async get(cid) {
-      const i = slot.get(keyOf(cid));
+      const key = keyOf(cid);
+      const i = shardOf(key).get(key);
       if (i === undefined) return undefined;
       const bytes = new Uint8Array(lengths[i]);
       await handle.read(bytes, 0, lengths[i], offsets[i]);
