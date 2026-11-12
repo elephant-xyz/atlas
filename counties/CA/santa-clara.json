@@ -1,0 +1,13 @@
+{
+  "county": "santa-clara",
+  "state": "CA",
+  "fips": "06085",
+  "groups": {
+    "county": {
+      "cid": "baguqeera7c23cpvkpc4oowskxrbi5tknpvabzmv5ox5j55s6zvnqp2m77o6a",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraceyahyqrne7l2mo4iw5hqdi3lfsenazrewmvjboqhlqjmetfcdoa",
+      "car": "bafybeihq7pwk67ohnm3twrabwctepovlejyzjwwaz6mpn7ug4p4dmouyce"
+    }
+  }
+}
