@@ -62,7 +62,7 @@ import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { openCar } from './car-file.mjs';
-import { pinStatus, rpc as filebaseRpc } from './filebase.mjs';
+import { pinStatus, poll, rpc as filebaseRpc } from './filebase.mjs';
 import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
 import { claimOrder, groupsOf, heldFor, holdConflicts, holdOf, indexAt, isOwed, latestPublished, pagesAt, pool, publishedGroup, rootsOf, sleep } from './lib.mjs';
 
@@ -93,6 +93,7 @@ const defaults = () => ({
   // A pinned import makes Filebase pin the whole DAG before it answers: over 30 minutes for
   // Travis's 11.3M blocks.
   pinMs: Number(process.env.ATLAS_PIN_MINUTES ?? 180) * 60_000,
+  pinPollMs: Number(process.env.ATLAS_PIN_POLL_MINUTES ?? 5) * 60_000,
   skipStored: process.env.ATLAS_SKIP_STORED_SHARDS === '1',
   sleep,
   now: Date.now,
@@ -188,6 +189,9 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
       break;
     } catch (e) {
       d.signal?.throwIfAborted();
+      // A pinned import that outlives Filebase's proxy (HTTP 504 at 60 minutes) is not re-sent:
+      // the pin carries on behind the proxy, and pinRoot watches pin/ls for it instead.
+      if (pinRoots && isProxyTimeout(e)) throw e;
       // Filebase drops connections and answers 500 under load; back off and try again.
       if (attempt === 6) throw e;
       d.log(`dag/import attempt ${attempt}: ${e.message}`);
@@ -230,6 +234,37 @@ async function transferSubtree(root, path, expect, tally, d) {
   }
 }
 
+/** Filebase's nginx proxy ends a request after 60 minutes with HTTP 504, whatever the client allows. */
+const isProxyTimeout = (e) => /HTTP 504\b/.test(e?.message ?? '');
+
+/**
+ * Pin `root`, whose DAG is already in the bucket, and prove it pinned. A pinned import makes Filebase
+ * pin the whole DAG before it answers, and its proxy gives up on any request after 60 minutes: King
+ * County's 8.9M blocks (2026-11-12) were all stored by 17:51, the pinned import answered HTTP 504 at
+ * 18:51, and re-sending it ran the root out of time at 19:26. So:
+ *   - a root pin/ls already lists (a pin a timed-out run left behind) is not imported again;
+ *   - a pinned import that times out at the proxy is not re-sent: pin/ls is polled every
+ *     ATLAS_PIN_POLL_MINUTES (default 5) for up to ATLAS_PIN_MINUTES;
+ *   - a pin that never appears is an ordinary error, so the root is deferred, never withdrawn:
+ *     a slow pin is Filebase's load, not the publication's fault.
+ */
+async function pinRoot(root, block, d) {
+  if ((await pinStatus(root, { call: d.rpc })).pinned) {
+    d.log(`${root} is already pinned recursively; no pinned import needed`);
+  } else {
+    try {
+      d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
+    } catch (e) {
+      if (!isProxyTimeout(e)) throw e;
+      const minutes = Math.round(d.pinMs / 60_000);
+      d.log(`pinned import of ${root} timed out at the Filebase proxy (HTTP 504); polling pin/ls for up to ${minutes} min`);
+      const pinned = await poll(async () => (await pinStatus(root, { call: d.rpc })).pinned, { limitMs: d.pinMs, intervalMs: d.pinPollMs, sleep: d.sleep, now: d.now });
+      if (!pinned) throw new Error(`${root} was not pinned within ${minutes} min of the pinned import timing out at the Filebase proxy`);
+    }
+  }
+  await requirePinned(root, d);
+}
+
 async function requirePinned(root, d) {
   const { pinned, why } = await pinStatus(root, { call: d.rpc, tries: 3, sleep: d.sleep });
   if (!pinned) throw new TransferFailed(root, `not pinned recursively after import (${why})`);
@@ -247,8 +282,7 @@ export async function transferArchive(root, deps = {}) {
   // One temp dir for every shard: the jobs get their own copy of the deps (for the pool's signal), so it is made first.
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
   await pool(index.shards.map((s, i) => (signal) => transferSubtree(root, `${root}/shards/${i}`, s.toString(), tally, { ...d, signal })), d.parallel);
-  d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
-  await requirePinned(root, d);
+  await pinRoot(root, block, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);
 }
 
@@ -369,8 +403,7 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
     if (d.skipStored) await pool(shards.map((s) => async () => (await hasBlock(s.toString(), d)) && held.add(s.toString())), 4);
     d.log(`${held.size}/${shards.length} shard(s) already in the bucket; sending the rest`);
     await pool(shards.filter((s) => !held.has(s.toString())).map((s) => (signal) => transferLocalSubtree(root, reader, s, sent, tally, { ...d, signal })), d.parallel);
-    d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
-    await requirePinned(root, d);
+    await pinRoot(root, block, d);
     d.log(`pinned ${root}: ${tally.blocks} distinct blocks, ${tally.bytes} bytes copied`);
   } finally {
     await reader?.close();
@@ -556,8 +589,7 @@ export async function transferTables(root, deps = {}) {
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
   const jobs = names.flatMap((name) => tables.tables[name].parts.map((part, i) => (signal) => transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, part.cid.toString(), tally, { ...d, signal })));
   await pool(jobs, d.parallel);
-  d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
-  await requirePinned(root, d);
+  await pinRoot(root, block, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied (the county_root link is pinned by the archive transfer)`);
 }
 

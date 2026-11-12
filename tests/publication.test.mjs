@@ -608,19 +608,27 @@ async function fixture(rpcReply) {
     return routes[key] ? routes[key]() : new Response('no', { status: 404 });
   };
   const calls = [];
+  // Like Filebase: pin/ls lists a root only once a pinned import of it has pinned it.
+  const pinned = new Set();
   const rpc = async (path, { body } = {}) => {
-    if (path.startsWith('pin/ls')) return [{ Keys: { [new URL(`x:?${path.split('?')[1]}`).searchParams.get('arg')]: { Type: 'recursive' } } }];
+    if (path.startsWith('pin/ls')) {
+      const arg = new URL(`x:?${path.split('?')[1]}`).searchParams.get('arg');
+      return [{ Keys: pinned.has(arg) ? { [arg]: { Type: 'recursive' } } : {} }];
+    }
     const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
     let n = 0;
     for await (const _ of reader.blocks()) n++;
     const [root] = await reader.getRoots();
     calls.push(`${path} root=${root} blocks=${n}`);
-    return (rpcReply ?? ((root, n) => [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }]))(root, n, path);
+    const reply = (rpcReply ?? ((root, n) => [{ Root: { Cid: { '/': root.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }]))(root, n, path);
+    const line = reply.find((l) => l.Root)?.Root;
+    if (path.includes('pin-roots=true') && line?.Cid?.['/'] === root.toString() && !line.PinErrorMsg) pinned.add(root.toString());
+    return reply;
   };
   let t = 0;
   const tmp = await mkdtemp(join(tmpdir(), 'atlas-test-'));
   const deps = { fetch, rpc, gateways: [G], deadlineMs: 60_000, sleep: async (ms) => (t += ms), now: () => t, log() {}, tmp };
-  return { index, shard, property, tables, part, fetched, calls, deps, tmp, G, G2 };
+  return { index, shard, property, tables, part, fetched, calls, deps, tmp, G, G2, pinned };
 }
 
 test('transferArchive imports the root block, each shard, then the root block pinned, and verifies the pin', async () => {
@@ -754,7 +762,7 @@ test('transferArchiveFromCar downloads the car file once, imports post-order pie
   const fetched = [];
   const order = [];
   const rpc = async (path, { body } = {}) => {
-    if (path.startsWith('pin/ls')) return [{ Keys: { [index.cid.toString()]: { Type: 'recursive' } } }];
+    if (path.startsWith('pin/ls')) return [{ Keys: f.calls.some((c) => c.startsWith('dag/import?pin-roots=true')) ? { [index.cid.toString()]: { Type: 'recursive' } } : {} }];
     const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
     let n = 0;
     for await (const b of reader.blocks()) (n++, order.push(b.cid.toString()));
@@ -789,7 +797,7 @@ test('shards in parallel never import a piece linking a block that is only queue
   const paths = [];
   const rpc = async (path, { body } = {}) => {
     paths.push(path);
-    if (path.startsWith('pin/ls')) return [{ Keys: { [index.cid.toString()]: { Type: 'recursive' } } }];
+    if (path.startsWith('pin/ls')) return [{ Keys: paths.some((p) => p.includes('pin-roots=true')) ? { [index.cid.toString()]: { Type: 'recursive' } } : {} }];
     const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
     const here = [];
     for await (const b of reader.blocks()) here.push(b);
@@ -823,7 +831,7 @@ test('a re-run skips shards whose root the bucket already holds and gives the pi
   const imported = [];
   const timeouts = [];
   const rpc = async (path, { body, timeoutMs } = {}) => {
-    if (path.startsWith('pin/ls')) return [{ Keys: { [index.cid.toString()]: { Type: 'recursive' } } }];
+    if (path.startsWith('pin/ls')) return [{ Keys: timeouts.length ? { [index.cid.toString()]: { Type: 'recursive' } } : {} }];
     if (path.startsWith('block/get')) {
       if (path.includes(shard0.cid.toString())) return [{}];
       throw new Error('The operation was aborted');
@@ -859,4 +867,48 @@ test('a car file that lacks a block is a TransferFailed', async () => {
   const file = await car(f.index.cid, [f.index, f.shard]);
   const fetch = async (url) => (url.endsWith(CAR) ? new Response(file) : new Response('no', { status: 404 }));
   await assert.rejects(transferArchiveFromCar(f.index.cid.toString(), CAR, { ...f.deps, fetch }), (e) => e instanceof TransferFailed && /missing block/.test(e.reason));
+});
+
+test('a root pin/ls already lists is not imported pinned again (a pin a timed-out run left behind)', async () => {
+  const f = await fixture();
+  f.pinned.add(f.index.cid.toString());
+  const log = [];
+  await transferArchive(f.index.cid.toString(), { ...f.deps, log: (l) => log.push(l) });
+  assert.deepEqual(f.calls, [
+    `dag/import?pin-roots=false&stats=true root=${f.index.cid} blocks=1`,
+    `dag/import?pin-roots=false&stats=true root=${f.shard.cid} blocks=3`,
+  ]);
+  assert.ok(log.includes(`${f.index.cid} is already pinned recursively; no pinned import needed`));
+});
+
+test('a pinned import that times out at the Filebase proxy is not re-sent; pin/ls is polled until the pin appears', async () => {
+  const f = await fixture();
+  const root = f.index.cid.toString();
+  let polls = 0;
+  const rpc = async (path, opts) => {
+    if (path.startsWith('pin/ls')) return [{ Keys: path.includes(root) && ++polls > 3 ? { [root]: { Type: 'recursive' } } : {} }];
+    if (path.includes('pin-roots=true')) {
+      await f.deps.rpc(path, opts); // recorded, like the request Filebase received
+      throw new Error('dag/import: HTTP 504 <html><head><title>504 Gateway Time-out</title></head>');
+    }
+    return f.deps.rpc(path, opts);
+  };
+  const log = [];
+  await transferArchive(root, { ...f.deps, rpc, pinMs: 60 * 60_000, pinPollMs: 5 * 60_000, log: (l) => log.push(l) });
+  assert.equal(f.calls.filter((c) => c.includes('pin-roots=true')).length, 1, 'the pinned import is sent once');
+  assert.ok(log.some((l) => l.includes('timed out at the Filebase proxy (HTTP 504); polling pin/ls for up to 60 min')));
+  assert.ok(polls >= 4);
+});
+
+test('a pin that never appears after a proxy timeout defers the root (an ordinary error, never a TransferFailed)', async () => {
+  const f = await fixture();
+  const rpc = async (path, opts) => {
+    if (path.startsWith('pin/ls')) return [{ Keys: {} }];
+    if (path.includes('pin-roots=true')) throw new Error('dag/import: HTTP 504 Gateway Time-out');
+    return f.deps.rpc(path, opts);
+  };
+  await assert.rejects(
+    transferArchive(f.index.cid.toString(), { ...f.deps, rpc, pinMs: 30 * 60_000, pinPollMs: 5 * 60_000 }),
+    (e) => !(e instanceof TransferFailed) && /was not pinned within 30 min of the pinned import timing out at the Filebase proxy/.test(e.message)
+  );
 });
