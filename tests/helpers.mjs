@@ -65,7 +65,7 @@ import { CarReader } from '@ipld/car';
  * CAR and its root pinned, unless `pins(root, blocks, key)` says otherwise ('pending': Pinning-Status
  * pinning and never pinned; anything else: failed). `respond(req)` may return { status, body, after } to answer a
  * request instead (`after: true` stores the object first, like a proxy timing out on a request
- * the server finished). Resolves { url, objects, pinned, requests, close() }.
+ * the server finished; `hold: true` never answers it). Resolves { url, objects, pinned, requests, close() }.
  */
 export async function fakeS3({ accessKey = 'AK', secretKey = 'SK', pins = () => 'pinned', respond = () => undefined } = {}) {
   const objects = new Map(); // `${bucket}/${key}` -> { body, metadata }
@@ -121,6 +121,7 @@ export async function fakeS3({ accessKey = 'AK', secretKey = 'SK', pins = () => 
     });
     if (!auth.startsWith(`AWS4-HMAC-SHA256 Credential=${accessKey}/`) || req.headers['x-amz-content-sha256'] !== hash || again.authorization !== auth) return send(403, '<Error><Code>SignatureDoesNotMatch</Code></Error>');
     const override = respond({ op, key, query: u.search });
+    if (override?.hold) return; // never answered: the client's own timeout or signal ends it
     if (override && !override.after) return send(override.status, override.body ?? '');
     if (op === 'HeadObject') {
       const o = objects.get(k);

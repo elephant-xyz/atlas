@@ -1176,6 +1176,91 @@ test('tables that do not pin from their parts alone are sent again with the arch
   }
 });
 
+/** A gateway response that sends a few bytes of its body, then drops the connection like undici ("terminated"). */
+const dropping = () =>
+  new Response(
+    new ReadableStream({
+      start(c) {
+        c.enqueue(new Uint8Array([0x3a, 0xa2, 0x65]));
+        c.error(new TypeError('terminated'));
+      },
+    }),
+  );
+
+test('a part download whose body the gateway drops midway is retried from the start, and the tables still pin', async () => {
+  const f = await s3Fixture();
+  try {
+    const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
+    let asked = 0;
+    const fetch = async (url, init) => (url === partUrl && ++asked === 1 ? dropping() : f.deps.fetch(url, init));
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, fetch });
+    assert.equal(asked, 2, 'the part was requested again after the drop');
+    assert.match(f.logs.join('\n'), new RegExp(`/ipfs/${f.tables.cid}/tables/address/parts/0/cid: download dropped \\(terminated\\); retry 1/4`));
+    const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
+    assert.deepEqual(blocks.sort(), [f.tables, f.part].map((b) => b.cid.toString()).sort(), 'the retried part is in the CAR once');
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('a part download the gateway drops every time fails after 5 attempts instead of hanging, and nothing is uploaded', async () => {
+  const f = await s3Fixture();
+  try {
+    const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
+    let asked = 0;
+    const fetch = async (url, init) => (url === partUrl ? (asked++, dropping()) : f.deps.fetch(url, init));
+    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, fetch }), /terminated/);
+    assert.equal(asked, 5, 'DOWNLOAD_ATTEMPTS whole downloads');
+    assert.equal(f.logs.filter((l) => /download dropped/.test(l)).length, 4);
+    assert.equal(f.s3.requests.filter((r) => r.op !== 'HeadObject').length, 0, 'nothing uploaded');
+    assert.deepEqual(readdirSync(f.tmp), []);
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('tables whose parts-only upload is still unanswered when the tables pin window ends are sent again as the full CAR', async () => {
+  // The CompleteMultipartUpload of the parts-only CAR is held (Filebase waiting on a pin that never
+  // comes); it ends in an AbortError from its own completeTimeoutMs, which is "did not pin", not a cancelled run.
+  const partsOnly = (key) => !key.includes('-tables-full-');
+  const f = await s3Fixture({ respond: ({ op, key }) => (op === 'CompleteMultipartUpload' && partsOnly(key) ? { hold: true } : undefined) });
+  try {
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesPinMs: 300 });
+    const completes = f.s3.requests.filter((r) => r.op === 'CompleteMultipartUpload').map((r) => r.key);
+    assert.deepEqual(completes, [`import/FL-lee-county-tables-${f.tables.cid}.car`, `import/FL-lee-county-tables-full-${f.tables.cid}.car`]);
+    assert.equal(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`), undefined, 'the parts-only CAR was never stored');
+    const { roots, blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-full-${f.tables.cid}.car`).body);
+    assert.deepEqual(roots, [f.tables.cid.toString()]);
+    assert.deepEqual(blocks.sort(), [f.index, f.shard, f.property, f.tables, f.part].map((b) => b.cid.toString()).sort());
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
+    assert.match(f.logs.join('\n'), /did not pin from its parts alone .*; sending it again with the archive's blocks/);
+    assert.deepEqual(readdirSync(f.tmp), []);
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('a cancelled run (d.signal aborted) during the parts-only tables upload stops there, without the full-CAR fallback', async () => {
+  const run = new AbortController();
+  const f = await s3Fixture({
+    respond: ({ op }) => {
+      if (op !== 'CompleteMultipartUpload') return undefined;
+      setTimeout(() => run.abort(), 20);
+      return { hold: true };
+    },
+  });
+  try {
+    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesPinMs: 300, signal: run.signal }), (e) => e.name === 'AbortError');
+    assert.ok(run.signal.aborted);
+    assert.ok(!f.s3.requests.some((r) => r.key.includes('-tables-full-')), 'no full CAR uploaded');
+    assert.ok(!f.logs.some((l) => /did not pin from its parts alone/.test(l)));
+    assert.ok(!f.s3.pinned.has(f.tables.cid.toString()));
+  } finally {
+    await f.s3.close();
+  }
+});
+
 test('an upload whose completion the proxy drops (504) with the object stored is not sent again; pin/ls is watched', async () => {
   const f = await s3Fixture({ respond: ({ op }) => (op === 'CompleteMultipartUpload' ? { status: 504, after: true } : undefined) });
   try {
