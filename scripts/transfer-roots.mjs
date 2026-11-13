@@ -864,16 +864,31 @@ async function appendCar(root, what, source, writer, seen, want = []) {
  * temp file first (a slow gateway must not hold the others' writes), then append it to `writer`;
  * an export that lacks its own root block is TransferFailed.
  */
+/** Whole-download attempts per exported part (a dropped body is retried from the start). */
+const DOWNLOAD_ATTEMPTS = 5;
+
 async function appendExports(root, items, writer, seen, d, label) {
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
   let appending = Promise.resolve();
   let done = 0;
   await pool(
     items.map((item) => async (signal) => {
-      const res = await gatewayGet(root, `${item.path}?format=car`, 'application/vnd.ipld.car', { ...d, signal });
       const file = join(d.tmp, `${item.cid}.export.car`);
       try {
-        await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+        // A gateway can drop the connection partway through the body ("terminated", ECONNRESET);
+        // gatewayGet only retries getting a response, so the whole download is retried here.
+        for (let attempt = 1; ; attempt++) {
+          const res = await gatewayGet(root, `${item.path}?format=car`, 'application/vnd.ipld.car', { ...d, signal });
+          try {
+            await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+            break;
+          } catch (e) {
+            signal?.throwIfAborted();
+            if (attempt >= DOWNLOAD_ATTEMPTS) throw e;
+            d.log(`/ipfs/${item.path}: download dropped (${e.message}); retry ${attempt}/${DOWNLOAD_ATTEMPTS - 1}`);
+            await d.sleep(Math.min(5_000 * 2 ** (attempt - 1), 60_000));
+          }
+        }
         const append = appending.then(async () => {
           const found = await appendCar(root, `/ipfs/${item.path}`, createReadStream(file), writer, seen, [item.cid]);
           if (!found.has(item.cid)) throw new TransferFailed(root, `/ipfs/${item.path}?format=car lacks the block ${item.cid}`);
@@ -1070,7 +1085,9 @@ export async function transferTablesViaS3(t, deps = {}) {
         await importCarViaS3(root, file, carKey(t, '-tables'), d, Math.min(d.tablesPinMs, d.pinMs));
         return d.log(`pinned ${root} from ${carKey(t, '-tables')} (its county_root ${countyRoot} was already pinned in the bucket)`);
       } catch (e) {
-        if (e instanceof TransferFailed || e.name === 'AbortError') throw e;
+        // Only a cancelled run stops here; an AbortError from the pin window's own timeout (the
+        // CompleteMultipartUpload that waited until tablesPinMs) means "did not pin", so fall back.
+        if (e instanceof TransferFailed || d.signal?.aborted) throw e;
         d.log(`tables ${root} did not pin from its parts alone (${e.message.split('\n')[0]}); sending it again with the archive's blocks`);
       }
     }
