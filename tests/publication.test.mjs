@@ -13,7 +13,7 @@ import { buildEntries, claimOrder, holdBack, holdConflicts, latestPublished, poo
 import { pinLookup, publishable, pushToMain, requireMainIndex } from '../scripts/publish-index.mjs';
 import { openIssues, pendingIssues, revertedIssue, withdraw } from '../scripts/withdraw.mjs';
 import { DEFAULT_GATEWAYS, fetchFromAny, gatewayList, redactGateways } from '../scripts/gateways.mjs';
-import { TransferFailed, inChild, outage, planTransfers, runTransfers, transferArchive, transferArchiveFromCar, transferTables } from '../scripts/transfer-roots.mjs';
+import { TransferFailed, inChild, outage, planGroups, planTransfers, runTransfers, settleHolds, transferArchive, transferArchiveFromCar, transferTables } from '../scripts/transfer-roots.mjs';
 import { validateCar } from '../scripts/verify-roots.mjs';
 import { CID_A, CID_B, CID_C, CID_D, block, car, group, page, registry } from './helpers.mjs';
 
@@ -279,6 +279,7 @@ test('a root is copied in a process of its own: its verdict comes back, and a pr
     if (cid === 'ok') writeFileSync(arg('--result'), '{"ok":true}');
     else if (cid === 'unpublishable') { writeFileSync(arg('--result'), '{"failed":"not available from any gateway"}'); process.exit(1); }
     else if (cid === 'rpc') { writeFileSync(arg('--result'), '{"error":"dag/import: HTTP 500"}'); process.exit(1); }
+    else if (cid === 'deadline') { writeFileSync(arg('--result'), JSON.stringify({ error: process.env.ATLAS_DEADLINE ?? 'none' })); process.exit(1); }
     else if (cid === 'dies') process.abort();
     else await new Promise((r) => setTimeout(r, 60_000));
   `);
@@ -286,6 +287,9 @@ test('a root is copied in a process of its own: its verdict comes back, and a pr
   await run('ok');
   await assert.rejects(run('unpublishable'), (e) => e instanceof TransferFailed && e.cid === 'unpublishable' && e.reason === 'not available from any gateway');
   await assert.rejects(run('rpc'), (e) => !(e instanceof TransferFailed) && e.message === 'dag/import: HTTP 500');
+  // The child is told when it must have reported: a little before it would be killed.
+  const before = Date.now();
+  await assert.rejects(run('deadline', 600_000), (e) => Number(e.message) >= before + 540_000 && Number(e.message) <= Date.now() + 540_000);
   await assert.rejects(run('dies'), (e) => !(e instanceof TransferFailed) && /ended on .* without a result/.test(e.message));
   await assert.rejects(run('hangs', 300), (e) => !(e instanceof TransferFailed) && /ended on SIGTERM without a result/.test(e.message));
 });
@@ -797,7 +801,7 @@ test('shards in parallel never import a piece linking a block that is only queue
   const paths = [];
   const rpc = async (path, { body } = {}) => {
     paths.push(path);
-    if (path.startsWith('pin/ls')) return [{ Keys: paths.some((p) => p.includes('pin-roots=true')) ? { [index.cid.toString()]: { Type: 'recursive' } } : {} }];
+    if (path.startsWith('pin/ls')) return [{ Keys: stored.has(index.cid.toString()) ? { [index.cid.toString()]: { Type: 'recursive' } } : {} }];
     const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
     const here = [];
     for await (const b of reader.blocks()) here.push(b);
@@ -881,34 +885,174 @@ test('a root pin/ls already lists is not imported pinned again (a pin a timed-ou
   assert.ok(log.includes(`${f.index.cid} is already pinned recursively; no pinned import needed`));
 });
 
-test('a pinned import that times out at the Filebase proxy is not re-sent; pin/ls is polled until the pin appears', async () => {
+/** A clock for the pin tests: `sleep` moves it, and so may a fake request. */
+const clocked = () => {
+  const c = { t: 0 };
+  c.now = () => c.t;
+  c.sleep = async (ms) => {
+    c.t += ms;
+  };
+  return c;
+};
+
+test('a pinned import that ends at the Filebase proxy after a while is not re-sent; pin/ls is watched until the pin appears', async () => {
   const f = await fixture();
   const root = f.index.cid.toString();
+  const c = clocked();
   let polls = 0;
   const rpc = async (path, opts) => {
-    if (path.startsWith('pin/ls')) return [{ Keys: path.includes(root) && ++polls > 3 ? { [root]: { Type: 'recursive' } } : {} }];
+    if (path.startsWith('pin/ls')) return [{ Keys: path.includes(root) && ++polls > 4 ? { [root]: { Type: 'recursive' } } : {} }];
     if (path.includes('pin-roots=true')) {
       await f.deps.rpc(path, opts); // recorded, like the request Filebase received
+      c.t += 60 * 60_000;
       throw new Error('dag/import: HTTP 504 <html><head><title>504 Gateway Time-out</title></head>');
     }
     return f.deps.rpc(path, opts);
   };
   const log = [];
-  await transferArchive(root, { ...f.deps, rpc, pinMs: 60 * 60_000, pinPollMs: 5 * 60_000, log: (l) => log.push(l) });
-  assert.equal(f.calls.filter((c) => c.includes('pin-roots=true')).length, 1, 'the pinned import is sent once');
-  assert.ok(log.some((l) => l.includes('timed out at the Filebase proxy (HTTP 504); polling pin/ls for up to 60 min')));
-  assert.ok(polls >= 4);
+  await transferArchive(root, { ...f.deps, ...c, rpc, pinMs: 180 * 60_000, pinPollMs: 60_000, log: (l) => log.push(l) });
+  assert.equal(f.calls.filter((call) => call.includes('pin-roots=true')).length, 1, 'the pinned import is sent once');
+  assert.ok(log.some((l) => /pinned import of .* ended at the Filebase proxy \(dag\/import: HTTP 504 .*watching pin\/ls for up to 180 min/.test(l)));
+  assert.ok(polls >= 5);
 });
 
-test('a pin that never appears after a proxy timeout defers the root (an ordinary error, never a TransferFailed)', async () => {
+test('Santa Clara\'s tables pin: a 502 after 56 minutes is watched, not re-sent five times into resets', async () => {
   const f = await fixture();
+  const root = f.tables.cid.toString();
+  const c = clocked();
+  let sends = 0;
+  const rpc = async (path, opts) => {
+    if (path.startsWith('pin/ls')) return [{ Keys: path.includes(root) && c.t > 90 * 60_000 ? { [root]: { Type: 'recursive' } } : {} }];
+    if (path.includes('pin-roots=true')) {
+      sends++;
+      c.t += 56 * 60_000;
+      throw new Error('dag/import: HTTP 502 <html><head><title>502 Bad Gateway</title></head>');
+    }
+    return f.deps.rpc(path, opts);
+  };
+  await transferTables(root, { ...f.deps, ...c, rpc, pinMs: 180 * 60_000, pinPollMs: 60_000 });
+  assert.equal(sends, 1);
+});
+
+test('a pinned import dropped at once (socket hang up) is sent again with backoff, watching pin/ls meanwhile', async () => {
+  const f = await fixture();
+  const root = f.index.cid.toString();
+  const c = clocked();
+  const sentAt = [];
+  const rpc = async (path, opts) => {
+    if (path.includes('pin-roots=true')) {
+      sentAt.push(c.t);
+      if (sentAt.length < 3) throw new Error('socket hang up');
+    }
+    return f.deps.rpc(path, opts);
+  };
+  await transferArchive(root, { ...f.deps, ...c, rpc, pinMs: 180 * 60_000, pinPollMs: 60_000 });
+  assert.equal(sentAt.length, 3);
+  assert.ok(sentAt[1] - sentAt[0] >= 60_000 && sentAt[2] - sentAt[1] >= 2 * 60_000, `backoff between sends: ${sentAt}`);
+  assert.ok(f.pinned.has(root));
+});
+
+test('a root pin/ls lists while its pinned import is still waiting is done without waiting for the import', async () => {
+  const f = await fixture();
+  const root = f.index.cid.toString();
+  let polls = 0;
+  let aborted = false;
+  const rpc = async (path, opts) => {
+    if (path.startsWith('pin/ls')) return [{ Keys: ++polls > 3 ? { [root]: { Type: 'recursive' } } : {} }];
+    if (path.includes('pin-roots=true')) return new Promise((_, reject) => opts.signal.addEventListener('abort', () => ((aborted = true), reject(opts.signal.reason))));
+    return f.deps.rpc(path, opts);
+  };
+  const log = [];
+  await transferArchive(root, { ...f.deps, rpc, pinPollMs: 60_000, log: (l) => log.push(l) });
+  assert.ok(log.includes(`${root} is listed as pinned recursively while the pinned import was still waiting`));
+  assert.ok(aborted, 'the waiting import is let go');
+});
+
+test('a pin that never appears defers the root (an ordinary error, never a TransferFailed), by the process deadline at the latest', async () => {
+  const f = await fixture();
+  const c = clocked();
   const rpc = async (path, opts) => {
     if (path.startsWith('pin/ls')) return [{ Keys: {} }];
-    if (path.includes('pin-roots=true')) throw new Error('dag/import: HTTP 504 Gateway Time-out');
+    if (path.includes('pin-roots=true')) {
+      c.t += 60 * 60_000;
+      throw new Error('dag/import: HTTP 504 Gateway Time-out');
+    }
     return f.deps.rpc(path, opts);
   };
   await assert.rejects(
-    transferArchive(f.index.cid.toString(), { ...f.deps, rpc, pinMs: 30 * 60_000, pinPollMs: 5 * 60_000 }),
-    (e) => !(e instanceof TransferFailed) && /was not pinned within 30 min of the pinned import timing out at the Filebase proxy/.test(e.message)
+    transferArchive(f.index.cid.toString(), { ...f.deps, ...c, rpc, pinMs: 180 * 60_000, pinPollMs: 5 * 60_000, deadline: 90 * 60_000 }),
+    (e) => !(e instanceof TransferFailed) && /was not pinned within 90 min of its pinned import; everything under it is stored/.test(e.message),
   );
+  assert.ok(c.t >= 90 * 60_000 && c.t < 100 * 60_000, `stopped at the deadline (${c.t / 60_000} min)`);
+});
+
+test('the shards Filebase confirmed are recorded, skipped by the next attempt, and the record dropped once pinned', async () => {
+  const f = await fixture();
+  const a = await block({ label: 'Seed', relationships: {}, n: 7 });
+  const b = await block({ label: 'Seed', relationships: {}, n: 8 });
+  const shard0 = await block({ properties: [{ property_cid: a.cid, data_groups: {} }] });
+  const shard1 = await block({ properties: [{ property_cid: b.cid, data_groups: {} }] });
+  const index = await block({ label: 'CountyIndex', properties: 2, shards: [shard0.cid, shard1.cid], version: 1 });
+  const root = index.cid.toString();
+  const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+  const file = await car(index.cid, [index, shard0, a, shard1, b]);
+  const progressDir = await mkdtemp(join(tmpdir(), 'atlas-progress-'));
+  let imported = [];
+  let pinReply = 'timeout';
+  const rpc = async (path, { body } = {}) => {
+    if (path.startsWith('pin/ls')) return [{ Keys: pinReply === 'pin' && imported.includes(root) ? { [root]: { Type: 'recursive' } } : {} }];
+    const reader = await CarReader.fromBytes(new Uint8Array(await body.get('file').arrayBuffer()));
+    let n = 0;
+    for await (const blk of reader.blocks()) (n++, imported.push(blk.cid.toString()));
+    const [r] = await reader.getRoots();
+    if (path.includes('pin-roots=true')) {
+      if (pinReply === 'timeout') throw new Error('dag/import: HTTP 504 Gateway Time-out');
+      if (pinReply === 'incomplete') return [];
+    }
+    return [{ Root: { Cid: { '/': r.toString() }, PinErrorMsg: '' } }, { Stats: { BlockCount: n, BlockBytesCount: 0 } }];
+  };
+  const fetch = async (url) => (url === `${f.G}/ipfs/${CAR}` ? new Response(file) : new Response('no', { status: 404 }));
+  const deps = { ...f.deps, fetch, rpc, parallel: 2, pieceBytes: 1, pinMs: 10 * 60_000, pinPollMs: 60_000, progressDir };
+  // 1. Every shard stored, the pin does not show in time: deferred, the shards recorded.
+  await assert.rejects(transferArchiveFromCar(root, CAR, deps), (e) => !(e instanceof TransferFailed));
+  assert.deepEqual(JSON.parse(readFileSync(join(progressDir, `${root}.json`), 'utf8')).sort(), [shard0.cid.toString(), shard1.cid.toString()].sort());
+  // 2. The next attempt sends no shard again; the DAG turns out incomplete: deferred, not withdrawn, record dropped.
+  imported = [];
+  pinReply = 'incomplete';
+  await assert.rejects(transferArchiveFromCar(root, CAR, deps), (e) => !(e instanceof TransferFailed) && /after skipping 2 piece\(s\) taken to be in the bucket already; the next attempt sends every piece/.test(e.message));
+  assert.deepEqual(imported, [root], 'only the root block was sent');
+  assert.deepEqual(readdirSync(progressDir), []);
+  // 3. With no record, every shard is sent and the root pinned.
+  imported = [];
+  pinReply = 'pin';
+  await transferArchiveFromCar(root, CAR, deps);
+  assert.ok(imported.includes(shard0.cid.toString()) && imported.includes(shard1.cid.toString()));
+  assert.deepEqual(readdirSync(progressDir), [], 'nothing left to resume');
+});
+
+test('the workflow plans one job per group, and each job transfers its own group only', async () => {
+  const pages = [at(LEE, page()), at(FULTON, fulton())];
+  assert.deepEqual(planGroups(pages, null, {}), [
+    { group: `${LEE}#county`, name: 'FL/lee county', first: CID_A },
+    { group: `${FULTON}#county`, name: 'GA/fulton county', first: CID_C },
+  ]);
+  assert.deepEqual(planGroups(pages, indexOf(page(), fulton()), {}), [], 'nothing owed, no job');
+  const { done, transfer } = transferring({ [CID_C]: new TransferFailed(CID_C, 'not available from any gateway') });
+  const held = await runTransfers(pages, null, { group: `${FULTON}#county` }, { transfer, down: async () => undefined, ...quiet });
+  assert.deepEqual(done, []);
+  assert.deepEqual(holds({ held }), ['withdrawn GA/fulton county']);
+});
+
+test('the holds of a run\'s group jobs are settled as one run would: one withdrawal, then the collisions', async () => {
+  const pages = [at(LEE, page()), at(FULTON, fulton())];
+  const fail = (path, p) => ({ ...heldGroup(path, p, 'county'), reason: 'not available from any gateway' });
+  // Each job withdrew its own group; they arrive in any order.
+  const held = settleHolds(pages, null, [fail(FULTON, fulton()), fail(LEE, page())], {}, () => {});
+  assert.deepEqual(holds({ held }), ['withdrawn FL/lee county', 'deferred GA/fulton county']);
+  assert.match(held[1].reason, /not withdrawn: this run already withdrew a publication/);
+  // fulton claims lee's archive root later; lee's job failed, so fulton is not withdrawn for it, and lee's withdrawal stands.
+  const claim = [at(LEE, page()), at(FULTON, fulton({ county: group({ cid: CID_A, tables: CID_D }) }))];
+  assert.deepEqual(holds({ held: settleHolds(claim, null, [fail(LEE, page())], { claimed: (path) => (path === LEE ? 1 : 2) }, () => {}) }), ['withdrawn FL/lee county']);
+  // When lee went through, fulton's claim is withdrawn.
+  assert.deepEqual(holds({ held: settleHolds(claim, null, [], { claimed: (path) => (path === LEE ? 1 : 2) }, () => {}) }), ['withdrawn GA/fulton county']);
 });
