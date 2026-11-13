@@ -51,30 +51,6 @@ jobs:
           # (scripts/car-file.mjs): a full-county CAR has 11M blocks (Travis).
           NODE_OPTIONS: --max-old-space-size=12288
         run: npm run verify
-      # TEMPORARY, reverted before merge: this pull request changes no group, so the step above
-      # verifies nothing. Verify both Travis County groups once, the largest published archive,
-      # with the CLI's time and peak memory in the log.
-      - name: One-off, verify Travis County with this CLI
-        env:
-          ELEPHANT_CLI: ${{ runner.temp }}/timed-cli
-          ATLAS_VALIDATION_CSV: ${{ runner.temp }}/validation-errors.csv
-          ATLAS_GATEWAYS: ${{ secrets.ATLAS_GATEWAYS }}
-          ATLAS_GATEWAY_TOKEN: ${{ secrets.ATLAS_GATEWAY_TOKEN }}
-          ATLAS_GATEWAY_DEADLINE_MINUTES: ${{ vars.ATLAS_GATEWAY_DEADLINE_MINUTES || '20' }}
-          NODE_OPTIONS: --max-old-space-size=12288
-        run: |
-          printf '#!/bin/sh\nexec /usr/bin/time -v /home/runner/elephant-cli/elephant-cli "$@"\n' > "$ELEPHANT_CLI"
-          chmod +x "$ELEPHANT_CLI"
-          node --input-type=module -e "
-          import { readFileSync } from 'node:fs';
-          import { verifyGroup } from './scripts/verify-roots.mjs';
-          const page = JSON.parse(readFileSync('counties/TX/travis.json', 'utf8'));
-          for (const key of Object.keys(page.groups)) {
-            console.log('verifying travis group ' + key);
-            await verifyGroup(page.groups[key]);
-            console.log('ok travis group ' + key);
-          }
-          "
       - name: Upload validation errors
         if: failure()
         uses: actions/upload-artifact@v4
