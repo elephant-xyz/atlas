@@ -1,0 +1,13 @@
+{
+  "county": "chester",
+  "state": "PA",
+  "fips": "42029",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraiu2vgzh3imclphmr2zwzlgbfitufclnfi6inwpblm2battg3pima",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerafb3qa3k23ndbztwf3tk6kk5ekkjxtcpsj5dfehfr2a5p7eqstbeq",
+      "car": "bafybeig724waf36biwwjhgpcbvmb5235qx3axjs7zdpnobx6th4bz6p3yi"
+    }
+  }
+}
