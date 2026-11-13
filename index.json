@@ -1,7 +1,20 @@
 {
   "version": 1,
-  "generated_from": "89d7d4e3da579bf2f1a44a23c42b07cdbf4a62d4",
+  "generated_from": "913101f3f391792bd2031f2cf4ddc7a1a0218719",
   "counties": [
+    {
+      "county": "santa-clara",
+      "state": "CA",
+      "fips": "06085",
+      "groups": {
+        "county": {
+          "cid": "baguqeera7c23cpvkpc4oowskxrbi5tknpvabzmv5ox5j55s6zvnqp2m77o6a",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraceyahyqrne7l2mo4iw5hqdi3lfsenazrewmvjboqhlqjmetfcdoa",
+          "published_at": "2026-11-12T20:32:31.000Z"
+        }
+      }
+    },
     {
       "county": "new-castle",
       "state": "DE",
@@ -448,6 +461,19 @@
       }
     },
     {
+      "county": "seminole",
+      "state": "FL",
+      "fips": "12117",
+      "groups": {
+        "county": {
+          "cid": "baguqeerakp6usk3hiydblizbbkv2innornrpzahixzumhlydqp3i7okieflq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera2w6rafvd4mjy3z57lj3xn3myshwsq7ppobjea4dde22p65inf5eq",
+          "published_at": "2026-11-12T20:34:49.000Z"
+        }
+      }
+    },
+    {
       "county": "st-johns",
       "state": "FL",
       "fips": "12109",
@@ -551,6 +577,19 @@
       }
     },
     {
+      "county": "nassau",
+      "state": "NY",
+      "fips": "36059",
+      "groups": {
+        "county": {
+          "cid": "baguqeeramzkynqbz5kjf7qq6vcd6zohagcegk44lwpl7drcqrtikpcvry5na",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraj3saodwm7jk2bthn5eazb4ygd4eksiic3ki7txhpxvm2flwmjfrq",
+          "published_at": "2026-11-12T20:33:05.000Z"
+        }
+      }
+    },
+    {
       "county": "franklin",
       "state": "OH",
       "fips": "39049",
@@ -560,6 +599,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraukavcvlfxlnmthgra7nau6tijeixafkvyqqijgopvnpzj7ayv2ca",
           "published_at": "2026-11-12T20:35:49.000Z"
+        }
+      }
+    },
+    {
+      "county": "chester",
+      "state": "PA",
+      "fips": "42029",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraiu2vgzh3imclphmr2zwzlgbfitufclnfi6inwpblm2battg3pima",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerafb3qa3k23ndbztwf3tk6kk5ekkjxtcpsj5dfehfr2a5p7eqstbeq",
+          "published_at": "2026-11-13T20:43:27.000Z"
         }
       }
     },
