@@ -3,7 +3,18 @@
 // the new roots of every group at HEAD whose cid or tables the committed index.json does not
 // list. The index is written only after a transfer, so that is every publication still owed,
 // including one whose own run was cancelled or superseded because several merges landed close
-// together; a run started by one merge finishes the others too. Each root is exported from
+// together; a run started by one merge finishes the others too.
+//
+// How a root gets into the bucket: ATLAS_PIN_VIA=s3 (the default) builds one CAR file of the
+// root's whole DAG and uploads it through Filebase's S3 endpoint with the object metadata
+// import=car, which makes Filebase import the CAR and pin its root; pin/ls must then list it (see
+// "S3 import" below). It replaced the RPC path after 2026-11-13, when roots whose every block had
+// gone in by dag/import, followed by the pinned import of the root block, were never pinned (the
+// Filebase pinning API had no record of them at all, not even a failed one), while every root
+// uploaded as an import=car object was pinned within seconds of the upload. ATLAS_PIN_VIA=rpc
+// keeps the RPC path below as a fallback.
+//
+// RPC path (ATLAS_PIN_VIA=rpc): each root is exported from
 // the IPFS network as CAR through the gateway list (see gateways.mjs) and imported with dag/import, bounded piece by piece so a runner
 // never holds a whole county: the root block alone (pin-roots=false), then one shard or one
 // Parquet part at a time through a temp file, then the root block again with pin-roots=true
@@ -66,19 +77,20 @@
 //
 // TODO: unpin roots of withdrawn groups; nothing is unpinned yet.
 import { spawn } from 'node:child_process';
-import { appendFileSync, createWriteStream, mkdirSync, openAsBlob, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, createReadStream, createWriteStream, mkdirSync, openAsBlob, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { CarReader, CarWriter } from '@ipld/car';
+import { CarBlockIterator, CarReader, CarWriter } from '@ipld/car';
 import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
-import { openCar } from './car-file.mjs';
+import { createCarFile, openCar } from './car-file.mjs';
 import { pinStatus, rpc as filebaseRpc } from './filebase.mjs';
+import { S3Error, filebaseS3 } from './s3.mjs';
 import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
 import { claimOrder, groupsOf, heldFor, holdConflicts, holdOf, indexAt, isOwed, latestPublished, pagesAt, pool, publishedGroup, rootsOf, sleep } from './lib.mjs';
 
@@ -93,7 +105,8 @@ export class TransferFailed extends Error {
 /** The two roots of a group, archive first: [{ county: 'FL/lee', key: 'county.cid', kind: 'archive', cid, car? }, { ..., key: 'county.tables', kind: 'tables', cid }]. */
 const groupRoots = (county, key, g) => [
   { county, key: `${key}.cid`, kind: 'archive', cid: g.cid, ...(g.car ? { car: g.car } : {}) },
-  { county, key: `${key}.tables`, kind: 'tables', cid: g.tables },
+  // archiveCar: the group's car file, for a tables CAR that must carry the archive's blocks too (see transferTablesViaS3).
+  { county, key: `${key}.tables`, kind: 'tables', cid: g.tables, ...(g.car ? { archiveCar: g.car } : {}) },
 ];
 
 const defaults = () => ({
@@ -114,6 +127,14 @@ const defaults = () => ({
   deadline: Number(process.env.ATLAS_DEADLINE) || Infinity,
   skipStored: process.env.ATLAS_SKIP_STORED_SHARDS === '1',
   progressDir: process.env.ATLAS_PROGRESS_DIR || undefined,
+  // S3 import (see importCarViaS3): the bucket, the multipart part size and parts sent at once, and
+  // how long a tables CAR of the parts alone may wait for its pin before the full one is sent.
+  bucket: process.env.FILEBASE_BUCKET || 'elephant-atlas',
+  s3PartBytes: Number(process.env.ATLAS_S3_PART_MB ?? 64) * 1024 * 1024,
+  s3Parallel: Number(process.env.ATLAS_S3_PARALLEL ?? 4),
+  tablesCar: process.env.ATLAS_TABLES_CAR || 'parts',
+  tablesPinMs: Number(process.env.ATLAS_TABLES_PIN_MINUTES ?? 30) * 60_000,
+  s3: undefined, // the S3 client; made from the environment when first needed
   sleep,
   now: Date.now,
   log: console.log,
@@ -705,11 +726,16 @@ export async function runTransfers(pages, index, options, { transfer, down, log 
 }
 
 /** Copy one target, unless an earlier run already pinned it (a re-run after a later root failed). */
-async function transferOne(t) {
+async function transferOne(t, via = process.env.ATLAS_PIN_VIA || 's3') {
   if ((await pinStatus(t.cid)).pinned) return console.log(`already pinned ${t.cid}; skipped`);
-  if (t.kind === 'tables') await transferTables(t.cid);
-  else if (t.car) await transferArchiveFromCar(t.cid, t.car);
-  else await transferArchive(t.cid);
+  if (via === 'rpc') {
+    if (t.kind === 'tables') await transferTables(t.cid);
+    else if (t.car) await transferArchiveFromCar(t.cid, t.car);
+    else await transferArchive(t.cid);
+  } else if (via === 's3') {
+    if (t.kind === 'tables') await transferTablesViaS3(t);
+    else await transferArchiveViaS3(t);
+  } else throw new Error(`ATLAS_PIN_VIA must be s3 or rpc, not ${JSON.stringify(via)}`);
 }
 
 /**
@@ -763,6 +789,311 @@ export async function transferTables(root, deps = {}) {
   await pool(todo.map((p) => async (signal) => (await transferSubtree(root, p.path, p.cid, tally, { ...d, signal }), progress.record(p.cid))), d.parallel);
   await pinAfterSkipping(root, block, parts.length - todo.length, progress, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied (the county_root link is pinned by the archive transfer)`);
+}
+
+// ---- S3 import (ATLAS_PIN_VIA=s3, the default)
+//
+// A root goes into the bucket as one CAR file of its DAG, uploaded through Filebase's S3 endpoint
+// (s3.filebase.com, SigV4, the same FILEBASE_ACCESS_KEY / FILEBASE_SECRET_KEY as the RPC) with the
+// object metadata import=car: Filebase imports the CAR and pins its root. Evidence, 2026-11-13:
+// Chester County's 1.8 GB county.car took 18.5 min to upload with `aws s3 cp --metadata import=car`
+// and its root was pinned 3 s after the upload ended; a server-side copy of King County's CAR into
+// this bucket under import/ with import=car pinned its root within 2 s, and the 10 counties the RPC
+// path had left unpinned were unstuck that way. Roots sent by dag/import, then a pinned import of
+// the root block, had no pin record at all, and the pinned import itself ended in HTTP 504/502 at
+// the proxy.
+//   - archive with `car`: the car file is downloaded once and uploaded as it is;
+//   - archive without: the root block and each shard's CAR export are written into one CAR file,
+//     every block hashed against its CID and written once;
+//   either way the file must hold the root's whole DAG before it is uploaded (every block linked
+//   from the root is in it and hashes to its CID), or the publication is at fault (TransferFailed);
+//   - tables: the tables block and each Parquet part's CAR export, in one CAR rooted at the tables
+//     block. Its county_root link is the archive, which the archive transfer has already pinned in
+//     this bucket. If that CAR does not pin within ATLAS_TABLES_PIN_MINUTES (default 30), a second
+//     one is sent that carries the archive's blocks as well (from the group's car file, or shard by
+//     shard from the gateways), so the tables CAR is a complete DAG on its own. ATLAS_TABLES_CAR=full
+//     sends that one at once.
+// Objects are keyed import/<ST>-<county>-<group>[-tables[-full]]-<root>.car: deterministic, so a
+// re-run finds the object it uploaded, and never the key of another version of the same group
+// (overwriting that object could unpin a root the index still lists). The request that ends an
+// upload can take as long as Filebase takes to read the CAR (a 1.6 KB tables CAR took over a
+// minute), so it waits until the pin deadline while pin/ls is asked every ATLAS_PIN_POLL_MINUTES.
+// A pin that does not appear is an ordinary error: the root is deferred, never withdrawn.
+
+/** The S3 key a target's CAR is uploaded under. */
+export const carKey = (t, suffix = '') => `import/${t.county.replace('/', '-')}-${t.group}${suffix}-${t.cid}.car`;
+
+/** Whether `bytes` are the block `cid` names (sha2-256, or an identity CID that carries its bytes). */
+async function blockHashes(cid, bytes) {
+  const { code, digest } = cid.multihash;
+  if (code === 0x00) return Buffer.compare(Buffer.from(digest), Buffer.from(bytes)) === 0;
+  if (code !== sha256.code) return false;
+  return Buffer.compare(Buffer.from((await sha256.digest(bytes)).digest), Buffer.from(digest)) === 0;
+}
+
+const cidKey = (cid) => Buffer.from(cid.bytes).toString('latin1');
+
+/**
+ * Copy the blocks of the CAR `source` (an async iterable of bytes) into `writer`, each hashed
+ * against its CID (a block that does not is TransferFailed: the gateway, or the publication, sent
+ * bad bytes) and written once (`seen`, CID keys). Returns the set of `want` CIDs it carried.
+ */
+async function appendCar(root, what, source, writer, seen, want = []) {
+  const wanted = new Set(want.map(String));
+  const found = new Set();
+  let reader;
+  try {
+    reader = await CarBlockIterator.fromIterable(source);
+  } catch (e) {
+    throw new TransferFailed(root, `${what} is not a readable CAR (${e.message})`);
+  }
+  for await (const { cid, bytes } of reader) {
+    if (!(await blockHashes(cid, bytes))) throw new TransferFailed(root, `${what}: block ${cid} does not hash to its CID`);
+    const s = cid.toString();
+    if (wanted.has(s)) found.add(s);
+    const key = cidKey(cid);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    writer.put(cid, bytes);
+  }
+  return found;
+}
+
+/**
+ * Export each `item` ({ path, cid }) as CAR from the gateways, `d.parallel` at a time, each to a
+ * temp file first (a slow gateway must not hold the others' writes), then append it to `writer`;
+ * an export that lacks its own root block is TransferFailed.
+ */
+async function appendExports(root, items, writer, seen, d, label) {
+  d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
+  let appending = Promise.resolve();
+  let done = 0;
+  await pool(
+    items.map((item) => async (signal) => {
+      const res = await gatewayGet(root, `${item.path}?format=car`, 'application/vnd.ipld.car', { ...d, signal });
+      const file = join(d.tmp, `${item.cid}.export.car`);
+      try {
+        await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+        const append = appending.then(async () => {
+          const found = await appendCar(root, `/ipfs/${item.path}`, createReadStream(file), writer, seen, [item.cid]);
+          if (!found.has(item.cid)) throw new TransferFailed(root, `/ipfs/${item.path}?format=car lacks the block ${item.cid}`);
+        });
+        appending = append.catch(() => {});
+        await append;
+        done++;
+        if (done === items.length || done % Math.max(1, Math.round(items.length / 10)) === 0) d.log(`${label}: ${done}/${items.length} written (${writer.blocks} blocks)`);
+      } finally {
+        await unlink(file).catch(() => {});
+      }
+    }),
+    d.parallel,
+  );
+}
+
+/** Write archive `root` from the gateways into `writer`: its root block, then each shard's CAR export. Returns the CountyIndex. */
+async function appendArchiveFromGateways(root, writer, seen, d) {
+  const bytes = await rawBlock(root, root, d);
+  const index = decodeBlock(root, `root block ${root}`, bytes);
+  if (index.label !== 'CountyIndex' || !Array.isArray(index.shards)) throw new TransferFailed(root, 'not a CountyIndex block');
+  const cid = CID.parse(root);
+  if (!seen.has(cidKey(cid))) (seen.add(cidKey(cid)), writer.put(cid, bytes));
+  d.log(`archive ${root}: ${index.shards.length} shard(s), ${index.properties} properties, exporting ${d.parallel} at a time`);
+  await appendExports(root, index.shards.map((s, i) => ({ path: `${root}/shards/${i}`, cid: s.toString() })), writer, seen, d, `archive ${root} shards`);
+  return index;
+}
+
+/**
+ * Prove the CAR `file` holds archive `root`'s whole DAG: `root` is one of its roots (unless
+ * `asRoot` is false: a full tables CAR is rooted at the tables block) and is a CountyIndex, and
+ * every block reachable from it is in the file and hashes to its CID. Anything else is the
+ * publication's (or the gateways') fault: TransferFailed. Returns the number of blocks reached.
+ */
+async function checkArchiveCar(root, file, what, { asRoot = true } = {}) {
+  const reader = await openCar(file).catch((e) => Promise.reject(new TransferFailed(root, `${what} is not a readable CAR (${e.message})`)));
+  try {
+    const roots = (await reader.getRoots()).map(String);
+    if (asRoot && !roots.includes(root)) throw new TransferFailed(root, `${what} has roots [${roots.join(', ')}]`);
+    const seen = new Uint8Array(reader.size);
+    const stack = [CID.parse(root)];
+    let reached = 0;
+    while (stack.length) {
+      const cid = stack.pop();
+      const key = cid.toString();
+      const slot = reader.slotOf(key);
+      if (slot === undefined) throw new TransferFailed(root, `${what} is missing block ${key}`);
+      if (seen[slot]) continue;
+      seen[slot] = 1;
+      reached++;
+      const { bytes } = await reader.get(key);
+      if (!(await blockHashes(cid, bytes))) throw new TransferFailed(root, `${what}: block ${key} does not hash to its CID`);
+      if (key === root) {
+        const index = decodeBlock(root, `root block of ${what}`, bytes);
+        if (index.label !== 'CountyIndex' || !Array.isArray(index.shards)) throw new TransferFailed(root, 'not a CountyIndex block');
+      }
+      if (cid.code === DAG_JSON) stack.push(...linksOf(decodeBlock(root, `block ${key} of ${what}`, bytes)));
+      else if (cid.code !== RAW) throw new TransferFailed(root, `block ${key} has codec 0x${cid.code.toString(16)}, which the archive check does not walk`);
+    }
+    return reached;
+  } finally {
+    await reader.close();
+  }
+}
+
+/**
+ * Upload the CAR `file` (rooted at `root`) to `key` with import=car and wait until pin/ls lists
+ * `root`, for `pinMs` at most (and never past the process's deadline):
+ *   - an object already at `key` that Filebase imported as this root (metadata cid) and has not
+ *     failed to pin is not uploaded again; pin/ls is watched;
+ *   - while the upload is in flight pin/ls is asked every ATLAS_PIN_POLL_MINUTES, and a listed root
+ *     is done whatever the upload answers later;
+ *   - an upload whose ending request (PUT, CompleteMultipartUpload) the proxy dropped (502, 504, a
+ *     reset, a timeout) is not sent again when the object is there: pin/ls is watched. Any other
+ *     failed upload is sent again, up to 3 times in all; 4xx other than 429 is final;
+ *   - an object Filebase marks Pinning-Status failed ends the wait at once.
+ * Every failure here is an ordinary Error (deferred, never withdrawn).
+ */
+async function importCarViaS3(root, file, key, d, pinMs = d.pinMs) {
+  const s3 = (d.s3 ??= filebaseS3(process.env, { log: d.log, sleep: d.sleep }));
+  const size = statSync(file).size;
+  const started = d.now();
+  const until = Math.min(started + pinMs, d.deadline);
+  const minutes = Math.max(0, Math.round((until - started) / 60_000));
+  const tick = () => new Promise((r) => setImmediate(r));
+  const head = () => s3.headObject(d.bucket, key).catch((e) => (d.log(`HEAD ${key}: ${e.message}`), undefined));
+  const imported = (h) => h && h.size === size && [h.metadata.cid, h.metadata['atlas-root']].includes(root);
+  const stop = new AbortController();
+  let upload; // { settled, ok, error } of the upload in flight
+  let attempts = 0;
+  const start = () => {
+    attempts++;
+    const u = {};
+    u.promise = s3
+      .uploadFile(d.bucket, key, file, { metadata: { import: 'car', 'atlas-root': root }, partBytes: d.s3PartBytes, parallel: d.s3Parallel, completeTimeoutMs: Math.max(1, until - d.now()), signal: stop.signal })
+      .then((ok) => Object.assign(u, { settled: true, ok }), (error) => Object.assign(u, { settled: true, error }));
+    upload = u;
+  };
+  const before = await head();
+  if (imported(before) && before.metadata.cid === root && before.metadata['pinning-status'] !== 'failed') d.log(`${key} already holds ${root} (pinning status ${before.metadata['pinning-status'] ?? 'unknown'}); not uploading it again`);
+  else {
+    d.log(`uploading ${key} (${size} bytes) with import=car`);
+    start();
+  }
+  try {
+    for (;;) {
+      if (upload) await Promise.race([upload.promise, d.sleep(d.pinPollMs)]);
+      else await d.sleep(d.pinPollMs);
+      await tick();
+      if (upload?.settled) {
+        const { ok, error } = upload;
+        upload = undefined;
+        if (ok) d.log(`uploaded ${key}: ${ok.parts} part(s), ${ok.size} bytes; watching pin/ls for ${root}`);
+        else if (error.name === 'AbortError') throw error;
+        else if (error.phase === 'complete' && isDropped(error) && imported(await head())) d.log(`upload of ${key} ended at the proxy (${error.message.split('\n')[0]}) with the object stored; watching pin/ls for up to ${minutes} min`);
+        else if (attempts < 3 && !(error instanceof S3Error && error.status < 500 && error.status !== 429) && d.now() < until) {
+          d.log(`upload of ${key} failed (${error.message.split('\n')[0]}); sending it again`);
+          start();
+          continue;
+        } else throw new Error(`S3 import of ${root} as ${key} failed: ${error.message}`);
+      }
+      if ((await pinStatus(root, { call: d.rpc })).pinned) {
+        d.log(`${root} is listed as pinned recursively${upload ? ' while its upload was still waiting' : ''}`);
+        break;
+      }
+      if (!upload) {
+        const h = await head();
+        if (h?.metadata['pinning-status'] === 'failed') throw new Error(`Filebase could not pin ${root} from ${key} (Pinning-Status: failed)`);
+        if (d.now() >= until) throw new Error(`${root} was not pinned within ${minutes} min of uploading ${key} with import=car (Pinning-Status: ${h?.metadata['pinning-status'] ?? 'no object'}); the next run watches it again`);
+      }
+    }
+  } finally {
+    stop.abort();
+  }
+  await requirePinned(root, d);
+}
+
+/** Copy archive target `t` as one import=car object: from its car file, or built from the gateways. */
+export async function transferArchiveViaS3(t, deps = {}) {
+  const d = { ...defaults(), ...deps };
+  const root = t.cid;
+  d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
+  const file = join(d.tmp, `${root}.car`);
+  // Inside the try: a partial multi-GB file left behind would fill the runner's disk.
+  try {
+    let what;
+    if (t.car) {
+      what = `car file ${t.car}`;
+      const res = await gatewayGet(root, t.car, '*/*', d);
+      await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+    } else {
+      what = `the CAR built from the gateways`;
+      const writer = createCarFile(file, root);
+      try {
+        await appendArchiveFromGateways(root, writer, new Set(), d);
+      } finally {
+        writer.close();
+      }
+    }
+    const blocks = await checkArchiveCar(root, file, what);
+    d.log(`archive ${root}: ${what} holds the whole DAG (${blocks} blocks, ${statSync(file).size} bytes)`);
+    await importCarViaS3(root, file, carKey(t), d);
+    d.log(`pinned ${root} from ${carKey(t)}`);
+  } finally {
+    await unlink(file).catch(() => {});
+  }
+}
+
+/** Copy tables target `t` as an import=car object: its tables block and parts, then (if that does not pin) with the archive's blocks too. */
+export async function transferTablesViaS3(t, deps = {}) {
+  const d = { ...defaults(), ...deps };
+  const root = t.cid;
+  const bytes = await rawBlock(root, root, d);
+  const tables = decodeBlock(root, `tables block ${root}`, bytes);
+  if (tables.label !== 'CountyTables' || !tables.tables) throw new TransferFailed(root, 'not a CountyTables block');
+  const countyRoot = CID.asCID(tables.county_root)?.toString();
+  const names = Object.keys(tables.tables).sort();
+  const parts = names.flatMap((name) => tables.tables[name].parts.map((part, i) => ({ path: `${root}/tables/${name}/parts/${i}/cid`, cid: part.cid.toString() })));
+  d.log(`tables ${root}: ${names.length} table(s), ${parts.length} part(s), county_root ${countyRoot}`);
+  d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
+  const file = join(d.tmp, `${root}.car`);
+  const full = join(d.tmp, `${root}.full.car`);
+  try {
+    const seen = new Set([cidKey(CID.parse(root))]);
+    const writer = createCarFile(file, root);
+    try {
+      writer.put(CID.parse(root), bytes);
+      await appendExports(root, parts, writer, seen, d, `tables ${root} parts`);
+    } finally {
+      writer.close();
+    }
+    if (d.tablesCar !== 'full') {
+      try {
+        await importCarViaS3(root, file, carKey(t, '-tables'), d, Math.min(d.tablesPinMs, d.pinMs));
+        return d.log(`pinned ${root} from ${carKey(t, '-tables')} (its county_root ${countyRoot} was already pinned in the bucket)`);
+      } catch (e) {
+        if (e instanceof TransferFailed || e.name === 'AbortError') throw e;
+        d.log(`tables ${root} did not pin from its parts alone (${e.message.split('\n')[0]}); sending it again with the archive's blocks`);
+      }
+    }
+    if (!countyRoot) throw new TransferFailed(root, 'the tables block has no county_root link to send the archive by');
+    const writer2 = createCarFile(full, root);
+    try {
+      await appendCar(root, 'the tables CAR', createReadStream(file), writer2, new Set());
+      const seen2 = new Set(seen);
+      if (t.archiveCar) {
+        const res = await gatewayGet(root, t.archiveCar, '*/*', d);
+        await appendCar(root, `car file ${t.archiveCar}`, Readable.fromWeb(res.body), writer2, seen2);
+      } else await appendArchiveFromGateways(countyRoot, writer2, seen2, d);
+    } finally {
+      writer2.close();
+    }
+    await unlink(file).catch(() => {});
+    await checkArchiveCar(countyRoot, full, `the full tables CAR of ${root}`, { asRoot: false });
+    await importCarViaS3(root, full, carKey(t, '-tables-full'), d);
+    d.log(`pinned ${root} from ${carKey(t, '-tables-full')}`);
+  } finally {
+    await unlink(file).catch(() => {});
+    await unlink(full).catch(() => {});
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

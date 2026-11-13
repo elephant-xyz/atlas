@@ -13,9 +13,10 @@ import { buildEntries, claimOrder, holdBack, holdConflicts, latestPublished, poo
 import { pinLookup, publishable, pushToMain, requireMainIndex } from '../scripts/publish-index.mjs';
 import { openIssues, pendingIssues, revertedIssue, withdraw } from '../scripts/withdraw.mjs';
 import { DEFAULT_GATEWAYS, fetchFromAny, gatewayList, redactGateways } from '../scripts/gateways.mjs';
-import { TransferFailed, inChild, outage, planGroups, planTransfers, runTransfers, settleHolds, transferArchive, transferArchiveFromCar, transferTables } from '../scripts/transfer-roots.mjs';
+import { TransferFailed, carKey, inChild, outage, planGroups, planTransfers, runTransfers, settleHolds, transferArchive, transferArchiveFromCar, transferArchiveViaS3, transferTables, transferTablesViaS3 } from '../scripts/transfer-roots.mjs';
+import { s3Client } from '../scripts/s3.mjs';
 import { validateCar } from '../scripts/verify-roots.mjs';
-import { CID_A, CID_B, CID_C, CID_D, block, car, group, page, registry } from './helpers.mjs';
+import { CID_A, CID_B, CID_C, CID_D, block, car, fakeS3, group, page, registry } from './helpers.mjs';
 
 const at = (path, page) => ({ path, page });
 const LEE = 'counties/FL/lee.json';
@@ -751,6 +752,7 @@ test('validateCar is clean only on exit 0 and strips browserslist noise from the
 test('a group with car carries it to the transfer', () => {
   const head = [at(LEE, page({ groups: { county: group({ car: CID_C }) } }))];
   assert.deepEqual(planTransfers(head, null).targets.map((r) => r.car), [CID_C, undefined]);
+  assert.deepEqual(planTransfers(head, null).targets.map((r) => r.archiveCar), [undefined, CID_C], 'the tables root knows the archive car, for a full tables CAR');
 });
 
 test('transferArchiveFromCar downloads the car file once, imports post-order pieces, then pins the root', async () => {
@@ -1055,4 +1057,164 @@ test('the holds of a run\'s group jobs are settled as one run would: one withdra
   assert.deepEqual(holds({ held: settleHolds(claim, null, [fail(LEE, page())], { claimed: (path) => (path === LEE ? 1 : 2) }, () => {}) }), ['withdrawn FL/lee county']);
   // When lee went through, fulton's claim is withdrawn.
   assert.deepEqual(holds({ held: settleHolds(claim, null, [], { claimed: (path) => (path === LEE ? 1 : 2) }, () => {}) }), ['withdrawn GA/fulton county']);
+});
+
+// ---- S3 import (ATLAS_PIN_VIA=s3): a fake Filebase S3 endpoint pins the root of an import=car object
+
+/** The transfer fixture wired to a fake S3 endpoint whose pins pin/ls reports. */
+async function s3Fixture(s3Options) {
+  const f = await fixture();
+  const s3 = await fakeS3(s3Options);
+  const fast = () => new Promise((r) => setTimeout(r, 1));
+  const rpc = async (path) => {
+    if (!path.startsWith('pin/ls')) throw new Error(`unexpected RPC call ${path}`);
+    const arg = new URL(`x:?${path.split('?')[1]}`).searchParams.get('arg');
+    return [{ Keys: s3.pinned.has(arg) ? { [arg]: { Type: 'recursive' } } : {} }];
+  };
+  const logs = [];
+  const deps = { ...f.deps, rpc, sleep: fast, now: Date.now, pinPollMs: 1, s3: s3Client({ endpoint: s3.url, accessKey: 'AK', secretKey: 'SK', sleep: fast }), s3PartBytes: 64, bucket: 'elephant-atlas', log: (m) => logs.push(m) };
+  const target = (kind, cid, extra = {}) => ({ county: 'FL/lee', group: 'county', key: `county.${kind === 'tables' ? 'tables' : 'cid'}`, kind, cid: cid.toString(), ...extra });
+  return { ...f, s3, deps, logs, target };
+}
+
+const carOf = async (bytes) => {
+  const reader = await CarReader.fromBytes(new Uint8Array(bytes));
+  const blocks = [];
+  for await (const b of reader.blocks()) blocks.push(b.cid.toString());
+  return { roots: (await reader.getRoots()).map(String), blocks };
+};
+
+test('an archive is built into one CAR from the gateways and uploaded with import=car (multipart), then pin/ls must list it', async () => {
+  const f = await s3Fixture();
+  try {
+    const t = f.target('archive', f.index.cid);
+    await transferArchiveViaS3(t, f.deps);
+    const key = `import/FL-lee-county-${f.index.cid}.car`;
+    assert.equal(carKey(t), key);
+    const obj = f.s3.objects.get(`elephant-atlas/${key}`);
+    assert.ok(obj, f.logs.join('\n'));
+    assert.equal(obj.metadata.import, 'car');
+    assert.equal(obj.metadata['atlas-root'], f.index.cid.toString());
+    const { roots, blocks } = await carOf(obj.body);
+    assert.deepEqual(roots, [f.index.cid.toString()]);
+    assert.deepEqual(blocks.sort(), [f.index, f.shard, f.property].map((b) => b.cid.toString()).sort(), 'every block once');
+    assert.ok(f.s3.requests.some((r) => r.op === 'CreateMultipartUpload' && r.metadata.import === 'car'), 'multipart, metadata on the create');
+    assert.ok(f.s3.pinned.has(f.index.cid.toString()));
+    assert.deepEqual(readdirSync(f.tmp), [], 'temp files deleted');
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('an archive with car is uploaded from its car file as it is, after proving the file holds the whole DAG', async () => {
+  const f = await s3Fixture();
+  try {
+    const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+    const file = await car(f.index.cid, [f.index, f.shard, f.property]);
+    const fetched = [];
+    const fetch = async (url) => (fetched.push(url), url === `${f.G}/ipfs/${CAR}` ? new Response(file) : new Response('no', { status: 404 }));
+    await transferArchiveViaS3(f.target('archive', f.index.cid, { car: CAR }), { ...f.deps, fetch });
+    assert.deepEqual(fetched, [`${f.G}/ipfs/${CAR}`], 'one request');
+    assert.deepEqual(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-${f.index.cid}.car`).body, file);
+    assert.ok(f.s3.pinned.has(f.index.cid.toString()));
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('a car file that lacks a block, or a gateway block that does not hash, is the publication\'s fault and nothing is uploaded', async () => {
+  const f = await s3Fixture();
+  try {
+    const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+    const partial = await car(f.index.cid, [f.index, f.shard]);
+    const fetch = async () => new Response(partial);
+    await assert.rejects(transferArchiveViaS3(f.target('archive', f.index.cid, { car: CAR }), { ...f.deps, fetch }), (e) => e instanceof TransferFailed && /missing block/.test(e.reason));
+    const forged = { cid: f.property.cid, bytes: new TextEncoder().encode('{"label":"forged"}') };
+    const routes = { [`${f.G}/ipfs/${f.index.cid}?format=raw`]: () => new Response(f.index.bytes), [`${f.G}/ipfs/${f.index.cid}/shards/0?format=car`]: async () => new Response(await car(f.shard.cid, [f.index, f.shard, forged])) };
+    await assert.rejects(transferArchiveViaS3(f.target('archive', f.index.cid), { ...f.deps, fetch: async (url) => routes[url]?.() ?? new Response('no', { status: 404 }) }), (e) => e instanceof TransferFailed && /does not hash/.test(e.reason));
+    assert.equal(f.s3.requests.filter((r) => r.op !== 'HeadObject').length, 0, 'nothing uploaded');
+    assert.deepEqual(readdirSync(f.tmp), []);
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('tables go up as one CAR of the tables block and its parts, the archive left to the pin the bucket has', async () => {
+  const f = await s3Fixture({ pins: (root, blocks) => (blocks.has(root) ? 'pinned' : 'failed') });
+  try {
+    await transferTablesViaS3(f.target('tables', f.tables.cid), f.deps);
+    const obj = f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`);
+    const { roots, blocks } = await carOf(obj.body);
+    assert.deepEqual(roots, [f.tables.cid.toString()]);
+    assert.deepEqual(blocks.sort(), [f.tables, f.part].map((b) => b.cid.toString()).sort());
+    assert.equal(obj.metadata.import, 'car');
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
+    assert.equal(f.s3.requests.filter((r) => r.op === 'PutObject' || r.op === 'CompleteMultipartUpload').length, 1, 'one upload');
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('tables that do not pin from their parts alone are sent again with the archive\'s blocks, as a complete DAG', async () => {
+  // Like a Filebase that pins an import=car object only when the CAR carries every block under its root.
+  const all = async (f) => new Set([f.index, f.shard, f.property, f.tables, f.part].map((b) => b.cid.toString()));
+  const f = await s3Fixture({ pins: (root, blocks) => ([...wanted].every((c) => blocks.has(c)) ? 'pinned' : 'failed') });
+  const wanted = await all(f);
+  try {
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesPinMs: 60_000 });
+    const partsOnly = f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`);
+    assert.equal(partsOnly.metadata['pinning-status'], 'failed');
+    const full = f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-full-${f.tables.cid}.car`);
+    const { roots, blocks } = await carOf(full.body);
+    assert.deepEqual(roots, [f.tables.cid.toString()]);
+    assert.deepEqual(blocks.sort(), [...wanted].sort(), 'tables, parts and the archive, each once');
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
+    assert.match(f.logs.join('\n'), /did not pin from its parts alone \(Filebase could not pin/);
+    assert.deepEqual(readdirSync(f.tmp), []);
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('an upload whose completion the proxy drops (504) with the object stored is not sent again; pin/ls is watched', async () => {
+  const f = await s3Fixture({ respond: ({ op }) => (op === 'CompleteMultipartUpload' ? { status: 504, after: true } : undefined) });
+  try {
+    // Filebase pins the root only after the proxy has dropped the request.
+    const rpc = async (path) => (f.logs.some((l) => /ended at the proxy/.test(l)) ? f.deps.rpc(path) : [{ Keys: {} }]);
+    await transferArchiveViaS3(f.target('archive', f.index.cid), { ...f.deps, rpc });
+    assert.equal(f.s3.requests.filter((r) => r.op === 'CreateMultipartUpload').length, 1, 'sent once');
+    assert.match(f.logs.join('\n'), /ended at the proxy .*HTTP 504.* with the object stored; watching pin\/ls/);
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('an object Filebase already imported as this root is not uploaded again; one that fails to pin is an ordinary error (deferred)', async () => {
+  const f = await s3Fixture();
+  try {
+    const t = f.target('archive', f.index.cid);
+    await transferArchiveViaS3(t, f.deps);
+    const uploads = () => f.s3.requests.filter((r) => r.op === 'CreateMultipartUpload').length;
+    f.s3.pinned.delete(f.index.cid.toString()); // pinned later than the upload, as Filebase may
+    setTimeout(() => f.s3.pinned.add(f.index.cid.toString()), 20);
+    await transferArchiveViaS3(t, f.deps);
+    assert.equal(uploads(), 1, 'not uploaded again');
+    assert.match(f.logs.join('\n'), /already holds .* not uploading it again/);
+  } finally {
+    await f.s3.close();
+  }
+  const g = await s3Fixture({ pins: () => 'failed' });
+  try {
+    await assert.rejects(transferArchiveViaS3(g.target('archive', g.index.cid), g.deps), (e) => !(e instanceof TransferFailed) && /Pinning-Status: failed/.test(e.message));
+  } finally {
+    await g.s3.close();
+  }
+  const h = await s3Fixture({ pins: () => 'pending' });
+  try {
+    const started = Date.now();
+    await assert.rejects(transferArchiveViaS3(h.target('archive', h.index.cid), { ...h.deps, pinMs: 50 }), (e) => !(e instanceof TransferFailed) && /was not pinned within/.test(e.message));
+    assert.ok(Date.now() - started < 5_000);
+  } finally {
+    await h.s3.close();
+  }
 });
