@@ -859,14 +859,22 @@ async function appendCar(root, what, source, writer, seen, want = []) {
   return found;
 }
 
+/** Throw unless `file` is a complete CAR (every block decodes to its end) holding `cid`. */
+async function readWholeCar(file, cid) {
+  const it = await CarBlockIterator.fromIterable(createReadStream(file));
+  let found = false;
+  for await (const b of it) if (b.cid.toString() === cid) found = true;
+  if (!found) throw new Error(`the download lacks the block ${cid}`);
+}
+
+/** Whole-download attempts per exported part (a dropped body is retried from the start). */
+const DOWNLOAD_ATTEMPTS = 5;
+
 /**
  * Export each `item` ({ path, cid }) as CAR from the gateways, `d.parallel` at a time, each to a
  * temp file first (a slow gateway must not hold the others' writes), then append it to `writer`;
  * an export that lacks its own root block is TransferFailed.
  */
-/** Whole-download attempts per exported part (a dropped body is retried from the start). */
-const DOWNLOAD_ATTEMPTS = 5;
-
 async function appendExports(root, items, writer, seen, d, label) {
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
   let appending = Promise.resolve();
@@ -881,6 +889,9 @@ async function appendExports(root, items, writer, seen, d, label) {
           const res = await gatewayGet(root, `${item.path}?format=car`, 'application/vnd.ipld.car', { ...d, signal });
           try {
             await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+            // A gateway can also end the body early without an error; the CAR then stops mid-block.
+            // Read it through before accepting it, so a cut-off download is retried, not appended.
+            await readWholeCar(file, item.cid);
             break;
           } catch (e) {
             signal?.throwIfAborted();

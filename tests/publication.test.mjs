@@ -1220,6 +1220,45 @@ test('a part download the gateway drops every time fails after 5 attempts instea
   }
 });
 
+/** The gateway's real response for `url`, cut off mid-block and ended cleanly (no stream error). */
+const truncated = async (fetch, url, init) => {
+  const bytes = new Uint8Array(await (await fetch(url, init)).arrayBuffer());
+  return new Response(bytes.slice(0, bytes.length - 5));
+};
+
+test('a part download the gateway ends early without an error is read through, retried, and the tables still pin', async () => {
+  const f = await s3Fixture();
+  try {
+    const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
+    let asked = 0;
+    const fetch = async (url, init) => (url === partUrl && ++asked === 1 ? truncated(f.deps.fetch, url, init) : f.deps.fetch(url, init));
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, fetch });
+    assert.equal(asked, 2, 'the cut-off part was requested again');
+    assert.match(f.logs.join('\n'), new RegExp(`/ipfs/${f.tables.cid}/tables/address/parts/0/cid: download dropped \\(Unexpected end of data\\); retry 1/4`));
+    const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
+    assert.deepEqual(blocks.sort(), [f.tables, f.part].map((b) => b.cid.toString()).sort(), 'the retried part is in the CAR once');
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('a part download the gateway ends early every time fails after 5 attempts, and nothing is uploaded', async () => {
+  const f = await s3Fixture();
+  try {
+    const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
+    let asked = 0;
+    const fetch = async (url, init) => (url === partUrl ? (asked++, truncated(f.deps.fetch, url, init)) : f.deps.fetch(url, init));
+    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, fetch }), /Unexpected end of data/);
+    assert.equal(asked, 5, 'DOWNLOAD_ATTEMPTS whole downloads');
+    assert.equal(f.logs.filter((l) => /download dropped/.test(l)).length, 4);
+    assert.equal(f.s3.requests.filter((r) => r.op !== 'HeadObject').length, 0, 'nothing uploaded');
+    assert.deepEqual(readdirSync(f.tmp), []);
+  } finally {
+    await f.s3.close();
+  }
+});
+
 test('tables whose parts-only upload is still unanswered when the tables pin window ends are sent again as the full CAR', async () => {
   // The CompleteMultipartUpload of the parts-only CAR is held (Filebase waiting on a pin that never
   // comes); it ends in an AbortError from its own completeTimeoutMs, which is "did not pin", not a cancelled run.
