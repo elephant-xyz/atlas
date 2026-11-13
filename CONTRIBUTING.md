@@ -131,16 +131,21 @@ updating branches. Everything else in the ruleset stays as it is.
 Dispatching `publish` with a `county` transfers every root of that county again. It also
 publishes what other counties are owed, because a dispatched run can replace theirs in the
 queue; a transfer of theirs that fails is left for the next run, never taken off `main` by this
-one. Dispatch `publish` from `main`. From another branch only the transfer step runs, with that
+one. Dispatch `publish` from `main`. From another branch only the transfer jobs run, with that
 branch's scripts, which is how a change to the transfer is tried before it merges; the index,
 the IPNS name and withdrawals are handled on `main` only.
 
 A push to a pull request (a new or changed `cid`, `schema`, `tables`, or `car`) always re-runs
 the full validation. Only an untouched, already green pull request is spared.
 
-One run handles its roots in sequence and a hosted runner stops a job after 6 hours. The
-transfer step stops itself after 5 hours and leaves what it did not reach for the next run, so
-merging many very large counties at once only spreads them over several runs.
+A run transfers each group in a job of its own, `ATLAS_PUBLISH_MAX_PARALLEL` (repository
+variable, default 4) at a time, and publishes the index once they have all ended. A hosted
+runner stops a job after 6 hours; a transfer job stops itself after 5.5 (`ATLAS_RUN_MINUTES`,
+default 330) and leaves what it did not finish for the next run. That run starts where this one
+stopped: a root already pinned is skipped, the shards Filebase confirmed are kept in the Actions
+cache and not sent again, and a pin Filebase was still working on when the run ended is picked
+up by watching `pin/ls`. So merging many very large counties at once only spreads them over
+several runs.
 
 ## When a publication is reverted
 

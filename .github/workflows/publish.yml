@@ -48,23 +48,137 @@ env:
   ATLAS_GATEWAY_DEADLINE_MINUTES: ${{ inputs.gateway_deadline_minutes || vars.ATLAS_GATEWAY_DEADLINE_MINUTES || '20' }}
 
 jobs:
+  # 1. List the groups main holds with roots index.json does not list yet (a git read; it calls
+  # neither the gateways nor Filebase). Publication is a merge whose archive already passed validation; nothing here
+  # validates archives again. It does refuse a root that two merged pull requests both claim.
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      # `ref` is given explicitly so the checkout is the branch as it is when the run starts, not
+      # the commit that triggered it: a run that waited behind another one must see what that run
+      # did (a withdrawal, a new index). On a push or a retry that is main. A dispatch from another
+      # branch runs that branch's transfer jobs with its own workflow file, which is how a change
+      # to the transfer is tried before it merges, and stops there: the index and the withdrawal
+      # run on main only (and publish-index refuses an index that is not main's). Every job of the
+      # run checks out this same commit (`sha`), so the plan and the transfers agree.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0 # main's history: the order groups claimed their roots in
+          persist-credentials: false
+      - id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - id: plan
+        env:
+          COUNTY: ${{ inputs.county }}
+        run: node scripts/transfer-roots.mjs --plan ${{ inputs.transfer_all && '--all' || '' }} ${COUNTY:+--county "$COUNTY"}
+
+  # 2. One job per group: export its roots (archive, then tables) from the public gateway, or
+  # its `car` file, and import them into the elephant-atlas bucket shard by shard and part by
+  # part, then pin each root. A job has the whole 6-hour job limit to itself, and the jobs run
+  # side by side, up to ATLAS_PUBLISH_MAX_PARALLEL at once (repository variable, default 4; each
+  # job imports ATLAS_TRANSFER_PARALLEL shards at a time, so the product is the load on the
+  # Filebase RPC). A group that fails is held back and the job ends red; the others go on.
+  # When the gateways or Filebase are down nothing is blamed on a publication (exit 2 when they
+  # are down from the start). Each root is copied in a process of its own within the job's time
+  # budget, so an archive that exhausts the heap or hangs costs only itself.
+  # A job that runs out of time is cheap to repeat: a pinned root is skipped at once, and the
+  # shards Filebase confirmed are kept in the Actions cache (ATLAS_PROGRESS_DIR) and not sent again.
+  transfer:
+    needs: plan
+    if: ${{ needs.plan.outputs.count != '0' }}
+    name: transfer ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(vars.ATLAS_PUBLISH_MAX_PARALLEL || '4') }}
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      # The root copies stop after this, leaving time for the cache and the hold to be saved
+      # inside the 360-minute job limit (setup and the CAR download fit in the rest).
+      ATLAS_RUN_MINUTES: ${{ vars.ATLAS_RUN_MINUTES || '330' }}
+      ATLAS_ROOT_MINUTES: ${{ vars.ATLAS_ROOT_MINUTES || '330' }}
+      # How long to watch pin/ls for a pin after the pinned import ends at Filebase's proxy; the
+      # root's own time limit stops it earlier.
+      ATLAS_PIN_MINUTES: ${{ vars.ATLAS_PIN_MINUTES || '330' }}
+      # Opt-in: also skip shards block/get finds. It answers for blocks on the IPFS network too,
+      # so on a first transfer it can skip shards the bucket lacks (the pin then fails and the
+      # root is deferred, not withdrawn). The progress cache below is the default resume.
+      ATLAS_SKIP_STORED_SHARDS: ${{ vars.ATLAS_SKIP_STORED_SHARDS || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0 # main's history for the plan this job repeats
+          persist-credentials: false
+      - name: Mask the Filebase token
+        run: echo "::add-mask::$(printf '%s:%s:%s' "$FILEBASE_ACCESS_KEY" "$FILEBASE_SECRET_KEY" "$FILEBASE_BUCKET" | base64 -w0)"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The shards an earlier run confirmed for this group's first root (a new key per run, the
+      # newest earlier one restored).
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/atlas-progress
+          key: atlas-progress-${{ matrix.first }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: atlas-progress-${{ matrix.first }}-
+      - id: transfer
+        env:
+          COUNTY: ${{ inputs.county }}
+          GROUP: ${{ matrix.group }}
+          ATLAS_PROGRESS_DIR: ${{ runner.temp }}/atlas-progress
+          ATLAS_HELD: ${{ runner.temp }}/held/${{ strategy.job-index }}.json
+        run: |
+          mkdir -p "$(dirname "$ATLAS_HELD")" "$ATLAS_PROGRESS_DIR"
+          node scripts/transfer-roots.mjs --group "$GROUP" ${{ inputs.transfer_all && '--all' || '' }} ${COUNTY:+--county "$COUNTY"}
+      - if: ${{ always() }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/atlas-progress
+          key: atlas-progress-${{ matrix.first }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: held-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/held/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # 3-4. Once every transfer job has ended, whatever they ended as (also when the plan found
+  # nothing to transfer, or a job crashed or ran out of time): it asks Filebase what is pinned, so
+  # the counties that did arrive are published and nothing else is.
   publish:
+    needs: [plan, transfer]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     outputs:
       index_cid: ${{ steps.index.outputs.cid }}
     steps:
       # main is protected by a ruleset that GITHUB_TOKEN cannot bypass; the bot commits (index.json,
       # withdrawals) go through the write deploy key registered as a bypass actor, so the checkout's
-      # origin is SSH and every `git push origin HEAD:main` below uses it. `ref` is given
-      # explicitly so the checkout is the branch as it is when the run starts, not the commit
-      # that triggered it: a run that waited behind another one must see what that run did (a
-      # withdrawal, a new index). On a push or the schedule that is main. A dispatch from another
-      # branch runs that branch's transfer step with its own workflow file, which is how a change
-      # to the transfer is tried before it merges, and stops there: the index and the
-      # withdrawal run on main only (and publish-index refuses an index that is not main's).
+      # origin is SSH and every `git push origin HEAD:main` below uses it. The plan's commit, so
+      # the index and the withdrawals are judged on what was transferred.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ needs.plan.outputs.sha }}
           fetch-depth: 0 # main's history for published_at and for a group's last published version
           ssh-key: ${{ secrets.ATLAS_DEPLOY_KEY }}
       - name: Mask the Filebase token
@@ -79,33 +193,30 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # Publication is a merge whose archive already passed validation; this job does not validate
-      # archives again. It does refuse a root that two merged pull requests both claim.
-      # 1-2. Export every root main holds and index.json does not list yet from the public gateway
-      # and import it into the elephant-atlas bucket, shard by shard and part by part, then pin
-      # the root. That is this push and any earlier merge whose own run did not finish. A group
-      # that fails is held back and the run goes on with the others; the step ends red when any
-      # was. When the gateways or Filebase are down nothing is blamed on a publication and the
-      # run stops (exit 2 when they are down from the start). Each root is copied in a process of
-      # its own and the step keeps to a time budget, so one archive that exhausts the heap or
-      # hangs costs only itself and the steps below still run.
-      - id: transfer
+      # Collect what the transfer jobs held back and settle it as one run would have: a run takes
+      # at most one publication off main for failing to transfer (several failing together may be
+      # the network), and groups that claim the same root are settled in merge order.
+      - if: ${{ needs.transfer.result != 'skipped' }}
+        uses: actions/download-artifact@v4
+        continue-on-error: true # no job left a hold
+        with:
+          pattern: held-*
+          path: ${{ runner.temp }}/held
+          merge-multiple: true
+      - id: settle
         env:
           COUNTY: ${{ inputs.county }}
           ATLAS_HELD: ${{ runner.temp }}/held.json
-        run: node scripts/transfer-roots.mjs ${{ inputs.transfer_all && '--all' || '' }} ${COUNTY:+--county "$COUNTY"}
+        run: node scripts/transfer-roots.mjs --settle "$RUNNER_TEMP/held" ${{ inputs.transfer_all && '--all' || '' }} ${COUNTY:+--county "$COUNTY"}
 
       # 3. Regenerate index.json from every group whose roots Filebase lists as pinned, commit it
       # if it changed (pushed through the deploy key, rebased first when main moved during the
       # run; the commit touches only index.json, outside this workflow's path filter, so it does
       # not retrigger), add it to the bucket, point the IPNS name at it, and require the gateway
-      # to serve the committed bytes. It runs whatever the transfer step ended as, also after a
-      # crash: it asks Filebase what is pinned, so the counties that did arrive are published and
-      # nothing else is. It ends red when a group on main was left out, after publishing the
-      # rest. A failure here is not a withdrawal; re-run the workflow (workflow_dispatch) and it
-      # finishes idempotently.
+      # to serve the committed bytes. It ends red when a group on main was left out, after
+      # publishing the rest. A failure here is not a withdrawal; re-run the workflow
+      # (workflow_dispatch) and it finishes idempotently.
       - id: index
-        if: ${{ !cancelled() && steps.transfer.outcome != 'skipped' && github.ref == 'refs/heads/main' }}
         env:
           GH_TOKEN: ${{ github.token }} # a `Publication pending` issue for a group left out too long
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -119,7 +230,7 @@ jobs:
       # left out): the withdrawal carries [skip ci], and a group the index listed after all is
       # not withdrawn. When the index step failed before that, the next run does both.
       - name: Withdraw what could not be published
-        if: ${{ !cancelled() && steps.index.outputs.indexed == 'true' && steps.transfer.outputs.withdrawn != '' && steps.transfer.outputs.withdrawn != '0' }}
+        if: ${{ !cancelled() && steps.index.outputs.indexed == 'true' && steps.settle.outputs.withdrawn != '' && steps.settle.outputs.withdrawn != '0' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

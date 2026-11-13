@@ -35,12 +35,28 @@
 // or hangs ends that process and is deferred like any other error, and the roots after it are
 // still tried. A root gets at most ATLAS_ROOT_MINUTES (default 180) and the whole run
 // ATLAS_RUN_MINUTES (default 300), after which what is left is deferred unattempted: the step
-// ends inside the 6-hour job limit and the index step still runs.
+// ends inside the 6-hour job limit and the index step still runs. The child is told its deadline
+// (ATLAS_DEADLINE), so a root still waiting for its pin at the end reports that instead of
+// being killed without a result.
 // The held groups are written to the file ATLAS_HELD as JSON and GITHUB_OUTPUT gets
 // `withdrawn=<n>`. Exit 1 when anything was held. --all transfers every root on
 // main again. --county ST/name transfers every root of that county again, and what the other
 // counties are owed as usual (the run replaces theirs in the queue), but a transfer that fails
 // withdraws only its own.
+//
+// The workflow runs one job per group (see publish.yml), in three modes of this script:
+//   --plan            GITHUB_OUTPUT gets `matrix` (the groups with roots to transfer) and `count`
+//   --group PATH#KEY  transfer that group's roots only; ATLAS_HELD gets that group's hold, unsettled
+//   --settle DIR      merge the holds the group jobs left in DIR (*.json) as one run would have:
+//                     one withdrawal per run, then the root collisions; write ATLAS_HELD and
+//                     `withdrawn=<n>` for withdraw.mjs
+// --all and --county mean the same in every mode.
+//
+// A run that ends early is cheap to repeat. A root pin/ls lists is skipped at once. With
+// ATLAS_PROGRESS_DIR set, every shard (or Parquet part) Filebase confirmed is recorded in
+// <dir>/<root>.json and skipped by the next attempt (the workflow keeps the directory in the
+// Actions cache); if the pinned import then finds the DAG incomplete, the record is dropped and
+// the root deferred, never withdrawn, so the next attempt sends everything.
 //
 // A group with `car` (the archive as one CARv1 file, by its own CID) is copied from that file
 // instead: one request downloads it, then the same pieces are cut locally and imported with the
@@ -50,7 +66,7 @@
 //
 // TODO: unpin roots of withdrawn groups; nothing is unpinned yet.
 import { spawn } from 'node:child_process';
-import { appendFileSync, createWriteStream, openAsBlob, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, createWriteStream, mkdirSync, openAsBlob, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,7 +78,7 @@ import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { openCar } from './car-file.mjs';
-import { pinStatus, poll, rpc as filebaseRpc } from './filebase.mjs';
+import { pinStatus, rpc as filebaseRpc } from './filebase.mjs';
 import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
 import { claimOrder, groupsOf, heldFor, holdConflicts, holdOf, indexAt, isOwed, latestPublished, pagesAt, pool, publishedGroup, rootsOf, sleep } from './lib.mjs';
 
@@ -93,8 +109,11 @@ const defaults = () => ({
   // A pinned import makes Filebase pin the whole DAG before it answers: over 30 minutes for
   // Travis's 11.3M blocks.
   pinMs: Number(process.env.ATLAS_PIN_MINUTES ?? 180) * 60_000,
-  pinPollMs: Number(process.env.ATLAS_PIN_POLL_MINUTES ?? 5) * 60_000,
+  pinPollMs: Number(process.env.ATLAS_PIN_POLL_MINUTES ?? 1) * 60_000,
+  // When this process must have reported (epoch ms, set by inChild): the pin is watched until then at most.
+  deadline: Number(process.env.ATLAS_DEADLINE) || Infinity,
   skipStored: process.env.ATLAS_SKIP_STORED_SHARDS === '1',
+  progressDir: process.env.ATLAS_PROGRESS_DIR || undefined,
   sleep,
   now: Date.now,
   log: console.log,
@@ -185,17 +204,17 @@ async function importCar(root, blob, expect, count, pinRoots, d) {
   for (let attempt = 1; ; attempt++) {
     try {
       d.signal?.throwIfAborted();
-      lines = await d.rpc(`dag/import?pin-roots=${pinRoots}&stats=true`, { body: form, timeoutMs: pinRoots ? d.pinMs : 15 * 60_000, signal: d.signal });
+      lines = await d.rpc(`dag/import?pin-roots=${pinRoots}&stats=true`, { body: form, timeoutMs: pinRoots ? d.pinTimeoutMs ?? d.pinMs : 15 * 60_000, signal: d.signal });
       break;
     } catch (e) {
       d.signal?.throwIfAborted();
-      // A pinned import that outlives Filebase's proxy (HTTP 504 at 60 minutes) is not re-sent:
-      // the pin carries on behind the proxy, and pinRoot watches pin/ls for it instead.
-      if (pinRoots && isProxyTimeout(e)) throw e;
+      // A pinned import is sent once here: pinRoot decides whether to send it again, since the pin
+      // may carry on behind a proxy that dropped the request.
+      if (pinRoots) throw e;
       // Filebase drops connections and answers 500 under load; back off and try again.
       if (attempt === 6) throw e;
       d.log(`dag/import attempt ${attempt}: ${e.message}`);
-      await d.sleep(15_000 * attempt);
+      await d.sleep(15_000 * 2 ** (attempt - 1));
     }
   }
   const rootLine = lines.find((l) => l.Root)?.Root;
@@ -234,33 +253,88 @@ async function transferSubtree(root, path, expect, tally, d) {
   }
 }
 
-/** Filebase's nginx proxy ends a request after 60 minutes with HTTP 504, whatever the client allows. */
-const isProxyTimeout = (e) => /HTTP 504\b/.test(e?.message ?? '');
+/**
+ * Whether a failed request may still be running behind Filebase's nginx proxy: the proxy ends any
+ * request after 60 minutes with HTTP 504, and under load answers 502 or drops the connection
+ * (ECONNRESET, "socket hang up") while the node goes on working.
+ */
+const isDropped = (e) => /HTTP 50[0234]\b|ECONNRESET|socket hang up|EPIPE|ETIMEDOUT/.test(e?.message ?? '') || e?.name === 'TimeoutError';
 
 /**
  * Pin `root`, whose DAG is already in the bucket, and prove it pinned. A pinned import makes Filebase
  * pin the whole DAG before it answers, and its proxy gives up on any request after 60 minutes: King
  * County's 8.9M blocks (2026-11-12) were all stored by 17:51, the pinned import answered HTTP 504 at
- * 18:51, and re-sending it ran the root out of time at 19:26. So:
+ * 18:51, and re-sending it ran the root out of time at 19:26; Santa Clara's tables pin (which pins
+ * the archive it links to as well) answered 502 after 56 minutes, then ECONNRESET to every re-send.
+ * So:
  *   - a root pin/ls already lists (a pin a timed-out run left behind) is not imported again;
- *   - a pinned import that times out at the proxy is not re-sent: pin/ls is polled every
- *     ATLAS_PIN_POLL_MINUTES (default 5) for up to ATLAS_PIN_MINUTES;
+ *   - while the pinned import is in flight, pin/ls is asked every ATLAS_PIN_POLL_MINUTES (default 1)
+ *     and a listed root is done, whatever the import answers later;
+ *   - an import the proxy dropped after a while (504, 502, a reset) is not re-sent: pin/ls is
+ *     watched until the pin deadline. One dropped within a few minutes may never have reached the
+ *     node, so it is sent again, up to 5 times, 1, 2, 4, 8 and 16 minutes later;
+ *   - the pin deadline is ATLAS_PIN_MINUTES (default 180) after the first send, or the process's
+ *     own deadline (ATLAS_DEADLINE) when that comes first;
  *   - a pin that never appears is an ordinary error, so the root is deferred, never withdrawn:
- *     a slow pin is Filebase's load, not the publication's fault.
+ *     a slow pin is Filebase's load, not the publication's fault. The next attempt starts with
+ *     pin/ls, so a pin that finishes in between costs it nothing.
  */
 async function pinRoot(root, block, d) {
   if ((await pinStatus(root, { call: d.rpc })).pinned) {
     d.log(`${root} is already pinned recursively; no pinned import needed`);
-  } else {
-    try {
-      d.log(`imported ${root} (root block, pin-roots=true): ${await importCar(root, block, root, 1, true, d)}`);
-    } catch (e) {
-      if (!isProxyTimeout(e)) throw e;
-      const minutes = Math.round(d.pinMs / 60_000);
-      d.log(`pinned import of ${root} timed out at the Filebase proxy (HTTP 504); polling pin/ls for up to ${minutes} min`);
-      const pinned = await poll(async () => (await pinStatus(root, { call: d.rpc })).pinned, { limitMs: d.pinMs, intervalMs: d.pinPollMs, sleep: d.sleep, now: d.now });
-      if (!pinned) throw new Error(`${root} was not pinned within ${minutes} min of the pinned import timing out at the Filebase proxy`);
+    return requirePinned(root, d);
+  }
+  const started = d.now();
+  const until = Math.min(started + d.pinMs, d.deadline);
+  const minutes = Math.round((until - started) / 60_000);
+  const tick = () => new Promise((r) => setImmediate(r)); // lets an import settle between polls, also with a test's instant sleep
+  let resends = 0;
+  let inFlight; // { settled, ok, error } of the pinned import being sent, or undefined
+  let wait = 0; // when the next send is due (epoch ms), while none is in flight
+  const stop = new AbortController();
+  const send = () => {
+    const sentAt = d.now();
+    const call = { sentAt };
+    call.promise = importCar(root, block, root, 1, true, { ...d, signal: stop.signal, pinTimeoutMs: Math.max(1, until - sentAt) }).then(
+      (summary) => Object.assign(call, { settled: true, ok: summary }),
+      (error) => Object.assign(call, { settled: true, error }),
+    );
+    inFlight = call;
+  };
+  send();
+  try {
+    for (;;) {
+      if (inFlight) await Promise.race([inFlight.promise, d.sleep(d.pinPollMs)]);
+      else await d.sleep(d.pinPollMs);
+      await tick();
+      if (inFlight?.settled) {
+        const { ok, error, sentAt } = inFlight;
+        inFlight = undefined;
+        if (ok) {
+          d.log(`imported ${root} (root block, pin-roots=true): ${ok}`);
+          break;
+        }
+        // No root, a pin error, a short count: the DAG is incomplete, the publication's own fault.
+        if (error instanceof TransferFailed || !isDropped(error)) throw error;
+        const quick = d.now() - sentAt < 5 * 60_000;
+        if (quick && resends < 5) {
+          wait = d.now() + 60_000 * 2 ** resends++;
+          d.log(`pinned import of ${root} dropped after ${Math.round((d.now() - sentAt) / 1000)} s (${error.message.split('\n')[0]}); sending it again in ${Math.round((wait - d.now()) / 60_000)} min, watching pin/ls meanwhile`);
+        } else {
+          wait = Infinity;
+          d.log(`pinned import of ${root} ended at the Filebase proxy (${error.message.split('\n')[0]}); the pin may carry on: watching pin/ls for up to ${minutes} min from the first send`);
+        }
+      }
+      if ((await pinStatus(root, { call: d.rpc })).pinned) {
+        d.log(`${root} is listed as pinned recursively${inFlight ? ' while the pinned import was still waiting' : ''}`);
+        break;
+      }
+      // While an import is in flight its own timeout keeps it to the deadline.
+      if (!inFlight && d.now() >= until) throw new Error(`${root} was not pinned within ${minutes} min of its pinned import; everything under it is stored, so the next run only waits for the pin again`);
+      if (!inFlight && d.now() >= wait) send();
     }
+  } finally {
+    stop.abort();
   }
   await requirePinned(root, d);
 }
@@ -268,6 +342,50 @@ async function pinRoot(root, block, d) {
 async function requirePinned(root, d) {
   const { pinned, why } = await pinStatus(root, { call: d.rpc, tries: 3, sleep: d.sleep });
   if (!pinned) throw new TransferFailed(root, `not pinned recursively after import (${why})`);
+}
+
+/**
+ * The pieces (shard or part roots) of `root` Filebase confirmed in an earlier attempt, from
+ * <d.progressDir>/<root>.json, with `record(cid)` to add one as it is confirmed and `forget()`
+ * to drop the file. Without a progress directory nothing is remembered.
+ */
+function progressOf(root, d) {
+  const file = d.progressDir && join(d.progressDir, `${root}.json`);
+  let done = new Set();
+  try {
+    if (file) done = new Set(JSON.parse(readFileSync(file, 'utf8')));
+  } catch {
+    // no record yet, or an unreadable one: send everything
+  }
+  return {
+    done,
+    record(cid) {
+      if (!file) return;
+      done.add(cid);
+      mkdirSync(d.progressDir, { recursive: true });
+      writeFileSync(file, JSON.stringify([...done]));
+    },
+    forget() {
+      if (file) rmSync(file, { force: true });
+    },
+  };
+}
+
+/**
+ * pinRoot, after `skipped` pieces were not sent because an earlier attempt (or block/get) said
+ * the bucket holds them. If the pinned import then finds the DAG incomplete, that is no proof
+ * against the publication: the record is dropped and the root deferred, and the next attempt
+ * sends every piece.
+ */
+async function pinAfterSkipping(root, block, skipped, progress, d) {
+  try {
+    await pinRoot(root, block, d);
+  } catch (e) {
+    if (!skipped || !(e instanceof TransferFailed)) throw e;
+    progress.forget();
+    throw new Error(`${e.reason}, after skipping ${skipped} piece(s) taken to be in the bucket already; the next attempt sends every piece`);
+  }
+  progress.forget();
 }
 
 export async function transferArchive(root, deps = {}) {
@@ -281,8 +399,12 @@ export async function transferArchive(root, deps = {}) {
   d.log(`imported ${root} (root block): ${await importCar(root, block, root, 1, false, d)}`);
   // One temp dir for every shard: the jobs get their own copy of the deps (for the pool's signal), so it is made first.
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
-  await pool(index.shards.map((s, i) => (signal) => transferSubtree(root, `${root}/shards/${i}`, s.toString(), tally, { ...d, signal })), d.parallel);
-  await pinRoot(root, block, d);
+  const progress = progressOf(root, d);
+  const todo = index.shards.map((s, i) => ({ path: `${root}/shards/${i}`, cid: s.toString() })).filter((s) => !progress.done.has(s.cid));
+  const skipped = index.shards.length - todo.length;
+  if (skipped) d.log(`${skipped}/${index.shards.length} shard(s) confirmed by an earlier attempt; sending the rest`);
+  await pool(todo.map((s) => async (signal) => (await transferSubtree(root, s.path, s.cid, tally, { ...d, signal }), progress.record(s.cid))), d.parallel);
+  await pinAfterSkipping(root, block, skipped, progress, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied`);
 }
 
@@ -399,11 +521,12 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
     const shards = index.shards.map((s) => CID.asCID(s) ?? CID.parse(String(s)));
     // Off unless ATLAS_SKIP_STORED_SHARDS=1: block/get also answers for blocks Filebase finds on the
     // IPFS network, so on an empty bucket it reported all 48 Travis permit shards stored.
-    const held = new Set();
-    if (d.skipStored) await pool(shards.map((s) => async () => (await hasBlock(s.toString(), d)) && held.add(s.toString())), 4);
+    const progress = progressOf(root, d);
+    const held = new Set(shards.map(String).filter((s) => progress.done.has(s)));
+    if (d.skipStored) await pool(shards.filter((s) => !held.has(s.toString())).map((s) => async () => (await hasBlock(s.toString(), d)) && held.add(s.toString())), 4);
     d.log(`${held.size}/${shards.length} shard(s) already in the bucket; sending the rest`);
-    await pool(shards.filter((s) => !held.has(s.toString())).map((s) => (signal) => transferLocalSubtree(root, reader, s, sent, tally, { ...d, signal })), d.parallel);
-    await pinRoot(root, block, d);
+    await pool(shards.filter((s) => !held.has(s.toString())).map((s) => async (signal) => (await transferLocalSubtree(root, reader, s, sent, tally, { ...d, signal }), progress.record(s.toString()))), d.parallel);
+    await pinAfterSkipping(root, block, held.size, progress, d);
     d.log(`pinned ${root}: ${tally.blocks} distinct blocks, ${tally.bytes} bytes copied`);
   } finally {
     await reader?.close();
@@ -420,9 +543,10 @@ export async function transferArchiveFromCar(root, car, deps = {}) {
  * the index lacks. `all` transfers every root. `only` (ST/name) transfers every root of that
  * county and leaves the others as they are, owed groups included: the run replaces theirs in
  * the queue, so it must publish them, but they are out of scope and a failed transfer never
- * withdraws them.
+ * withdraws them. `group` ('counties/FL/lee.json#county') keeps the targets of that one group:
+ * a group job of the workflow plans the whole run and transfers its own share.
  */
-export function planTransfers(pages, index, { all = false, only, claimed } = {}) {
+export function planTransfers(pages, index, { all = false, only, claimed, group } = {}) {
   const published = publishedGroup(index);
   const known = rootsOf((index?.counties ?? []).map((page) => ({ page })));
   const targets = [];
@@ -437,7 +561,47 @@ export function planTransfers(pages, index, { all = false, only, claimed } = {})
     }
   }
   const held = holdConflicts(pages, index, [], { claimed });
-  return { targets: targets.filter((t) => !heldFor(held, t.path, t.group)), held };
+  return { targets: targets.filter((t) => !heldFor(held, t.path, t.group) && (!group || `${t.path}#${t.group}` === group)), held };
+}
+
+/**
+ * The workflow's matrix: one entry per group with roots to transfer, in run order, as
+ * { group: 'counties/FL/lee.json#county', name: 'FL/lee county', first: <cid of its first root> }
+ * (`first` names the group's progress cache).
+ */
+export function planGroups(pages, index, options) {
+  const groups = new Map();
+  for (const t of planTransfers(pages, index, options).targets) {
+    const id = `${t.path}#${t.group}`;
+    if (!groups.has(id)) groups.set(id, { group: id, name: `${t.county} ${t.group}`, first: t.cid });
+  }
+  return [...groups.values()];
+}
+
+/**
+ * The holds the group jobs of one run left (`held`, in any order), settled as one run that
+ * transferred every group in page order would have: the first `withdrawn` stays withdrawn and
+ * the others are deferred (several failing together may be the network), then holdConflicts
+ * settles the root collisions on what the transfers did.
+ */
+export function settleHolds(pages, index, held, options = {}, log = console.log) {
+  const order = new Map(pages.flatMap(({ path, page }) => Object.keys(page.groups ?? {}).sort().map((key) => `${path}#${key}`)).map((id, i) => [id, i]));
+  const at = (h) => order.get(`${h.path}#${h.key}`) ?? Infinity;
+  const settled = held.filter((h) => order.has(`${h.path}#${h.key}`)).sort((a, b) => at(a) - at(b));
+  let blamed = false;
+  for (const h of settled) {
+    if (h.kind !== 'withdrawn') continue;
+    if (!blamed) blamed = true;
+    else {
+      h.kind = 'deferred';
+      h.reason += '; not withdrawn: this run already withdrew a publication, and several failing together may be the network';
+      log(`deferred ${h.county} ${h.key}: ${h.reason}`);
+    }
+  }
+  const before = settled.map((h) => h.kind);
+  holdConflicts(pages, index, settled, options);
+  for (const [i, h] of settled.entries()) if (h.kind !== before[i]) log(`${h.kind} ${h.county} ${h.key}: ${h.reason}`);
+  return settled;
 }
 
 /**
@@ -485,6 +649,8 @@ export async function outage(canaries, deps = {}) {
  * was already down before the first transfer (nothing was done). `transfer(target, { timeoutMs })`
  * copies one root and `down()` resolves to what is wrong with the service, if anything. A root
  * gets `rootMs` at most and the run `budgetMs`; what does not fit is deferred unattempted.
+ * With `options.group` only that group is transferred and the holds are returned unsettled
+ * (no collisions resolved): settleHolds does that once every group job of the run is done.
  */
 export async function runTransfers(pages, index, options, { transfer, down, log = console.log, error = console.error, now = Date.now, budgetMs = Infinity, rootMs = Infinity }) {
   const started = now();
@@ -531,6 +697,7 @@ export async function runTransfers(pages, index, options, { transfer, down, log 
       }
     }
   }
+  if (options.group) return held;
   const before = held.map((h) => h.kind);
   holdConflicts(pages, index, held, options);
   for (const [i, h] of held.entries()) if (h.kind !== before[i]) log(`${h.kind} ${h.county} ${h.key}: ${h.reason}`);
@@ -556,7 +723,9 @@ export async function inChild(t, timeoutMs, argv = [fileURLToPath(import.meta.ur
   const dir = await mkdtemp(join(tmpdir(), 'atlas-root-'));
   const result = join(dir, 'result.json');
   try {
-    const child = spawn(process.execPath, [...argv, '--one', JSON.stringify(t), '--result', result], { stdio: 'inherit', env: { ...process.env, TMPDIR: dir }, ...(Number.isFinite(timeoutMs) ? { timeout: timeoutMs } : {}) });
+    // The child stops waiting for a pin a little before it would be killed, so it can say so.
+    const deadline = Number.isFinite(timeoutMs) ? { ATLAS_DEADLINE: String(Date.now() + timeoutMs - Math.min(5 * 60_000, timeoutMs / 10)) } : {};
+    const child = spawn(process.execPath, [...argv, '--one', JSON.stringify(t), '--result', result], { stdio: 'inherit', env: { ...process.env, TMPDIR: dir, ...deadline }, ...(Number.isFinite(timeoutMs) ? { timeout: timeoutMs } : {}) });
     const [code, signal] = await new Promise((resolve, reject) => {
       child.on('error', reject);
       child.on('exit', (...ended) => resolve(ended));
@@ -587,9 +756,12 @@ export async function transferTables(root, deps = {}) {
   // The tables block goes in last: Filebase holds a dag/import open while any block it carries
   // links to something the bucket lacks, so importing it before its parts never returns.
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
-  const jobs = names.flatMap((name) => tables.tables[name].parts.map((part, i) => (signal) => transferSubtree(root, `${root}/tables/${name}/parts/${i}/cid`, part.cid.toString(), tally, { ...d, signal })));
-  await pool(jobs, d.parallel);
-  await pinRoot(root, block, d);
+  const progress = progressOf(root, d);
+  const parts = names.flatMap((name) => tables.tables[name].parts.map((part, i) => ({ path: `${root}/tables/${name}/parts/${i}/cid`, cid: part.cid.toString() })));
+  const todo = parts.filter((p) => !progress.done.has(p.cid));
+  if (todo.length < parts.length) d.log(`${parts.length - todo.length}/${parts.length} part(s) confirmed by an earlier attempt; sending the rest`);
+  await pool(todo.map((p) => async (signal) => (await transferSubtree(root, p.path, p.cid, tally, { ...d, signal }), progress.record(p.cid))), d.parallel);
+  await pinAfterSkipping(root, block, parts.length - todo.length, progress, d);
   d.log(`pinned ${root}: ${tally.seen.size} distinct blocks, ${tally.bytes} bytes copied (the county_root link is pinned by the archive transfer)`);
 }
 
@@ -611,16 +783,44 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const all = process.argv.includes('--all');
   // --county ST/name: every root of that county on HEAD again (re-runs one publication after a fix).
   const only = arg('--county');
+  const group = arg('--group');
   const index = JSON.parse(indexAt('HEAD', root) ?? 'null');
+  const pages = pagesAt('HEAD', root);
+  const options = { all, only, claimed: claimOrder(root), group };
+  const output = (line) => process.env.GITHUB_OUTPUT && appendFileSync(process.env.GITHUB_OUTPUT, `${line}\n`);
+  const writeHeld = (held) => {
+    if (process.env.ATLAS_HELD) writeFileSync(process.env.ATLAS_HELD, JSON.stringify(held, null, 2));
+    output(`withdrawn=${held.filter((h) => h.kind === 'withdrawn').length}`);
+  };
+  if (process.argv.includes('--plan')) {
+    const matrix = planGroups(pages, index, options);
+    for (const g of matrix) console.log(`to transfer: ${g.name}`);
+    if (!matrix.length) console.log('no roots to transfer');
+    output(`matrix=${JSON.stringify(matrix)}`);
+    output(`count=${matrix.length}`);
+    process.exit(0);
+  }
+  if (arg('--settle')) {
+    const dir = arg('--settle');
+    let files = [];
+    try {
+      files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+    } catch {
+      // no group job left a hold
+    }
+    const held = settleHolds(pages, index, files.flatMap((f) => JSON.parse(readFileSync(join(dir, f), 'utf8'))), options);
+    for (const h of held) console.log(`${h.kind} ${h.county} ${h.key}: ${h.reason}`);
+    writeHeld(held);
+    process.exit(0);
+  }
   const minutes = (name, fallback) => Number(process.env[name] ?? fallback) * 60_000;
-  const held = await runTransfers(pagesAt('HEAD', root), index, { all, only, claimed: claimOrder(root) }, {
+  const held = await runTransfers(pages, index, options, {
     down: () => outage(latestPublished(index)),
     transfer: (t, { timeoutMs }) => inChild(t, timeoutMs),
     rootMs: minutes('ATLAS_ROOT_MINUTES', 180),
     budgetMs: minutes('ATLAS_RUN_MINUTES', 300),
   });
   if (!held) process.exit(2);
-  if (process.env.ATLAS_HELD) writeFileSync(process.env.ATLAS_HELD, JSON.stringify(held, null, 2));
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `withdrawn=${held.filter((h) => h.kind === 'withdrawn').length}\n`);
+  writeHeld(held);
   process.exit(held.length ? 1 : 0);
 }
