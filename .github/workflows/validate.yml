@@ -21,31 +21,22 @@ jobs:
       - run: npm run validate
 
       # Every changed group: the whole archive downloaded by root and validated with the Elephant
-      # CLI from GitHub main (cached per main commit), then schema, tables and every part by CID.
-      # Nothing is resolved by path.
-      - name: Resolve elephant-cli main
-        id: cli
-        run: echo "sha=$(git ls-remote https://github.com/elephant-xyz/elephant-cli.git refs/heads/main | cut -f1)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        id: cli-cache
-        with:
-          path: ~/elephant-cli
-          key: elephant-cli-${{ steps.cli.outputs.sha }}
-      - if: steps.cli-cache.outputs.cache-hit != 'true'
+      # CLI, then schema, tables and every part by CID. Nothing is resolved by path.
+      # The CLI is version 2 (one binary, no Node), pinned to one release and to the digest of its
+      # archive, so a new CLI reaches this gate only through a pull request here.
+      - name: Install elephant-cli
+        env:
+          VERSION: v2.0.0-alpha.0
+          SHA256: 94cff190683dcee4b5307aaeaa0a3392cd83748335e6110cf501838b7a063f1b
         run: |
           mkdir -p ~/elephant-cli && cd ~/elephant-cli
-          npm init -y >/dev/null
-          npm i --no-audit --no-fund "github:elephant-xyz/elephant-cli#${{ steps.cli.outputs.sha }}"
-      # elephant-cli validate indexes the whole CAR with @ipld/car, which runs out of a 12 GB heap
-      # on Node 22 and 24 for an archive of 11M blocks (Travis County) and takes 2.6 GB on Node 26.
-      # The CLI's git install does not build on Node 26, so it is installed above on Node 22 and
-      # run on Node 26.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26
+          curl -fsSL --retry 3 -o cli.tar.gz "https://github.com/elephant-xyz/elephant-cli/releases/download/$VERSION/elephant-cli-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$SHA256  cli.tar.gz" | sha256sum -c -
+          tar -xzf cli.tar.gz
+          ./elephant-cli --version
       - name: Verify every changed group
         env:
-          ELEPHANT_CLI: /home/runner/elephant-cli/node_modules/.bin/elephant-cli
+          ELEPHANT_CLI: /home/runner/elephant-cli/elephant-cli
           ATLAS_VALIDATION_CSV: ${{ runner.temp }}/validation-errors.csv
           # Optional private gateway(s) for archive downloads, and the token a restricted Filebase
           # dedicated gateway requires (sent only to ATLAS_GATEWAYS); masked in logs. Pull requests
@@ -56,7 +47,8 @@ jobs:
           ATLAS_GATEWAY_TOKEN: ${{ secrets.ATLAS_GATEWAY_TOKEN }}
           # Same as publish.yml: the per-request retry window, from the repository variable.
           ATLAS_GATEWAY_DEADLINE_MINUTES: ${{ vars.ATLAS_GATEWAY_DEADLINE_MINUTES || '20' }}
-          # Indexing a full-county CAR (11M blocks for Travis) takes about 2.3 GB of heap.
+          # For the verify script itself, which indexes the CAR after the CLI has checked it
+          # (scripts/car-file.mjs): a full-county CAR has 11M blocks (Travis).
           NODE_OPTIONS: --max-old-space-size=12288
         run: npm run verify
       - name: Upload validation errors
