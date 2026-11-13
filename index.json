@@ -1,7 +1,20 @@
 {
   "version": 1,
-  "generated_from": "441a30159f80823d4ccd89fb4fddd168619f5b74",
+  "generated_from": "89d7d4e3da579bf2f1a44a23c42b07cdbf4a62d4",
   "counties": [
+    {
+      "county": "new-castle",
+      "state": "DE",
+      "fips": "10003",
+      "groups": {
+        "county": {
+          "cid": "baguqeerahh2vqhshog4snyz4xg5uhbhacgcddaczlzgqf5wfjykloztqflzq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerasydknaarycpykmonkp3vuc3hqb7vh57tuuxhotgccnywju7rv5kq",
+          "published_at": "2026-11-12T20:35:01.000Z"
+        }
+      }
+    },
     {
       "county": "baker",
       "state": "FL",
@@ -525,6 +538,32 @@
       }
     },
     {
+      "county": "mecklenburg",
+      "state": "NC",
+      "fips": "37119",
+      "groups": {
+        "county": {
+          "cid": "baguqeerauujzyet66rnrr7ebaiel5flyuzjtzet6ehddffvzirnq5tbfcgwa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerawwv3u56npyzytzwpfbdrsgecvzdr5mi7qvtbvecrinb7bjlu6yfq",
+          "published_at": "2026-11-12T20:36:01.000Z"
+        }
+      }
+    },
+    {
+      "county": "franklin",
+      "state": "OH",
+      "fips": "39049",
+      "groups": {
+        "county": {
+          "cid": "baguqeeradc73lxojjpdb354s5w456cuhkdxxujozpys3pa4l7xi5o7xpozga",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraukavcvlfxlnmthgra7nau6tijeixafkvyqqijgopvnpzj7ayv2ca",
+          "published_at": "2026-11-12T20:35:49.000Z"
+        }
+      }
+    },
+    {
       "county": "travis",
       "state": "TX",
       "fips": "48453",
@@ -540,6 +579,32 @@
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
           "tables": "baguqeeraaixjsbyifs5gzxd4dqjtcog3cahm7u3bwj3sqnisyocyfksbcnba",
           "published_at": "2026-11-10T23:04:57.000Z"
+        }
+      }
+    },
+    {
+      "county": "salt-lake",
+      "state": "UT",
+      "fips": "49035",
+      "groups": {
+        "county": {
+          "cid": "baguqeera4p6ggkqyqkuhdk3snp64st2wxnsmalyba6pqwkehydqicguv5mfa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerazh2oqwjoadp5dw6y3hxaqok7ygaun2knyr36uehhaexn3qub2ina",
+          "published_at": "2026-11-12T20:35:12.000Z"
+        }
+      }
+    },
+    {
+      "county": "king",
+      "state": "WA",
+      "fips": "53033",
+      "groups": {
+        "county": {
+          "cid": "baguqeera2g3w5yduyo7lhws7x3tvzvedl5yo3oyyji7hwrvgouygtqvf6csa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeragnat5gr4unjrnx545yyp2vpdvehctpajqkdpb7ktofbme5rn4sea",
+          "published_at": "2026-11-12T16:25:48.000Z"
         }
       }
     }
