@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "33b81bdf1e87e5a41f1f17c58f6157507fe573df",
+  "generated_from": "718364be6929710f29375daa151569b57bc3f9af",
   "counties": [
     {
       "county": "santa-clara",
@@ -586,6 +586,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerawwv3u56npyzytzwpfbdrsgecvzdr5mi7qvtbvecrinb7bjlu6yfq",
           "published_at": "2026-11-12T20:36:01.000Z"
+        }
+      }
+    },
+    {
+      "county": "wake",
+      "state": "NC",
+      "fips": "37183",
+      "groups": {
+        "county": {
+          "cid": "baguqeerarvhjtenamfz23wknirj6c2ngojynibomqltvjgv6jxctqzuvo3za",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeragynintxgjwhkkcqtasgmttxrxdhiuzkad777odf75tydz7tbsg2q",
+          "published_at": "2026-11-12T20:35:25.000Z"
         }
       }
     },
