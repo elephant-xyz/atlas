@@ -132,7 +132,7 @@ const defaults = () => ({
   bucket: process.env.FILEBASE_BUCKET || 'elephant-atlas',
   s3PartBytes: Number(process.env.ATLAS_S3_PART_MB ?? 64) * 1024 * 1024,
   s3Parallel: Number(process.env.ATLAS_S3_PARALLEL ?? 4),
-  tablesCar: process.env.ATLAS_TABLES_CAR || 'parts',
+  tablesCar: process.env.ATLAS_TABLES_CAR || 'full',
   tablesPinMs: Number(process.env.ATLAS_TABLES_PIN_MINUTES ?? 30) * 60_000,
   s3: undefined, // the S3 client; made from the environment when first needed
   sleep,
@@ -807,12 +807,13 @@ export async function transferTables(root, deps = {}) {
 //     every block hashed against its CID and written once;
 //   either way the file must hold the root's whole DAG before it is uploaded (every block linked
 //   from the root is in it and hashes to its CID), or the publication is at fault (TransferFailed);
-//   - tables: the tables block and each Parquet part's CAR export, in one CAR rooted at the tables
-//     block. Its county_root link is the archive, which the archive transfer has already pinned in
-//     this bucket. If that CAR does not pin within ATLAS_TABLES_PIN_MINUTES (default 30), a second
-//     one is sent that carries the archive's blocks as well (from the group's car file, or shard by
-//     shard from the gateways), so the tables CAR is a complete DAG on its own. ATLAS_TABLES_CAR=full
-//     sends that one at once.
+//   - tables: the tables block, each Parquet part's CAR export and the archive's blocks (from the
+//     group's car file, or shard by shard from the gateways), in one CAR rooted at the tables block,
+//     so the tables CAR is a complete DAG on its own. The tables block links to the archive
+//     (county_root), and Filebase pins a root only from a CAR that holds every block reachable from
+//     it: its import does not combine the upload with the archive already pinned in this bucket
+//     (Filebase support, 2026-11-13). ATLAS_TABLES_CAR=parts first sends the tables block and its
+//     parts alone, waits ATLAS_TABLES_PIN_MINUTES (default 30), then sends the complete one.
 // Objects are keyed import/<ST>-<county>-<group>[-tables[-full]]-<root>.car: deterministic, so a
 // re-run finds the object it uploaded, and never the key of another version of the same group
 // (overwriting that object could unpin a root the index still lists). The request that ends an
@@ -1068,7 +1069,7 @@ export async function transferArchiveViaS3(t, deps = {}) {
   }
 }
 
-/** Copy tables target `t` as an import=car object: its tables block and parts, then (if that does not pin) with the archive's blocks too. */
+/** Copy tables target `t` as an import=car object carrying its tables block, parts and the archive's blocks (tablesCar 'parts': the block and parts alone first). */
 export async function transferTablesViaS3(t, deps = {}) {
   const d = { ...defaults(), ...deps };
   const root = t.cid;

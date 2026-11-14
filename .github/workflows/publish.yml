@@ -127,10 +127,12 @@ jobs:
       ATLAS_SKIP_STORED_SHARDS: ${{ vars.ATLAS_SKIP_STORED_SHARDS || '0' }}
       # s3 (default): upload each root as one import=car object; rpc: the dag/import path.
       ATLAS_PIN_VIA: ${{ vars.ATLAS_PIN_VIA || 's3' }}
-      # How long a tables CAR of the tables block and its parts may wait for its pin before the
-      # tables are sent again with the archive's blocks (ATLAS_TABLES_CAR=full sends that at once).
+      # full (default): the tables CAR carries the archive's blocks too. Filebase pins a root only
+      # from a CAR that holds every block reachable from it (Filebase support, 2026-11-13); it does
+      # not combine the upload with the archive already pinned in the bucket. parts: send the tables
+      # block and its Parquet parts alone first, wait ATLAS_TABLES_PIN_MINUTES, then send the full one.
       ATLAS_TABLES_PIN_MINUTES: ${{ vars.ATLAS_TABLES_PIN_MINUTES || '30' }}
-      ATLAS_TABLES_CAR: ${{ vars.ATLAS_TABLES_CAR || 'parts' }}
+      ATLAS_TABLES_CAR: ${{ vars.ATLAS_TABLES_CAR || 'full' }}
     steps:
       - uses: actions/checkout@v4
         with:

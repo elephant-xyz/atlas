@@ -1139,10 +1139,10 @@ test('a car file that lacks a block, or a gateway block that does not hash, is t
   }
 });
 
-test('tables go up as one CAR of the tables block and its parts, the archive left to the pin the bucket has', async () => {
+test('with tablesCar parts, tables go up as one CAR of the tables block and its parts, the archive left to the pin the bucket has', async () => {
   const f = await s3Fixture({ pins: (root, blocks) => (blocks.has(root) ? 'pinned' : 'failed') });
   try {
-    await transferTablesViaS3(f.target('tables', f.tables.cid), f.deps);
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts' });
     const obj = f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`);
     const { roots, blocks } = await carOf(obj.body);
     assert.deepEqual(roots, [f.tables.cid.toString()]);
@@ -1161,7 +1161,7 @@ test('tables that do not pin from their parts alone are sent again with the arch
   const f = await s3Fixture({ pins: (root, blocks) => ([...wanted].every((c) => blocks.has(c)) ? 'pinned' : 'failed') });
   const wanted = await all(f);
   try {
-    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesPinMs: 60_000 });
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', tablesPinMs: 60_000 });
     const partsOnly = f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`);
     assert.equal(partsOnly.metadata['pinning-status'], 'failed');
     const full = f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-full-${f.tables.cid}.car`);
@@ -1171,6 +1171,24 @@ test('tables that do not pin from their parts alone are sent again with the arch
     assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
     assert.match(f.logs.join('\n'), /did not pin from its parts alone \(Filebase could not pin/);
     assert.deepEqual(readdirSync(f.tmp), []);
+  } finally {
+    await f.s3.close();
+  }
+});
+
+test('by default the tables CAR carries the archive\'s blocks too and is the only upload', async () => {
+  // Filebase pins an import=car object only when the CAR carries every block under its root (Filebase support, 2026-11-13).
+  const f = await s3Fixture({ pins: (root, blocks) => ([...wanted].every((c) => blocks.has(c)) ? 'pinned' : 'failed') });
+  const wanted = new Set([f.index, f.shard, f.property, f.tables, f.part].map((b) => b.cid.toString()));
+  try {
+    await transferTablesViaS3(f.target('tables', f.tables.cid), f.deps);
+    assert.equal(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`), undefined, 'no parts-only upload');
+    const full = f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-full-${f.tables.cid}.car`);
+    const { roots, blocks } = await carOf(full.body);
+    assert.deepEqual(roots, [f.tables.cid.toString()]);
+    assert.deepEqual(blocks.sort(), [...wanted].sort(), 'tables, parts and the archive, each once');
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
+    assert.equal(f.s3.requests.filter((r) => r.op === 'PutObject' || r.op === 'CompleteMultipartUpload').length, 1, 'one upload');
   } finally {
     await f.s3.close();
   }
@@ -1193,7 +1211,7 @@ test('a part download whose body the gateway drops midway is retried from the st
     const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
     let asked = 0;
     const fetch = async (url, init) => (url === partUrl && ++asked === 1 ? dropping() : f.deps.fetch(url, init));
-    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, fetch });
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch });
     assert.equal(asked, 2, 'the part was requested again after the drop');
     assert.match(f.logs.join('\n'), new RegExp(`/ipfs/${f.tables.cid}/tables/address/parts/0/cid: download dropped \\(terminated\\); retry 1/4`));
     const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
@@ -1210,7 +1228,7 @@ test('a part download the gateway drops every time fails after 5 attempts instea
     const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
     let asked = 0;
     const fetch = async (url, init) => (url === partUrl ? (asked++, dropping()) : f.deps.fetch(url, init));
-    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, fetch }), /terminated/);
+    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch }), /terminated/);
     assert.equal(asked, 5, 'DOWNLOAD_ATTEMPTS whole downloads');
     assert.equal(f.logs.filter((l) => /download dropped/.test(l)).length, 4);
     assert.equal(f.s3.requests.filter((r) => r.op !== 'HeadObject').length, 0, 'nothing uploaded');
@@ -1232,7 +1250,7 @@ test('a part download the gateway ends early without an error is read through, r
     const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
     let asked = 0;
     const fetch = async (url, init) => (url === partUrl && ++asked === 1 ? truncated(f.deps.fetch, url, init) : f.deps.fetch(url, init));
-    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, fetch });
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch });
     assert.equal(asked, 2, 'the cut-off part was requested again');
     assert.match(f.logs.join('\n'), new RegExp(`/ipfs/${f.tables.cid}/tables/address/parts/0/cid: download dropped \\(Unexpected end of data\\); retry 1/4`));
     const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
@@ -1249,7 +1267,7 @@ test('a part download the gateway ends early every time fails after 5 attempts, 
     const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
     let asked = 0;
     const fetch = async (url, init) => (url === partUrl ? (asked++, truncated(f.deps.fetch, url, init)) : f.deps.fetch(url, init));
-    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, fetch }), /Unexpected end of data/);
+    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch }), /Unexpected end of data/);
     assert.equal(asked, 5, 'DOWNLOAD_ATTEMPTS whole downloads');
     assert.equal(f.logs.filter((l) => /download dropped/.test(l)).length, 4);
     assert.equal(f.s3.requests.filter((r) => r.op !== 'HeadObject').length, 0, 'nothing uploaded');
@@ -1265,7 +1283,7 @@ test('tables whose parts-only upload is still unanswered when the tables pin win
   const partsOnly = (key) => !key.includes('-tables-full-');
   const f = await s3Fixture({ respond: ({ op, key }) => (op === 'CompleteMultipartUpload' && partsOnly(key) ? { hold: true } : undefined) });
   try {
-    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesPinMs: 300 });
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', tablesPinMs: 300 });
     const completes = f.s3.requests.filter((r) => r.op === 'CompleteMultipartUpload').map((r) => r.key);
     assert.deepEqual(completes, [`import/FL-lee-county-tables-${f.tables.cid}.car`, `import/FL-lee-county-tables-full-${f.tables.cid}.car`]);
     assert.equal(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`), undefined, 'the parts-only CAR was never stored');
@@ -1290,7 +1308,7 @@ test('a cancelled run (d.signal aborted) during the parts-only tables upload sto
     },
   });
   try {
-    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesPinMs: 300, signal: run.signal }), (e) => e.name === 'AbortError');
+    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', tablesPinMs: 300, signal: run.signal }), (e) => e.name === 'AbortError');
     assert.ok(run.signal.aborted);
     assert.ok(!f.s3.requests.some((r) => r.key.includes('-tables-full-')), 'no full CAR uploaded');
     assert.ok(!f.logs.some((l) => /did not pin from its parts alone/.test(l)));

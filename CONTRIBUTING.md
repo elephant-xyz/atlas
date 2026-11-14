@@ -154,8 +154,8 @@ How a root is pinned (repository variables, all optional):
 | Variable | Default | |
 | --- | --- | --- |
 | `ATLAS_PIN_VIA` | `s3` | `s3`: one CAR per root, uploaded with `import=car` to `import/<ST>-<county>-<group>[-tables]-<root>.car`, then `pin/ls`. `rpc`: the earlier `dag/import` path (piece by piece, then a pinned import of the root block); its shard progress is what the Actions cache keeps |
-| `ATLAS_TABLES_PIN_MINUTES` | `30` | how long a tables CAR of the tables block and its parts may wait for its pin before it is sent again with the archive's blocks |
-| `ATLAS_TABLES_CAR` | `parts` | `full` sends the tables CAR with the archive's blocks at once |
+| `ATLAS_TABLES_PIN_MINUTES` | `30` | with `ATLAS_TABLES_CAR=parts`: how long a tables CAR of the tables block and its parts may wait for its pin before it is sent again with the archive's blocks |
+| `ATLAS_TABLES_CAR` | `full` | `full` sends the tables CAR with the archive's blocks, which Filebase needs to pin the root (a CAR import pins only a root whose whole DAG is in the file); `parts` first sends the tables block and its parts alone |
 | `FILEBASE_S3_ENDPOINT` | `https://s3.filebase.com` | the S3 endpoint; the keys are the `ELEPHANT_FILEBASE_*` secrets the RPC uses |
 
 The upload is a multipart upload of 64 MB parts (`ATLAS_S3_PART_MB`), 4 at a time

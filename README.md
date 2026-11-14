@@ -65,8 +65,9 @@ root the registry cannot serve:
    Filebase bucket through Filebase's S3 endpoint (`s3.filebase.com`, multipart) with the object
    metadata `import=car`, under `import/<ST>-<county>-<group>[-tables]-<root>.car`. Filebase
    imports the CAR and pins its root; the pin is verified with `pin/ls`. A tables CAR carries
-   the tables block and its Parquet parts; if it does not pin within `ATLAS_TABLES_PIN_MINUTES`
-   (default 30) it is sent again with the archive's blocks too. The repository variable
+   the tables block, its Parquet parts and the archive's blocks: Filebase pins a root only from a
+   CAR that holds every block reachable from it, and the tables block links to the archive
+   (`county_root`). The repository variable
    `ATLAS_PIN_VIA=rpc` goes back to the earlier path, `dag/import` bounded piece by piece (the
    root block, one shard or Parquet part at a time, then the root block with `pin-roots=true`),
    which on 2026-11-13 left roots with no pin at all. Pinning by CID (`pin/add`) is not used: Filebase does
