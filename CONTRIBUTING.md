@@ -68,7 +68,9 @@ is not publishable, whatever the upload logs say.
    protected by a ruleset: a change lands only through a pull request with one approving
    review from a code owner (`.github/CODEOWNERS`) and a green `validate`; nothing is deleted
    or force-pushed. Merge once both are in place (see Merging county pull requests).
-8. The publish workflow transfers your roots into the registry's Filebase bucket, regenerates
+8. The publish workflow transfers your roots into the registry's Filebase bucket (each root as
+   one CAR file uploaded through Filebase's S3 endpoint with the metadata `import=car`, which
+   pins it; your `car` file, when the group has one, is that CAR), regenerates
    `index.json`, commits it to `main`, and points the `elephant-atlas` IPNS name at it.
    Consumers read the index through that name (and, when `ATLAS_INDEX_S3_URI` is set, from a
    byte-identical copy in S3; see the README). The workflow's own commits (the index, a
@@ -142,10 +144,23 @@ A run transfers each group in a job of its own, `ATLAS_PUBLISH_MAX_PARALLEL` (re
 variable, default 4) at a time, and publishes the index once they have all ended. A hosted
 runner stops a job after 6 hours; a transfer job stops itself after 5.5 (`ATLAS_RUN_MINUTES`,
 default 330) and leaves what it did not finish for the next run. That run starts where this one
-stopped: a root already pinned is skipped, the shards Filebase confirmed are kept in the Actions
-cache and not sent again, and a pin Filebase was still working on when the run ended is picked
-up by watching `pin/ls`. So merging many very large counties at once only spreads them over
-several runs.
+stopped: a root already pinned is skipped, an `import=car` object Filebase already imported as
+that root is not uploaded again, and a pin Filebase was still working on when the run ended is
+picked up by watching `pin/ls`. So merging many very large counties at once only spreads them
+over several runs.
+
+How a root is pinned (repository variables, all optional):
+
+| Variable | Default | |
+| --- | --- | --- |
+| `ATLAS_PIN_VIA` | `s3` | `s3`: one CAR per root, uploaded with `import=car` to `import/<ST>-<county>-<group>[-tables]-<root>.car`, then `pin/ls`. `rpc`: the earlier `dag/import` path (piece by piece, then a pinned import of the root block); its shard progress is what the Actions cache keeps |
+| `ATLAS_TABLES_PIN_MINUTES` | `30` | with `ATLAS_TABLES_CAR=parts`: how long a tables CAR of the tables block and its parts may wait for its pin before it is sent again with the archive's blocks |
+| `ATLAS_TABLES_CAR` | `full` | `full` sends the tables CAR with the archive's blocks, which Filebase needs to pin the root (a CAR import pins only a root whose whole DAG is in the file); `parts` first sends the tables block and its parts alone |
+| `FILEBASE_S3_ENDPOINT` | `https://s3.filebase.com` | the S3 endpoint; the keys are the `ELEPHANT_FILEBASE_*` secrets the RPC uses |
+
+The upload is a multipart upload of 64 MB parts (`ATLAS_S3_PART_MB`), 4 at a time
+(`ATLAS_S3_PARALLEL`). A job needs disk for one county CAR (two while a tables CAR is sent with
+the archive's blocks: the tables CAR and the archive streamed into it).
 
 ## When a publication is reverted
 

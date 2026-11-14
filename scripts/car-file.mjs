@@ -3,8 +3,10 @@
 // into the stream chunk it was parsed from, so every chunk stays alive: on Node 22 indexing the
 // Travis County archive (11.3M blocks, 4 GB) runs out of a 12 GB heap. This index keeps only the
 // CID string, offset and length of each block, and reads block bytes from the file on demand.
+import { closeSync, openSync, writeSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import * as dagCbor from '@ipld/dag-cbor';
+import { varint as uvarint } from 'multiformats';
 import { CID } from 'multiformats/cid';
 
 /**
@@ -47,6 +49,16 @@ function cidLength(buf, pos) {
  */
 export async function openCar(file) {
   const handle = await open(file, 'r');
+  try {
+    return await indexCar(file, handle);
+  } catch (e) {
+    // A file that is not a CAR must not leave its handle to the garbage collector (an error on Node 24+).
+    await handle.close().catch(() => {});
+    throw e;
+  }
+}
+
+async function indexCar(file, handle) {
   const { size: fileSize } = await handle.stat();
   const CHUNK = 8 << 20;
   let buf = new Uint8Array(0);
@@ -114,5 +126,55 @@ export async function openCar(file) {
       return { cid: typeof cid === 'string' ? CID.parse(cid) : cid, bytes };
     },
     close: () => handle.close(),
+  };
+}
+
+/**
+ * Write a CARv1 file with one root, block by block: { put(cid, bytes), blocks, close() }. Writes
+ * are buffered (a county is millions of small blocks) and synchronous, so the file is complete
+ * once close() returns. Blocks are written as given: hash them before put().
+ */
+export function createCarFile(file, root) {
+  const fd = openSync(file, 'w');
+  const LIMIT = 4 << 20;
+  let chunks = [];
+  let pending = 0;
+  let blocks = 0;
+  const flush = () => {
+    if (pending) writeSync(fd, Buffer.concat(chunks, pending));
+    chunks = [];
+    pending = 0;
+  };
+  const push = (bytes) => {
+    chunks.push(bytes);
+    pending += bytes.length;
+    if (pending >= LIMIT) flush();
+  };
+  const prefix = (n) => {
+    const out = new Uint8Array(uvarint.encodingLength(n));
+    uvarint.encodeTo(n, out, 0);
+    return out;
+  };
+  const header = dagCbor.encode({ version: 1, roots: [CID.asCID(root) ?? CID.parse(String(root))] });
+  push(prefix(header.length));
+  push(header);
+  return {
+    put(cid, bytes) {
+      const c = (CID.asCID(cid) ?? CID.parse(String(cid))).bytes;
+      push(prefix(c.length + bytes.length));
+      push(c);
+      push(bytes);
+      blocks++;
+    },
+    get blocks() {
+      return blocks;
+    },
+    close() {
+      try {
+        flush();
+      } finally {
+        closeSync(fd);
+      }
+    },
   };
 }

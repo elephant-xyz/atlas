@@ -60,10 +60,17 @@ root the registry cannot serve:
    through public gateways tried in order (`https://ipfs.filebase.io`, then
    `https://trustless-gateway.link`); a private gateway can be put first through the
    `ATLAS_GATEWAYS` repository secret, which GitHub masks in logs,
-   and imported into the `elephant-atlas` Filebase bucket with `dag/import`, bounded piece by
-   piece: the root block alone, then one shard (or one Parquet part) at a time through a temp
-   file, then the root block again with `pin-roots=true` so the recursive pin sees a complete
-   DAG. The pin is verified with `pin/ls`. Pinning by CID (`pin/add`) is not used: Filebase does
+   into one CAR file per root (a group's `car` file is used as it is), checked to hold the
+   root's whole DAG with every block hashing to its CID, and uploaded to the `elephant-atlas`
+   Filebase bucket through Filebase's S3 endpoint (`s3.filebase.com`, multipart) with the object
+   metadata `import=car`, under `import/<ST>-<county>-<group>[-tables]-<root>.car`. Filebase
+   imports the CAR and pins its root; the pin is verified with `pin/ls`. A tables CAR carries
+   the tables block, its Parquet parts and the archive's blocks: Filebase pins a root only from a
+   CAR that holds every block reachable from it, and the tables block links to the archive
+   (`county_root`). The repository variable
+   `ATLAS_PIN_VIA=rpc` goes back to the earlier path, `dag/import` bounded piece by piece (the
+   root block, one shard or Parquet part at a time, then the root block with `pin-roots=true`),
+   which on 2026-11-13 left roots with no pin at all. Pinning by CID (`pin/add`) is not used: Filebase does
    not serve a bucket's inner blocks to nodes outside the owning account, its own pinning
    cluster included, so a `pin/add` of another account's root sits in `pinning` forever.
 2. A group whose root no gateway can serve through the retry policy, or whose root another
@@ -133,7 +140,9 @@ atlas/
 │   ├── validate-entry.mjs          schema, key consistency, no duplicate roots, index not hand-edited
 │   ├── verify-roots.mjs            the gate: whole archive by root, elephant-cli validate, schema, tables and parts by CID
 │   ├── build-index.mjs             regenerate index.json from counties/
-│   ├── transfer-roots.mjs          export new roots from the gateway, import them into the bucket
+│   ├── transfer-roots.mjs          export new roots from the gateway, upload them to the bucket as import=car CARs
+│   ├── s3.mjs                      minimal SigV4 S3 client (HeadObject, PutObject, multipart) for those uploads
+│   ├── car-file.mjs                index a CAR file on disk; write one block by block
 │   ├── publish-index.mjs           commit index.json, add it, point the IPNS name at it
 │   ├── upload-index-s3.mjs         optional: copy the published index.json to S3, held to its CID
 │   ├── unixfs.mjs                  the CID Kubo gives a file (add --cid-version=1 --raw-leaves)

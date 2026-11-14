@@ -35,6 +35,8 @@ env:
   FILEBASE_ACCESS_KEY: ${{ secrets.ELEPHANT_FILEBASE_ACCESS_KEY }}
   FILEBASE_SECRET_KEY: ${{ secrets.ELEPHANT_FILEBASE_SECRET_KEY }}
   FILEBASE_BUCKET: elephant-atlas
+  # Filebase's S3 endpoint, for the import=car uploads (same keys as the RPC; SigV4).
+  FILEBASE_S3_ENDPOINT: ${{ vars.FILEBASE_S3_ENDPOINT || 'https://s3.filebase.com' }}
   # Optional private gateway(s), comma-separated, tried before the public ones; masked in logs.
   ATLAS_GATEWAYS: ${{ secrets.ATLAS_GATEWAYS }}
   ATLAS_GATEWAY_TOKEN: ${{ secrets.ATLAS_GATEWAY_TOKEN }}
@@ -84,9 +86,12 @@ jobs:
           COUNTY: ${{ inputs.county }}
         run: node scripts/transfer-roots.mjs --plan ${{ inputs.transfer_all && '--all' || '' }} ${COUNTY:+--county "$COUNTY"}
 
-  # 2. One job per group: export its roots (archive, then tables) from the public gateway, or
-  # its `car` file, and import them into the elephant-atlas bucket shard by shard and part by
-  # part, then pin each root. A job has the whole 6-hour job limit to itself, and the jobs run
+  # 2. One job per group: for each of its roots (archive, then tables) build one CAR file of the
+  # root's DAG (the group's `car` file as it is, or the shards / Parquet parts exported from the
+  # gateways), upload it to the elephant-atlas bucket through Filebase's S3 endpoint with the
+  # metadata import=car, which makes Filebase import it and pin the root, and require pin/ls to
+  # list the root (ATLAS_PIN_VIA=rpc goes back to dag/import shard by shard and part by part,
+  # then a pinned import of the root block). A job has the whole 6-hour job limit to itself, and the jobs run
   # side by side, up to ATLAS_PUBLISH_MAX_PARALLEL at once (repository variable, default 4; each
   # job imports ATLAS_TRANSFER_PARALLEL shards at a time, so the product is the load on the
   # Filebase RPC). A group that fails is held back and the job ends red; the others go on.
@@ -120,6 +125,14 @@ jobs:
       # so on a first transfer it can skip shards the bucket lacks (the pin then fails and the
       # root is deferred, not withdrawn). The progress cache below is the default resume.
       ATLAS_SKIP_STORED_SHARDS: ${{ vars.ATLAS_SKIP_STORED_SHARDS || '0' }}
+      # s3 (default): upload each root as one import=car object; rpc: the dag/import path.
+      ATLAS_PIN_VIA: ${{ vars.ATLAS_PIN_VIA || 's3' }}
+      # full (default): the tables CAR carries the archive's blocks too. Filebase pins a root only
+      # from a CAR that holds every block reachable from it (Filebase support, 2026-11-13); it does
+      # not combine the upload with the archive already pinned in the bucket. parts: send the tables
+      # block and its Parquet parts alone first, wait ATLAS_TABLES_PIN_MINUTES, then send the full one.
+      ATLAS_TABLES_PIN_MINUTES: ${{ vars.ATLAS_TABLES_PIN_MINUTES || '30' }}
+      ATLAS_TABLES_CAR: ${{ vars.ATLAS_TABLES_CAR || 'full' }}
     steps:
       - uses: actions/checkout@v4
         with:
