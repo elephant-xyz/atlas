@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "913101f3f391792bd2031f2cf4ddc7a1a0218719",
+  "generated_from": "33b81bdf1e87e5a41f1f17c58f6157507fe573df",
   "counties": [
     {
       "county": "santa-clara",
@@ -560,6 +560,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerabt7rtq36nnoqlpifjjglgqzewxlch4gkxgvdjakcimek6z2p6aqa",
           "published_at": "2026-11-10T19:38:24.000Z"
+        }
+      }
+    },
+    {
+      "county": "oakland",
+      "state": "MI",
+      "fips": "26125",
+      "groups": {
+        "county": {
+          "cid": "baguqeera3hx3wyoexpqlzctowo3deq6a23qo2aqyerfdegi67jqhs2j33mzq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerawg62f2y6ivqiergxfoko32samnupfji54x6dsmjlyfhti3tq6mya",
+          "published_at": "2026-11-12T20:35:37.000Z"
         }
       }
     },
