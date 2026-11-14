@@ -1,0 +1,13 @@
+{
+  "county": "hennepin",
+  "state": "MN",
+  "fips": "27053",
+  "groups": {
+    "county": {
+      "cid": "baguqeerasltc322lvu73uuzx35ko6mr4gwm6ehnnec7ov7mc6y64h5mopnpa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerawhwvgebjfnv33wd25ncfiy7q6kfrrxmvjtjli4qilockljmvahia",
+      "car": "bafybeidd6i55ut6kbxrusejkzvqcedxoaxqypl4shz47tdjmcdsrptt7yy"
+    }
+  }
+}
