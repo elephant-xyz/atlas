@@ -1,10 +1,10 @@
 // What every Atlas command shares when Transform's command executor runs it: the configuration
 // it was started under (the argv `--configuration <id>`, one of those in this directory),
-// parameters from the environment checked against it, secrets kept to the command that needs
-// them and out of every log and result, a checkout of the registry fetched from GitHub, the check
-// that this image runs main's scripts, and result.json written only on success. A command is
-// `{ name, summary, returns, parameters, secrets, inputs, outputs, run, deps }`; its file calls
-// runCommand(command), which exits 0 with result.json written or 1 with none.
+// parameters from the environment checked against it, secrets kept out of every log and result,
+// a checkout of the registry fetched from GitHub, the check that this image runs main's
+// scripts, and result.json written only on success. A command is
+// `{ name, parameters, inputs, outputs, run, deps }`; its file calls runCommand(command), which
+// exits 0 with result.json written or 1 with none.
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,16 +19,13 @@ import { baseRef, git, refExists } from '../scripts/lib.mjs';
 /** The repository root, where the image keeps the Atlas files it runs (/opt/atlas). */
 export const IMAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 /**
- * The image's command configurations, by id. Each gives its commands only the secrets every one
- * of them uses: none to the checks of a pull request from a fork (and to check-page always), the
- * gateways to verify on a pull request from this repository, no deploy key to a transfer, no
- * Filebase key to a withdrawal. A task receives every secret its configuration declares, and
- * deleting one from process.env does not take it out of the process's environment block.
+ * The image's command configurations, by id. Each declares only the secrets every one of its
+ * commands uses, and the executor gives a task exactly those.
  */
 const CONFIGURATION_IDS = ['atlas-command-validation-public', 'atlas-command-validation', 'atlas-command-transfer', 'atlas-command-index', 'atlas-command-withdrawal'];
 const CONFIGURATIONS = new Map(CONFIGURATION_IDS.map((id) => [id, JSON.parse(readFileSync(new URL(`./${id}.json`, import.meta.url), 'utf8'))]));
 const allOf = (field) => [...new Set([...CONFIGURATIONS.values()].flatMap((configuration) => Object.keys(configuration[field])))];
-/** Every secret and parameter any Atlas configuration declares. */
+/** Every secret (whose values are redacted) and parameter any Atlas configuration declares. */
 const SECRET_NAMES = allOf('secretEnvironment');
 const PARAMETER_NAMES = allOf('parameters');
 const CONFIGURATION_FLAG = '--configuration';
@@ -42,7 +39,6 @@ export const RESULT_FILE = 'result.json';
 export const HELD_FILE = 'held.json';
 /** The hold kind that takes a publication off main (see transfer-roots.mjs). */
 export const WITHDRAWN = 'withdrawn';
-const HELP = '--help';
 const SUCCEEDED = 0;
 const FAILED = 1;
 
@@ -161,27 +157,14 @@ const PAGE_PATH = wholeValue(`counties/(?:${COUNTY_PATTERN})\\.json`);
 const PAGE_PATH_SHAPE = 'a page is counties/<ST>/<county>.json, <ST> two capital letters and <county> lowercase letters and digits in words joined by hyphens, such as counties/MN/hennepin.json';
 
 /**
- * The configuration `argv` (`--configuration <id>`, as the configuration's own argv for the
- * command gives it) names, which must be one of this image's and list the command; a run cannot
- * change the argv, so this is the configuration the task was started under.
+ * The configuration `argv` (`--configuration <id>`, as the configuration's own argv gives it)
+ * names: its parameter patterns judge the run, and they differ between configurations.
  */
-function startedUnder(command, argv) {
-  const [flag, id, ...rest] = argv;
-  if (flag !== CONFIGURATION_FLAG || id === undefined || rest.length) throw new Error(`must be started with ${CONFIGURATION_FLAG} <id> (${CONFIGURATION_IDS.join(' or ')}), as its configuration's argv does; parameters come as environment variables`);
-  const configuration = CONFIGURATIONS.get(id);
-  if (!configuration) throw new Error(`'${id}' is not a configuration of this image (${CONFIGURATION_IDS.join(', ')})`);
-  if (!Object.hasOwn(configuration.commands, command.name)) throw new Error(`${command.name} is not a command of ${id}`);
+function configurationIn(argv) {
+  const [flag, id] = argv;
+  const configuration = flag === CONFIGURATION_FLAG ? CONFIGURATIONS.get(id) : undefined;
+  if (!configuration) throw new Error(`must be started with ${CONFIGURATION_FLAG} <id> of one of this image's configurations (${CONFIGURATION_IDS.join(', ')})`);
   return configuration;
-}
-
-/**
- * Refuse to run when an Atlas secret the configuration does not declare reached this task: a
- * command never runs beside a secret its configuration was not meant to give it, however the
- * configuration was registered. Names only, never values.
- */
-function refuseForeignSecrets(command, configuration, env) {
-  const foreign = SECRET_NAMES.filter((name) => !Object.hasOwn(configuration.secretEnvironment, name) && env[name] !== undefined);
-  if (foreign.length) throw new Error(`${foreign.join(', ')} reached ${command.name} under ${configuration.id}, which does not declare it; refusing to run`);
 }
 
 /**
@@ -204,18 +187,6 @@ function readParameters(command, configuration, env) {
   }
   if (problems.length) throw new Error(problems.join('; '));
   return values;
-}
-
-/**
- * Drop from `env` every Atlas secret the command does not use, so neither the scripts nor the
- * CLI they start see it in their environment (a second line behind the configuration declaring
- * only what its commands use), and require the ones it cannot run without.
- */
-function keepSecrets(command, env) {
-  const { required, optional } = command.secrets;
-  for (const name of SECRET_NAMES) if (!required.includes(name) && !optional.includes(name)) delete env[name];
-  const missing = required.filter((name) => !env[name]?.trim());
-  if (missing.length) throw new Error(`secret(s) ${missing.join(', ')} required`);
 }
 
 /** The Kubo RPC bearer token scripts/filebase.mjs makes from the Filebase keys, or '' without them. */
@@ -299,29 +270,6 @@ function writeOutputs(dir, files) {
   }
 }
 
-/** The configuration --help describes the command under: the one `argv` names, else the first that lists it. */
-function helpConfiguration(command, argv) {
-  const named = argv[0] === CONFIGURATION_FLAG ? CONFIGURATIONS.get(argv[1]) : undefined;
-  if (named && Object.hasOwn(named.commands, command.name)) return named;
-  return [...CONFIGURATIONS.values()].find((configuration) => Object.hasOwn(configuration.commands, command.name));
-}
-
-/** --help: what the command does, takes and returns under `configuration`. */
-function usage(command, configuration) {
-  const parameter = ({ name, required }) => `  ${name.padEnd(32)} ${required ? 'required' : 'optional'}  ${configuration.parameters[name].pattern}`;
-  const secrets = Object.keys(configuration.secretEnvironment).map((name) => (command.secrets.required.includes(name) ? `${name} (required)` : name));
-  return [
-    `atlas-command ${command.name} (${configuration.id}): ${command.summary}`,
-    '',
-    'Parameters (environment variables, whole value matching the pattern):',
-    ...(command.parameters.length ? command.parameters.map(parameter) : ['  none']),
-    `Secrets (environment, by reference): ${secrets.join(', ') || 'none'}`,
-    `Inputs (${INPUTS_DIR}): ${command.inputs.join(', ') || 'none'}`,
-    `Outputs (${OUTPUTS_DIR}): ${command.outputs.join(', ')}`,
-    `${RESULT_FILE}: ${command.returns}`,
-  ].join('\n');
-}
-
 /**
  * Run `command` as the executor does: started under the configuration `argv` names, parameters
  * and secrets in `env`, inputs in `inputs`, outputs to `outputs`. Returns 0 once the command has
@@ -334,14 +282,7 @@ export async function runCommand(command, { argv = process.argv.slice(2), env = 
   const redact = redactor(env);
   const restore = routeConsole(stdout, stderr, redact);
   try {
-    if (argv.includes(HELP)) {
-      console.log(usage(command, helpConfiguration(command, argv)));
-      return SUCCEEDED;
-    }
-    const configuration = startedUnder(command, argv);
-    refuseForeignSecrets(command, configuration, env);
-    const parameters = readParameters(command, configuration, env);
-    keepSecrets(command, env);
+    const parameters = readParameters(command, configurationIn(argv), env);
     env.GIT_TERMINAL_PROMPT = '0';
     const work = mkdtempSync(join(tmpdir(), 'atlas-command-'));
     try {

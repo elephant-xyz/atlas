@@ -17,7 +17,7 @@ import { CID_A, CID_B, CID_C, CID_D, group, page } from './helpers.mjs';
 const configurationFile = (id) => JSON.parse(readFileSync(new URL(`../command/${id}.json`, import.meta.url), 'utf8'));
 const CONFIGURATION_IDS = ['atlas-command-validation-public', 'atlas-command-validation', 'atlas-command-transfer', 'atlas-command-index', 'atlas-command-withdrawal'];
 const CONFIGURATIONS = CONFIGURATION_IDS.map(configurationFile);
-const [VALIDATION_PUBLIC, VALIDATION, TRANSFER] = CONFIGURATIONS;
+const [VALIDATION_PUBLIC, VALIDATION] = CONFIGURATIONS;
 const COMMANDS = { 'check-page': checkPage, verify, transfer, 'publish-index': publishIndex, withdraw };
 /** The first configuration listing the command: for verify, the one without secrets. */
 const configurationOf = (name) => CONFIGURATIONS.find((c) => Object.hasOwn(c.commands, name));
@@ -148,12 +148,7 @@ test('each configuration gives its commands only the secrets every one of them u
     assert.ok(configuration.id.length <= 64, `${configuration.id} fits Transform's 64-character id`);
     assert.equal(configuration.image, VALIDATION.image, 'the same image');
     const commands = Object.keys(configuration.commands).map((name) => COMMANDS[name]);
-    for (const command of commands) {
-      assert.deepEqual(configuration.commands[command.name], ['node', `/opt/atlas/command/${command.name}.mjs`, ...startedUnder(configuration)]);
-      const uses = [...command.secrets.required, ...command.secrets.optional];
-      for (const name of Object.keys(configuration.secretEnvironment)) assert.ok(uses.includes(name), `${configuration.id} gives ${command.name} ${name}, which it does not use`);
-      for (const name of command.secrets.required) assert.ok(Object.hasOwn(configuration.secretEnvironment, name), `${configuration.id} lacks ${name} for ${command.name}`);
-    }
+    for (const command of commands) assert.deepEqual(configuration.commands[command.name], ['node', `/opt/atlas/command/${command.name}.mjs`, ...startedUnder(configuration)]);
     // The executor returns this output's JSON as the run's `result`.
     assert.equal(configuration.result, 'result.json');
     assert.ok(configuration.outputs.some(({ name, required }) => name === configuration.result && required), `${configuration.id} requires its result output`);
@@ -173,36 +168,6 @@ test('the image runs the elephant-cli release validate.yml pins, installs no dep
   assert.ok(dockerfile.includes(`ADD --checksum=sha256:${digest}`) && dockerfile.includes(`/releases/download/${version}/`), 'the CLI validate.yml pins');
   assert.match(dockerfile, /npm ci --omit=dev --ignore-scripts/);
   assert.ok(imageFiles(IMAGE_ROOT).includes('command/Dockerfile'));
-});
-
-test('an entry point refuses any Atlas secret its configuration does not declare, before anything runs', async () => {
-  for (const configuration of CONFIGURATIONS) {
-    for (const name of Object.keys(configuration.commands)) {
-      for (const secret of Object.keys(SECRETS).filter((s) => !Object.hasOwn(configuration.secretEnvironment, s))) {
-        const { code, result, err } = await run(COMMANDS[name], { configuration, env: { ATLAS_REPOSITORY_URL: '/nonexistent/atlas.git', [secret]: SECRETS[secret] } });
-        assert.equal(code, 1);
-        assert.equal(result, undefined);
-        assert.ok(err.includes(`${secret} reached ${name} under ${configuration.id}, which does not declare it`), err);
-        assert.ok(!err.includes('clone') && !err.includes(SECRETS[secret].split('\n').find((line) => !line.startsWith('-----'))), err);
-      }
-    }
-  }
-});
-
-test('an entry point refuses to run unless the configuration it was started under has its command', async () => {
-  for (const command of Object.values(COMMANDS)) {
-    const other = CONFIGURATIONS.find((c) => !Object.hasOwn(c.commands, command.name));
-    for (const [argv, message] of [
-      [startedUnder(other), `${command.name} is not a command of ${other.id}`],
-      [[], 'must be started with --configuration <id>'],
-      [['--configuration', 'atlas-command'], "'atlas-command' is not a configuration of this image"],
-    ]) {
-      const { code, result, err } = await run(command, { argv, env: { ATLAS_REPOSITORY_URL: '/nonexistent/atlas.git' } });
-      assert.equal(code, 1, `${command.name} ${argv.join(' ')}`);
-      assert.equal(result, undefined);
-      assert.ok(err.includes(message), err);
-    }
-  }
 });
 
 test("parameter patterns accept the consumer's values as whole values only: every page on main, and no gateway deadline beyond the configuration's time limit", () => {
@@ -250,30 +215,16 @@ test('the committed configurations never name an image digest: the image is pinn
 
 // ---- what every command does before it runs anything
 
-test('--help lists the parameters, secrets, inputs and outputs under the configuration it is started with', async () => {
-  const help = async (configuration) => {
-    const out = [];
-    const code = await runCommand(verify, { argv: [...startedUnder(configuration), '--help'], env: {}, stdout: { write: (s) => out.push(s) }, stderr: { write: () => {} } });
-    assert.equal(code, 0);
-    return out.join('');
-  };
-  const withGateways = await help(VALIDATION);
-  assert.match(withGateways, /^atlas-command verify \(atlas-command-validation\): /);
-  assert.match(withGateways, /ATLAS_PAGE\s+required\s+counties\//);
-  assert.match(withGateways, /ATLAS_GATEWAY_DEADLINE_MINUTES\s+optional/);
-  assert.match(withGateways, /Secrets \(environment, by reference\): ATLAS_GATEWAYS, ATLAS_GATEWAY_TOKEN$/m);
-  assert.match(withGateways, /validation-errors\.csv/);
-  assert.match(await help(VALIDATION_PUBLIC), /Secrets \(environment, by reference\): none$/m);
-});
-
-test('a missing, malformed or foreign parameter fails before anything is fetched, and writes no result', async () => {
+test('a run started without its configuration, or with a missing, malformed or foreign parameter, fails before anything is fetched, and writes no result', async () => {
   const env = { ATLAS_REPOSITORY_URL: '/nonexistent/atlas.git', ATLAS_HEAD_SHA: 'a'.repeat(40), ATLAS_PAGE: HENNEPIN };
-  for (const [changed, message] of [
+  for (const [changed, message, argv] of [
     [{ ATLAS_PAGE: undefined }, 'ATLAS_PAGE is required'],
     [{ ATLAS_HEAD_SHA: 'main' }, 'ATLAS_HEAD_SHA does not match its pattern'],
     [{ ATLAS_COUNTY: 'MN/hennepin' }, 'ATLAS_COUNTY is not a parameter of check-page'],
+    [{}, 'must be started with --configuration <id>', []],
+    [{}, 'must be started with --configuration <id>', ['--configuration', 'atlas-command']],
   ]) {
-    const { code, result, err } = await run(checkPage, { env: Object.fromEntries(Object.entries({ ...env, ...changed }).filter(([, v]) => v !== undefined)) });
+    const { code, result, err } = await run(checkPage, { argv, env: Object.fromEntries(Object.entries({ ...env, ...changed }).filter(([, v]) => v !== undefined)) });
     assert.equal(code, 1);
     assert.equal(result, undefined);
     assert.ok(err.includes(message), err);
@@ -298,19 +249,13 @@ test('check-page passes a valid page with the same line validate-entry prints', 
   assert.equal(result.summary, said);
 });
 
-test("check-page reports validate-entry's problems as ok: false, in its own words", async () => {
-  const remote = registryWithLee();
-  const head = remote.pullRequest({ [HENNEPIN]: hennepin({ county: 'hennepin-county' }) });
-  const { code, result } = await run(checkPage, { env: prEnv(remote, head) });
-  assert.equal(code, 0, 'a page that fails its checks is a result, not an error');
-  assert.deepEqual(result, { ok: false, reason: 'invalid-page', summary: 'counties/MN/hennepin.json: path must be counties/MN/hennepin-county.json' });
-});
-
-test('a head that is not exactly one added or modified county page, as a regular file, is a verdict, and nothing is read through a link', async () => {
+test("a page that fails validate-entry, in its own words, or a head that is not exactly one added or modified regular county page, is a verdict of check-page and verify, which fetches nothing and reads nothing through a link", async () => {
   const remote = registryWithLee();
   const secret = join(mkdtempSync(join(tmpdir(), 'atlas-secret-')), 'environ');
   writeFileSync(secret, 'ATLAS_GATEWAY_TOKEN=gateway-token-value');
   for (const [changes, pagePath, reason, summary] of [
+    [{ [HENNEPIN]: hennepin({ county: 'hennepin-county' }) }, HENNEPIN, 'invalid-page', /^counties\/MN\/hennepin\.json: path must be counties\/MN\/hennepin-county\.json$/],
+    [{ [HENNEPIN]: hennepin({ groups: { county: group({ cid: '../../../../home/node/x', car: 'not-a-cid' }) } }) }, HENNEPIN, 'invalid-page', /^counties\/MN\/hennepin\.json: \/groups\/county\/cid must match pattern/],
     [{ [HENNEPIN]: hennepin(), 'docs/note.md': 'x\n' }, HENNEPIN, 'not-one-page', /^the pull request changes 2 file\(s\) against its base [0-9a-f]{40}, not only counties\/MN\/hennepin\.json: counties\/MN\/hennepin\.json, docs\/note\.md$/],
     [{ [LEE]: page({ fips: '12999', groups: lee.groups }) }, HENNEPIN, 'not-one-page', /not only counties\/MN\/hennepin\.json: counties\/FL\/lee\.json$/],
     [{ [LEE]: null }, LEE, 'page-removed', /^counties\/FL\/lee\.json is removed; a pull request that removes a page has nothing to check here$/],
@@ -319,12 +264,12 @@ test('a head that is not exactly one added or modified county page, as a regular
   ]) {
     const head = remote.pullRequest(changes);
     const checked = await run(checkPage, { env: prEnv(remote, head, VALIDATION_PUBLIC, { ATLAS_PAGE: pagePath }) });
-    assert.equal(checked.code, 0, checked.err);
-    assert.equal(checked.result.ok, false);
-    assert.equal(checked.result.reason, reason);
-    assert.match(checked.result.summary, summary);
+    assert.equal(checked.code, 0, 'a page that fails its checks is a result, not an error');
+    const { summary: said, ...verdict } = checked.result;
+    assert.deepEqual(verdict, { ok: false, reason });
+    assert.match(said, summary);
     const verified = await run(verify, { configuration: VALIDATION, env: prEnv(remote, head, VALIDATION, { ATLAS_PAGE: pagePath }), deps: { verifyGroup: async () => assert.fail('fetched') } });
-    assert.deepEqual(verified.result, checked.result);
+    assert.deepEqual(verified.result, reason === 'invalid-page' ? { ...checked.result, summary: `nothing verified: the page fails check-page\n${said}` } : checked.result);
     for (const { out, err } of [checked, verified]) assert.ok(!`${out}${err}`.includes('ATLAS_GATE'), 'nothing read through the link');
   }
 });
@@ -369,16 +314,6 @@ test('verify checks each changed group with the scripts, the CLI error CSV redac
   assert.equal(readFileSync(join(outputs, 'validation-errors.csv'), 'utf8'), 'cid,error\nhttps://<private gateway> ***\n');
 });
 
-test('verify checks the page as check-page does first, and fetches nothing for a page that fails', async () => {
-  const remote = registryWithLee();
-  const head = remote.pullRequest({ [HENNEPIN]: hennepin({ groups: { county: group({ cid: '../../../../home/node/x', car: 'not-a-cid' }) } }) });
-  const { code, result } = await run(verify, { configuration: VALIDATION, env: prEnv(remote, head, VALIDATION), deps: { verifyGroup: async () => assert.fail('fetched') } });
-  assert.equal(code, 0);
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'invalid-page');
-  assert.match(result.summary, /^nothing verified: the page fails check-page\ncounties\/MN\/hennepin\.json: \/groups\/county\/cid must match pattern/);
-});
-
 test('verify reports a failing group as ok: false, with private gateways and secrets taken out', async () => {
   const remote = registryWithLee();
   const head = remote.pullRequest({ [HENNEPIN]: hennepin() });
@@ -420,44 +355,31 @@ test('transfer runs transfer-roots for the county on main as it is now, with the
   assert.equal(env.ATLAS_TRANSFER_PARALLEL, '8');
 });
 
-test("transfer reports this county's withdrawal and writes the hold for withdraw", async () => {
-  const remote = registryWithLee();
-  remote.merge({ [HENNEPIN]: hennepin() });
-  const holds = [withdrawnHold(), { ...withdrawnHold({ path: LEE, county: 'FL/lee', kind: 'deferred', root: CID_C }) }];
-  const runScript = async (_script, _args, { env }) => (writeFileSync(env.ATLAS_HELD, JSON.stringify(holds)), { code: 1, stderr: [] });
-  const { code, result, held } = await run(transfer, { env: mainEnv(remote, transfer), deps: { runScript } });
-  assert.equal(code, 0);
-  assert.deepEqual(result, { ok: false, reason: 'withdrawn', withdraw: true, deferred: false, root: CID_A, summary: `MN/hennepin county (withdrawn): ${withdrawnHold().reason}` });
-  assert.deepEqual(held, [withdrawnHold()]);
-});
-
-test('transfer reports a county that is only deferred, or a service that is down, as a verdict to retry, and fails when the script wrote no holds', async () => {
-  const remote = registryWithLee();
-  remote.merge({ [HENNEPIN]: hennepin() });
-  for (const [code, holds, expected] of [
-    [1, [withdrawnHold({ kind: 'deferred', reason: 'pin/ls: HTTP 500' })], { ok: false, reason: 'deferred', withdraw: false, deferred: true, summary: 'MN/hennepin county (deferred): pin/ls: HTTP 500; nothing is withdrawn, a later run transfers it again' }],
-    [2, undefined, { ok: false, reason: 'outage', withdraw: false, deferred: true, summary: 'nothing transferred: the gateways or Filebase were down before the first root (see the log); nothing is withdrawn' }],
+test("transfer turns the holds transfer-roots wrote into its verdict: this county's withdrawal, a deferral or an outage to retry, an old group's hold that does not fail a new publication; and fails when the script wrote none", async () => {
+  const merged = registryWithLee();
+  merged.merge({ [HENNEPIN]: hennepin() });
+  const published = hennepin();
+  const republished = atlasRemote({ [HENNEPIN]: published, 'index.json': indexOf(published) });
+  republished.merge({ [HENNEPIN]: hennepin({ groups: { ...published.groups, property_improvement: group({ cid: CID_C, tables: CID_D }) } }) });
+  const old = withdrawnHold({ kind: 'deferred', reason: 'already published, but it would not transfer again: pin/ls: HTTP 500' });
+  for (const { remote = merged, code, holds, result, held, error } of [
+    { code: 1, holds: [withdrawnHold(), withdrawnHold({ path: LEE, county: 'FL/lee', kind: 'deferred', root: CID_C })], result: { ok: false, reason: 'withdrawn', withdraw: true, deferred: false, root: CID_A, summary: `MN/hennepin county (withdrawn): ${withdrawnHold().reason}` }, held: [withdrawnHold()] },
+    { code: 1, holds: [withdrawnHold({ kind: 'deferred', reason: 'pin/ls: HTTP 500' })], result: { ok: false, reason: 'deferred', withdraw: false, deferred: true, summary: 'MN/hennepin county (deferred): pin/ls: HTTP 500; nothing is withdrawn, a later run transfers it again' } },
+    { code: 2, result: { ok: false, reason: 'outage', withdraw: false, deferred: true, summary: 'nothing transferred: the gateways or Filebase were down before the first root (see the log); nothing is withdrawn' } },
+    { remote: republished, code: 1, holds: [old], result: { ok: true, withdraw: false, deferred: false, summary: `every root MN/hennepin owes is pinned; already published, but not pinned again: MN/hennepin county (deferred): ${old.reason}` } },
+    { code: 1, error: 'transfer-roots.mjs ended with exit code 1 and wrote no holds' },
   ]) {
     const runScript = async (_script, _args, { env }) => (holds && writeFileSync(env.ATLAS_HELD, JSON.stringify(holds)), { code, stderr: [] });
     const outcome = await run(transfer, { env: mainEnv(remote, transfer), deps: { runScript } });
+    if (error) {
+      assert.equal(outcome.code, 1);
+      assert.ok(outcome.err.includes(error), outcome.err);
+      continue;
+    }
     assert.equal(outcome.code, 0, outcome.err);
-    assert.deepEqual(outcome.result, expected);
-    assert.equal(outcome.held, undefined);
+    assert.deepEqual(outcome.result, result);
+    assert.deepEqual(outcome.held, held);
   }
-  const crashed = await run(transfer, { env: mainEnv(remote, transfer), deps: { runScript: async () => ({ code: 1, stderr: [] }) } });
-  assert.equal(crashed.code, 1);
-  assert.ok(crashed.err.includes('transfer-roots.mjs ended with exit code 1 and wrote no holds'), crashed.err);
-});
-
-test("transfer does not fail a county's new publication over a group already published that would not transfer again", async () => {
-  const published = hennepin();
-  const remote = atlasRemote({ [HENNEPIN]: published, 'index.json': indexOf(published) });
-  remote.merge({ [HENNEPIN]: hennepin({ groups: { ...published.groups, property_improvement: group({ cid: CID_C, tables: CID_D }) } }) });
-  const old = withdrawnHold({ kind: 'deferred', reason: `already published, but it would not transfer again: pin/ls: HTTP 500` });
-  const runScript = async (_script, _args, { env }) => (writeFileSync(env.ATLAS_HELD, JSON.stringify([old])), { code: 1, stderr: [] });
-  const { code, result } = await run(transfer, { env: mainEnv(remote, transfer), deps: { runScript } });
-  assert.equal(code, 0);
-  assert.deepEqual(result, { ok: true, withdraw: false, deferred: false, summary: `every root MN/hennepin owes is pinned; already published, but not pinned again: MN/hennepin county (deferred): ${old.reason}` });
 });
 
 test("a publication command refuses a commit that is not on main, and an image whose files, Dockerfile included, are not main's", async () => {
@@ -520,31 +442,23 @@ test('publish-index tells a county left out, or an index on main the name does n
   const remote = registryWithLee();
   remote.merge({ [HENNEPIN]: hennepin() });
   const left = `not indexed: MN/hennepin county (deferred): Filebase does not list ${CID_A} as pinned (not listed)`;
-  const script = ({ code, output, stderr = [] }) => async (_script, _args, { env }) => (writeFileSync(env.GITHUB_OUTPUT, output), output.includes('cid=') && writeFileSync(env.GITHUB_STEP_SUMMARY, 'Published index.json bafkreiprevious (unchanged)\n'), { code, stderr });
-  const leftOut = await run(publishIndex, { env: mainEnv(remote, publishIndex), deps: { runScript: script({ code: 1, output: 'indexed=true\ncid=bafkreiprevious\n', stderr: [left, '1 publication(s) on main are not in the index'] }) } });
-  assert.equal(leftOut.code, 0);
-  assert.deepEqual(leftOut.result, { ok: false, reason: 'county-left-out', indexed: true, indexCid: 'bafkreiprevious', groups: [], countyIndexed: false, summary: `Published index.json bafkreiprevious (unchanged)\n${left}` });
-  const otherLeft = await run(publishIndex, { env: mainEnv(remote, publishIndex), deps: { runScript: script({ code: 1, output: 'indexed=true\ncid=bafkreiprevious\n', stderr: [left.replace('MN/hennepin', 'GA/fulton')] }) } });
-  assert.deepEqual([otherLeft.result.ok, otherLeft.result.countyIndexed], [true, true], "another county left out does not hold this one's publication back");
-  const notServed = await run(publishIndex, { env: mainEnv(remote, publishIndex), deps: { runScript: script({ code: 1, output: 'indexed=true\n', stderr: [left] }) } });
-  assert.equal(notServed.code, 0);
-  assert.deepEqual(notServed.result, { ok: false, reason: 'not-served', indexed: true, indexCid: null, groups: [], countyIndexed: false, summary: `index.json is on main, but publish-index.mjs ended with exit code 1 before the IPNS name served it (see the log)\n${left}` });
-  for (const [outcome, message] of [
-    [{ code: 1, output: '' }, 'index.json did not reach main: publish-index.mjs ended with exit code 1'],
-    [{ code: 1, output: 'indexed=true\ncid=bafkreiprevious\n' }, 'publish-index.mjs ended with exit code 1 without leaving a group out'],
+  const otherLeft = left.replace('MN/hennepin', 'GA/fulton');
+  const published = 'Published index.json bafkreiprevious (unchanged)';
+  const served = 'indexed=true\ncid=bafkreiprevious\n';
+  for (const { output, stderr = [], result, error } of [
+    { output: served, stderr: [left, '1 publication(s) on main are not in the index'], result: { ok: false, reason: 'county-left-out', indexed: true, indexCid: 'bafkreiprevious', groups: [], countyIndexed: false, summary: `${published}\n${left}` } },
+    // Another county left out does not hold this one's publication back.
+    { output: served, stderr: [otherLeft], result: { ok: true, indexed: true, indexCid: 'bafkreiprevious', groups: [], countyIndexed: true, summary: `${published}\n${otherLeft}` } },
+    { output: 'indexed=true\n', stderr: [left], result: { ok: false, reason: 'not-served', indexed: true, indexCid: null, groups: [], countyIndexed: false, summary: `index.json is on main, but publish-index.mjs ended with exit code 1 before the IPNS name served it (see the log)\n${left}` } },
+    { output: '', error: 'index.json did not reach main: publish-index.mjs ended with exit code 1' },
+    { output: served, error: 'publish-index.mjs ended with exit code 1 without leaving a group out' },
   ]) {
-    const failed = await run(publishIndex, { env: mainEnv(remote, publishIndex), deps: { runScript: script(outcome) } });
-    assert.equal(failed.code, 1);
-    assert.equal(failed.result, undefined);
-    assert.ok(failed.err.includes(message), failed.err);
+    const runScript = async (_script, _args, { env }) => (writeFileSync(env.GITHUB_OUTPUT, output), output.includes('cid=') && writeFileSync(env.GITHUB_STEP_SUMMARY, `${published}\n`), { code: 1, stderr });
+    const outcome = await run(publishIndex, { env: mainEnv(remote, publishIndex), deps: { runScript } });
+    assert.equal(outcome.code, error ? 1 : 0, outcome.err);
+    assert.deepEqual(outcome.result, result);
+    if (error) assert.ok(outcome.err.includes(error), outcome.err);
   }
-});
-
-test('publish-index needs the deploy key', async () => {
-  const remote = registryWithLee();
-  const { code, err } = await run(publishIndex, { env: mainEnv(remote, publishIndex, { ATLAS_DEPLOY_KEY: '' }), deps: { runScript: async () => assert.fail('ran') } });
-  assert.equal(code, 1);
-  assert.ok(err.includes('secret(s) ATLAS_DEPLOY_KEY required'), err);
 });
 
 // ---- withdraw
@@ -562,15 +476,16 @@ test("withdraw takes the county's withdrawn group off main with the scripts and 
 test("withdraw fails without a hold of the county or with one on another page, and reports when main no longer holds what failed", async () => {
   const remote = registryWithLee();
   remote.merge({ [HENNEPIN]: hennepin() });
-  const noInput = await run(withdraw, { env: mainEnv(remote, withdraw) });
-  assert.equal(noInput.code, 1);
-  assert.ok(noInput.err.includes('input held.json is required'), noInput.err);
-  const deferred = await run(withdraw, { env: mainEnv(remote, withdraw), inputs: { 'held.json': [withdrawnHold({ kind: 'deferred' })] } });
-  assert.ok(deferred.err.includes('held.json names no withdrawn group of MN/hennepin'), deferred.err);
   const tip = remote.main();
-  const elsewhere = await run(withdraw, { env: mainEnv(remote, withdraw), inputs: { 'held.json': [withdrawnHold({ path: LEE, cid: CID_C, tables: CID_D })] } });
-  assert.equal(elsewhere.code, 1);
-  assert.ok(elsewhere.err.includes('held.json holds MN/hennepin county on counties/FL/lee.json, not counties/MN/hennepin.json'), elsewhere.err);
+  for (const [inputs, message] of [
+    [{}, 'input held.json is required'],
+    [{ 'held.json': [withdrawnHold({ kind: 'deferred' })] }, 'held.json names no withdrawn group of MN/hennepin'],
+    [{ 'held.json': [withdrawnHold({ path: LEE, cid: CID_C, tables: CID_D })] }, 'held.json holds MN/hennepin county on counties/FL/lee.json, not counties/MN/hennepin.json'],
+  ]) {
+    const { code, err } = await run(withdraw, { env: mainEnv(remote, withdraw), inputs });
+    assert.equal(code, 1);
+    assert.ok(err.includes(message), err);
+  }
   assert.deepEqual([remote.main(), remote.onMain(LEE)], [tip, LEE], 'nothing was pushed');
   remote.merge({ [HENNEPIN]: hennepin({ groups: { county: group({ cid: CID_D, tables: CID_C }) } }) });
   // Main moved on (a new version of the page merged): withdraw.mjs leaves it alone and says so; that is a finished run.
@@ -618,29 +533,30 @@ test('a result always fits in 60,000 bytes as one JSON object, its summary short
   assert.equal(transferred.held[0].reason, reason, 'held.json is an output, not the result: it keeps the whole reason');
 });
 
-test('a summary keeps at most 16,000 characters, and less when the rest of the result leaves less of 60,000 bytes', async () => {
-  const summarize = async (result) => (await run({ ...checkPage, parameters: [], run: async () => ({ result }) }, { env: {} })).result.summary;
+test('a summary keeps at most 16,000 characters, and less beside a large result; a result that cannot fit 60,000 bytes, or is not one JSON object, fails the run and writes nothing', async () => {
   const longest = 'x'.repeat(MAX_SUMMARY_CHARACTERS);
-  assert.equal(await summarize({ ok: true, summary: longest }), longest, 'kept as it is at the limit');
-  const shortened = await summarize({ ok: true, summary: `${longest}x` });
-  assert.equal(shortened.length, MAX_SUMMARY_CHARACTERS);
-  assert.match(shortened, SHORTENED);
-  assert.ok(shortened.startsWith('x'.repeat(MAX_SUMMARY_CHARACTERS - 100)), 'as much of its start as fits');
-  const groups = Array.from({ length: 400 }, (_, i) => ({ group: `group_${i}`, archiveCid: CID_A }));
-  const beside = await summarize({ ok: true, groups, summary: longest });
-  assert.match(beside, SHORTENED);
-  assert.ok(beside.length < MAX_SUMMARY_CHARACTERS - 1_000, `${beside.length} characters beside ${groups.length} groups`);
-});
-
-test('a result that cannot fit, or is not one JSON object, fails the run and writes nothing', async () => {
-  for (const [result, message] of [
-    [{ groups: Array.from({ length: 10_000 }, (_, i) => ({ group: `g${i}`, archiveCid: CID_A })) }, `bytes; at most ${MAX_RESULT_BYTES} fit`],
+  const groups = (n) => Array.from({ length: n }, (_, i) => ({ group: `group_${i}`, archiveCid: CID_A }));
+  for (const [result, expected] of [
+    [{ ok: true, summary: longest }, (summary) => assert.equal(summary, longest, 'kept as it is at the limit')],
+    [{ ok: true, summary: `${longest}x` }, (summary) => {
+      assert.equal(summary.length, MAX_SUMMARY_CHARACTERS);
+      assert.match(summary, SHORTENED);
+      assert.ok(summary.startsWith('x'.repeat(MAX_SUMMARY_CHARACTERS - 100)), 'as much of its start as fits');
+    }],
+    [{ ok: true, groups: groups(400), summary: longest }, (summary) => {
+      assert.match(summary, SHORTENED);
+      assert.ok(summary.length < MAX_SUMMARY_CHARACTERS - 1_000, `${summary.length} characters beside 400 groups`);
+    }],
+    [{ groups: groups(10_000) }, `bytes; at most ${MAX_RESULT_BYTES} fit`],
     [['not', 'an', 'object'], 'result must be one JSON object'],
     [null, 'result must be one JSON object'],
   ]) {
     const outcome = await run({ ...checkPage, parameters: [], run: async () => ({ result }) }, { env: {} });
-    assert.equal(outcome.code, 1);
-    assert.ok(outcome.err.includes(message), outcome.err);
+    if (typeof expected === 'function') expected(outcome.result.summary);
+    else {
+      assert.equal(outcome.code, 1);
+      assert.ok(outcome.err.includes(expected), outcome.err);
+    }
   }
 });
 

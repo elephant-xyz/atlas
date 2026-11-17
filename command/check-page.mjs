@@ -11,13 +11,10 @@ import { Reason, checkoutPullRequest, runCommand } from './lib.mjs';
 
 export const command = {
   name: 'check-page',
-  summary: "validate-entry.mjs on the pull request's head against its merge base: schema, path, CIDs, roots used once, index.json untouched",
-  returns: '{ ok, reason?, summary }: summary is the ok line, or every problem, one per line; reason says why ok is false',
   parameters: [
     { name: 'ATLAS_HEAD_SHA', required: true },
     { name: 'ATLAS_PAGE', required: true },
   ],
-  secrets: { required: [], optional: [] },
   inputs: [],
   outputs: ['result.json'],
   /** The checks of validate-entry.mjs's command line, on a checkout of the head that changes only its page. */

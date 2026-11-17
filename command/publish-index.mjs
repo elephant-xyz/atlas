@@ -31,13 +31,10 @@ function outputsOf(file) {
 
 export const command = {
   name: 'publish-index',
-  summary: "publish-index.mjs on main's tip: commit index.json, add it to the bucket, point the IPNS name elephant-atlas at it",
-  returns: "{ ok, reason?, indexed, indexCid, groups: [{ group, archiveCid }], countyIndexed, summary }: indexed is true (index.json is on main); indexCid is the index the name serves, null when it does not serve it yet; groups are the county's groups in that index.json; countyIndexed is false when the script left one of them out",
   parameters: [
     { name: 'ATLAS_COUNTY', required: true },
     { name: 'ATLAS_MAIN_SHA', required: true },
   ],
-  secrets: { required: ['ATLAS_DEPLOY_KEY', 'FILEBASE_ACCESS_KEY', 'FILEBASE_SECRET_KEY'], optional: [] },
   inputs: [],
   outputs: ['result.json'],
   /** publish-index.mjs's command line, read back through its GITHUB_OUTPUT, its step summary and the index it committed. */

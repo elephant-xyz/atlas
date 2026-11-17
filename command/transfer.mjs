@@ -22,14 +22,11 @@ const describe = (holds) => holds.map((h) => `${h.county} ${h.key} (${h.kind}): 
 
 export const command = {
   name: 'transfer',
-  summary: "transfer-roots.mjs --county on main's tip: copy every root of the county into the elephant-atlas bucket and require Filebase to pin it",
-  returns: '{ ok, reason?, withdraw, deferred, root?, summary }: withdraw is true when the county must come off main (held.json then holds its hold, root is the root that failed); deferred is true when a later run must try again',
   parameters: [
     { name: 'ATLAS_COUNTY', required: true },
     { name: 'ATLAS_MAIN_SHA', required: true },
     { name: 'ATLAS_GATEWAY_DEADLINE_MINUTES', required: false },
   ],
-  secrets: { required: ['FILEBASE_ACCESS_KEY', 'FILEBASE_SECRET_KEY'], optional: ['ATLAS_GATEWAYS', 'ATLAS_GATEWAY_TOKEN'] },
   inputs: [],
   outputs: ['result.json', HELD_FILE],
   /** transfer-roots.mjs's command line, read back through the holds it writes (ATLAS_HELD) and its exit code. */

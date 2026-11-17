@@ -19,14 +19,11 @@ const VALIDATION_CSV = 'validation-errors.csv';
 
 export const command = {
   name: 'verify',
-  summary: "check-page's checks, then verify-roots.mjs (with the image's elephant-cli) on every group the pull request's head changes against its merge base",
-  returns: '{ ok, reason?, summary }: summary has one `ok <page> group <key>` or `FAIL <page> group <key>: <reason>` line per group, or the page problems that kept it from fetching anything',
   parameters: [
     { name: 'ATLAS_HEAD_SHA', required: true },
     { name: 'ATLAS_PAGE', required: true },
     { name: 'ATLAS_GATEWAY_DEADLINE_MINUTES', required: false },
   ],
-  secrets: { required: [], optional: ['ATLAS_GATEWAYS', 'ATLAS_GATEWAY_TOKEN'] },
   inputs: [],
   outputs: ['result.json', VALIDATION_CSV],
   /** check-page's checks, then verify-roots.mjs's command line, on a checkout of the head; the CLI's CSV is returned as an output. */

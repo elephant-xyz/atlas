@@ -18,13 +18,10 @@ const pageOf = (county) => `counties/${county}.json`;
 
 export const command = {
   name: 'withdraw',
-  summary: "withdraw.mjs's withdraw() on main: put the county's withdrawn group back to what was last published, and push",
-  returns: '{ withdrawn, commitSha, root, summary }: whether it came off main, the commit that took it off (null when not), the root that failed, what was withdrawn and why',
   parameters: [
     { name: 'ATLAS_COUNTY', required: true },
     { name: 'ATLAS_MAIN_SHA', required: true },
   ],
-  secrets: { required: ['ATLAS_DEPLOY_KEY'], optional: [] },
   inputs: [HELD_FILE],
   outputs: ['result.json'],
   /** withdraw() on a checkout of main, for the county's withdrawn holds on its own page only. */
