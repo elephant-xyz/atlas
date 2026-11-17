@@ -25,8 +25,13 @@ const configurationOf = (name) => CONFIGURATIONS.find((c) => Object.hasOwn(c.com
 const startedUnder = (configuration) => ['--configuration', configuration.id];
 /** The most result.json may hold: under the executor's 60 KiB result limit. */
 const MAX_RESULT_BYTES = 60_000;
+/** The longest summary: what the Connect flows that post it to GitHub accept. */
+const MAX_SUMMARY_CHARACTERS = 16_000;
+const SHORTENED = /\n… \(shortened to fit the result; the run's log has all of it\)$/;
 
 const HENNEPIN = 'counties/MN/hennepin.json';
+/** A page path the configurations accept and check-page refuses: the state is not in capitals. */
+const WRONGLY_SHAPED = 'counties/mn/hennepin.json';
 const LEE = 'counties/FL/lee.json';
 const hennepin = (overrides = {}) => page({ county: 'hennepin', state: 'MN', fips: '27053', ...overrides });
 const lee = page({ groups: { county: group({ cid: CID_C, tables: CID_D }) } });
@@ -110,6 +115,7 @@ async function run(command, { env, inputs = {}, deps, configuration = configurat
     assert.ok(statSync(resultFile).size <= MAX_RESULT_BYTES, `result.json is ${statSync(resultFile).size} bytes`);
     const result = read('result.json');
     assert.ok(result !== null && typeof result === 'object' && !Array.isArray(result), 'result.json holds one JSON object');
+    assert.ok(!(result.summary?.length > MAX_SUMMARY_CHARACTERS), `the summary has ${result.summary?.length} characters`);
   }
   return { code, result: read('result.json'), held: read('held.json'), outputs, out: out.join(''), err: err.join('') };
 }
@@ -223,7 +229,7 @@ test("parameter patterns accept the consumer's values as whole values only: ever
   const samples = {
     ATLAS_HEAD_SHA: ['5d3c1f0e9a2b4c6d8e0f1a2b3c4d5e6f7a8b9c0d', ['5d3c1f0e', '5D3C1F0E9A2B4C6D8E0F1A2B3C4D5E6F7A8B9C0D']],
     ATLAS_MAIN_SHA: ['fd148cd58a79ed54cbbc6df3459695646a55d4a2', ['main', 'fd148cd']],
-    ATLAS_PAGE: [HENNEPIN, ['counties/MN/hennepin/extra.json', 'index.json', 'counties/MN/:(top)x.json', 'counties/../x.json', 'counties/mn/Hennepin_County.json', 'counties/MN/.hennepin.json']],
+    ATLAS_PAGE: [HENNEPIN, ['counties/MN/hennepin/extra.json', 'index.json', 'counties/MN/:(top)x.json', 'counties/../x.json', 'counties/MN/.hennepin.json']],
     ATLAS_COUNTY: ['MN/hennepin', ['MN/Hennepin', 'mn/hennepin', 'MN/hennepin/x']],
   };
   assert.deepEqual(Object.keys(patterns).sort(), Object.keys(samples).sort());
@@ -231,6 +237,8 @@ test("parameter patterns accept the consumer's values as whole values only: ever
     assert.ok(whole(patterns[name]).test(good), `${name} accepts ${good}`);
     for (const value of [...bad, `${good}\n`, ` ${good}`]) assert.ok(!whole(patterns[name]).test(value), `${name} refuses ${JSON.stringify(value)}`);
   }
+  // A badly shaped page path still starts a task, so check-page answers it with a verdict.
+  assert.ok(whole(patterns.ATLAS_PAGE).test(WRONGLY_SHAPED));
 });
 
 test('the committed configurations never name an image digest: the image is pinned when they are registered', () => {
@@ -307,6 +315,7 @@ test('a head that is not exactly one added or modified county page, as a regular
     [{ [LEE]: page({ fips: '12999', groups: lee.groups }) }, HENNEPIN, 'not-one-page', /not only counties\/MN\/hennepin\.json: counties\/FL\/lee\.json$/],
     [{ [LEE]: null }, LEE, 'page-removed', /^counties\/FL\/lee\.json is removed; a pull request that removes a page has nothing to check here$/],
     [{ [HENNEPIN]: symlinkTo(secret) }, HENNEPIN, 'not-regular-file', /^counties\/MN\/hennepin\.json is not a regular file \(git mode 120000, expected 100644\); nothing was read from it$/],
+    [{ [WRONGLY_SHAPED]: hennepin() }, WRONGLY_SHAPED, 'invalid-page-path', /^counties\/mn\/hennepin\.json is not a county page path: a page is counties\/<ST>\/<county>\.json, <ST> two capital letters and <county> lowercase letters and digits in words joined by hyphens, such as counties\/MN\/hennepin\.json$/],
   ]) {
     const head = remote.pullRequest(changes);
     const checked = await run(checkPage, { env: prEnv(remote, head, VALIDATION_PUBLIC, { ATLAS_PAGE: pagePath }) });
@@ -575,7 +584,6 @@ test("withdraw fails without a hold of the county or with one on another page, a
 // ---- results the executor can return
 
 test('a result always fits in 60,000 bytes as one JSON object, its summary shortened when it must be', async () => {
-  const SHORTENED = /… \(shortened to fit the result's 60,000 bytes; the run's log has all of it\)$/;
   // check-page on a page with thousands of broken groups: validate-entry reports three problems for each.
   const remote = registryWithLee();
   const broken = Object.fromEntries(Array.from({ length: 4_000 }, (_, i) => [`g${i}`, group({ cid: 'not-a-cid', schema: 'not-a-cid', tables: 'not-a-cid' })]));
@@ -608,6 +616,20 @@ test('a result always fits in 60,000 bytes as one JSON object, its summary short
   assert.deepEqual([transferred.result.withdraw, transferred.result.root], [true, CID_A]);
   assert.match(transferred.result.summary, SHORTENED);
   assert.equal(transferred.held[0].reason, reason, 'held.json is an output, not the result: it keeps the whole reason');
+});
+
+test('a summary keeps at most 16,000 characters, and less when the rest of the result leaves less of 60,000 bytes', async () => {
+  const summarize = async (result) => (await run({ ...checkPage, parameters: [], run: async () => ({ result }) }, { env: {} })).result.summary;
+  const longest = 'x'.repeat(MAX_SUMMARY_CHARACTERS);
+  assert.equal(await summarize({ ok: true, summary: longest }), longest, 'kept as it is at the limit');
+  const shortened = await summarize({ ok: true, summary: `${longest}x` });
+  assert.equal(shortened.length, MAX_SUMMARY_CHARACTERS);
+  assert.match(shortened, SHORTENED);
+  assert.ok(shortened.startsWith('x'.repeat(MAX_SUMMARY_CHARACTERS - 100)), 'as much of its start as fits');
+  const groups = Array.from({ length: 400 }, (_, i) => ({ group: `group_${i}`, archiveCid: CID_A }));
+  const beside = await summarize({ ok: true, groups, summary: longest });
+  assert.match(beside, SHORTENED);
+  assert.ok(beside.length < MAX_SUMMARY_CHARACTERS - 1_000, `${beside.length} characters beside ${groups.length} groups`);
 });
 
 test('a result that cannot fit, or is not one JSON object, fails the run and writes nothing', async () => {

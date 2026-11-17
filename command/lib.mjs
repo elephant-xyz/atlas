@@ -50,6 +50,8 @@ const FAILED = 1;
 export const Reason = Object.freeze({
   /** The page fails validate-entry's checks. */
   INVALID_PAGE: 'invalid-page',
+  /** The page path is not counties/<ST>/<county>.json in the shape a county takes. */
+  INVALID_PAGE_PATH: 'invalid-page-path',
   /** The pull request changes something else than exactly its county page. */
   NOT_ONE_PAGE: 'not-one-page',
   /** The pull request removes its county page. */
@@ -113,8 +115,10 @@ export const PUBLICATION_SETTINGS = {
 
 /** The most result.json may hold: under the executor's 60 KiB result limit. */
 const MAX_RESULT_BYTES = 60_000;
+/** The longest `summary`: it fits the Connect write flows' 16,384-character limit (check run, comment, issue). */
+const MAX_SUMMARY_CHARACTERS = 16_000;
 /** The last line of a summary shortened to fit; the run's log keeps all of it. */
-const SHORTENED = "… (shortened to fit the result's 60,000 bytes; the run's log has all of it)";
+const SHORTENED = "… (shortened to fit the result; the run's log has all of it)";
 
 /** What replaces a secret value in logs and results; shorter pieces are not taken for secrets. */
 const REDACTED = '***';
@@ -146,6 +150,15 @@ export function imageFiles(root) {
 
 /** `^(?:<pattern>)$` with only the `u` flag: how Transform applies a parameter pattern, to the whole value. */
 const wholeValue = (pattern) => new RegExp(`^(?:${pattern})$`, 'u');
+
+/**
+ * A county page path: counties/<ATLAS_COUNTY>.json, so every page check-page passes is one the
+ * publication commands take. ATLAS_PAGE itself is looser, so that a pull request with another
+ * path still starts a task and gets this as its verdict.
+ */
+const COUNTY_PATTERN = [...CONFIGURATIONS.values()].find((configuration) => configuration.parameters.ATLAS_COUNTY).parameters.ATLAS_COUNTY.pattern;
+const PAGE_PATH = wholeValue(`counties/(?:${COUNTY_PATTERN})\\.json`);
+const PAGE_PATH_SHAPE = 'a page is counties/<ST>/<county>.json, <ST> two capital letters and <county> lowercase letters and digits in words joined by hyphens, such as counties/MN/hennepin.json';
 
 /**
  * The configuration `argv` (`--configuration <id>`, as the configuration's own argv for the
@@ -238,25 +251,32 @@ const serialize = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const bytesOf = (value) => Buffer.byteLength(serialize(value));
 
 /**
- * `result` as result.json may hold it: one JSON object of at most MAX_RESULT_BYTES. A `summary`
- * too long for that keeps as much of its start as fits, whole lines where it can, and says it
- * was shortened; a result that does not fit even then, or is not an object, is an error.
+ * `result` as result.json may hold it: one JSON object of at most MAX_RESULT_BYTES, its
+ * `summary` at most MAX_SUMMARY_CHARACTERS. A `summary` too long for either keeps as much of its
+ * start as fits, whole lines where it can, and says it was shortened; a result that does not fit
+ * even then, or is not an object, is an error.
  */
 function fitResult(result) {
   if (result === null || typeof result !== 'object' || Array.isArray(result)) throw new Error('the result must be one JSON object');
-  if (bytesOf(result) <= MAX_RESULT_BYTES) return result;
+  const tooLarge = () => new Error(`result.json would be ${bytesOf(result)} bytes; at most ${MAX_RESULT_BYTES} fit`);
+  if (typeof result.summary !== 'string') {
+    if (bytesOf(result) <= MAX_RESULT_BYTES) return result;
+    throw tooLarge();
+  }
+  const fits = (summary) => summary.length <= MAX_SUMMARY_CHARACTERS && bytesOf({ ...result, summary }) <= MAX_RESULT_BYTES;
+  if (fits(result.summary)) return result;
   const shortened = (keep) => {
     const cut = result.summary.lastIndexOf('\n', keep);
-    return { ...result, summary: `${result.summary.slice(0, cut > 0 ? cut : keep)}\n${SHORTENED}` };
+    return `${result.summary.slice(0, cut > 0 ? cut : keep)}\n${SHORTENED}`;
   };
-  if (typeof result.summary !== 'string' || bytesOf(shortened(0)) > MAX_RESULT_BYTES) throw new Error(`result.json would be ${bytesOf(result)} bytes; at most ${MAX_RESULT_BYTES} fit`);
-  let [fits, fails] = [0, result.summary.length];
-  while (fails - fits > 1) {
-    const keep = Math.floor((fits + fails) / 2);
-    if (bytesOf(shortened(keep)) <= MAX_RESULT_BYTES) fits = keep;
-    else fails = keep;
+  if (!fits(shortened(0))) throw tooLarge();
+  let [fitting, failing] = [0, result.summary.length];
+  while (failing - fitting > 1) {
+    const keep = Math.floor((fitting + failing) / 2);
+    if (fits(shortened(keep))) fitting = keep;
+    else failing = keep;
   }
-  return shortened(fits);
+  return { ...result, summary: shortened(fitting) };
 }
 
 /**
@@ -433,10 +453,12 @@ function pageRefusal(root, base, page) {
  * The registry at a pull request's head, compared with its merge base the way the scripts do
  * (baseRef: where the head left origin/main), once this image is known to run main's scripts.
  * The head is fetched by SHA when main does not hold it, as GitHub serves pull-request heads.
- * Returns { root, base, refused }: `refused` ({ reason, summary }) when the head is not exactly
- * one added or modified regular county page, which the caller returns as its verdict.
+ * Returns { root, base, refused }: `refused` ({ reason, summary }) when `page` is not a county
+ * page path (then nothing is fetched and there is no root) or the head is not exactly one added
+ * or modified regular county page, which the caller returns as its verdict.
  */
 export function checkoutPullRequest(work, repository, headSha, page) {
+  if (!PAGE_PATH.test(page)) return { refused: { reason: Reason.INVALID_PAGE_PATH, summary: `${page} is not a county page path: ${PAGE_PATH_SHAPE}` } };
   const root = cloneMain(work, repository);
   requireImageIsMain(root);
   if (!refExists(root, headSha)) git(root, 'fetch', '--quiet', 'origin', headSha);

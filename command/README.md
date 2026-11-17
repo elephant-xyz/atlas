@@ -42,24 +42,26 @@ or modifies exactly its county page, as a regular file, is checked.
 
 ## Commands and results
 
-Parameters arrive as environment variables, each matching its pattern as a whole value;
-`ATLAS_PAGE` is `counties/<ST>/<county>.json` in the shape of `ATLAS_COUNTY`, so a pull request
-whose page path has another shape never starts a task, and the caller answers it. Parameters
-and inputs are declared per configuration, so the executor accepts one that the started command
-does not use (`ATLAS_GATEWAY_DEADLINE_MINUTES` to `check-page`), and the command refuses it
-only once the task runs. `ATLAS_GATEWAY_DEADLINE_MINUTES` cannot exceed the configuration's
-time limit.
+Parameters arrive as environment variables, each matching its pattern as a whole value.
+`ATLAS_PAGE` accepts any `counties/<dir>/<name>.json` it is safe to compare with git's diff, so
+a pull request whose page path has another shape than `counties/<ATLAS_COUNTY>.json` still
+starts a task and gets the verdict `invalid-page-path`. Parameters and inputs are declared per
+configuration, so the executor accepts one that the started command does not use
+(`ATLAS_GATEWAY_DEADLINE_MINUTES` to `check-page`), and the command refuses it only once the
+task runs. `ATLAS_GATEWAY_DEADLINE_MINUTES` cannot exceed the configuration's time limit.
 
 Exit 0 means the command finished: `result.json`, one JSON object of at most 60,000 bytes
 (under the executor's 60 KiB result limit; it bounds the whole run output to 64 KiB), carries
-the verdict, its `summary` shortened when it must be while the log keeps all of it. Exit 1 means a crash or a run that cannot be used
+the verdict. Its `summary` is at most 16,000 characters, which the Connect flows that post it
+to GitHub accept, shortened with a closing line that points to the run's log when it must be.
+Exit 1 means a crash or a run that cannot be used
 (a wrong configuration, a missing secret, an image that is not main's, a head that cannot be
 fetched): no `result.json`, the reason on stderr. `reason` is set only when `ok` is false.
 
 | Command | Outcome | `result.json` | Exit |
 | --- | --- | --- | --- |
 | `check-page` | the page and the registry pass validate-entry | `{ok: true, summary}` | 0 |
-| | the head changes another file, another page or several (`not-one-page`), removes the page (`page-removed`), makes it a link or another mode (`not-regular-file`), or the page fails (`invalid-page`) | `{ok: false, reason, summary}` | 0 |
+| | the page path has another shape (`invalid-page-path`, nothing fetched), the head changes another file, another page or several (`not-one-page`), removes the page (`page-removed`), makes it a link or another mode (`not-regular-file`), or the page fails (`invalid-page`) | `{ok: false, reason, summary}` | 0 |
 | `verify` | every changed group passes, or none changed | `{ok: true, summary}` | 0 |
 | | as `check-page`'s refusals (nothing is fetched for any of them), or a group fails (`group-failed`) | `{ok: false, reason, summary}` | 0 |
 | `transfer` | every root the county owes is pinned | `{ok: true, withdraw: false, deferred: false, summary}` | 0 |

@@ -9,7 +9,7 @@
   },
   "parameters": {
     "ATLAS_HEAD_SHA": { "pattern": "[0-9a-f]{40}", "required": true },
-    "ATLAS_PAGE": { "pattern": "counties/[A-Z]{2}/[a-z0-9]+(?:-[a-z0-9]+)*\\.json", "required": true },
+    "ATLAS_PAGE": { "pattern": "counties/[A-Za-z0-9_-][A-Za-z0-9._-]*/[A-Za-z0-9_-][A-Za-z0-9._-]*\\.json", "required": true },
     "ATLAS_GATEWAY_DEADLINE_MINUTES": { "pattern": "[1-9][0-9]?|1[0-4][0-9]|150", "required": false }
   },
   "secretEnvironment": {},
