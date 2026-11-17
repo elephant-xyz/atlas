@@ -1,9 +1,5 @@
 #!/usr/bin/env node
-// check-page: Atlas's page checks on a pull request's head, compared with its merge base:
-// validateRegistry from validate-entry.mjs, run as that script's own command line runs it, so
-// the rules and their wording stay the script's. A page that fails, or a head that is not
-// exactly one added or modified county page, is a result (ok: false and its reason), not an
-// error; an error is anything that keeps the checks from running.
+// check-page: validate-entry.mjs on a pull request head that changes only its county page.
 import { fileURLToPath } from 'node:url';
 import { indexAt, readPages } from '../scripts/lib.mjs';
 import { validateRegistry } from '../scripts/validate-entry.mjs';
@@ -15,9 +11,6 @@ export const command = {
     { name: 'ATLAS_HEAD_SHA', required: true },
     { name: 'ATLAS_PAGE', required: true },
   ],
-  inputs: [],
-  outputs: ['result.json'],
-  /** The checks of validate-entry.mjs's command line, on a checkout of the head that changes only its page. */
   async run({ parameters, work, repository }) {
     const { root, base, refused } = checkoutPullRequest(work, repository, parameters.ATLAS_HEAD_SHA, parameters.ATLAS_PAGE);
     if (refused) return { result: { ok: false, ...refused } };

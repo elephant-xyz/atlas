@@ -1,12 +1,6 @@
 #!/usr/bin/env node
-// publish-index: publish-index.mjs on main as it is now, as publish.yml's index step runs it:
-// regenerate index.json from what Filebase lists as pinned, commit and push it through the
-// deploy key, add it to the bucket, point the IPNS name at it, and require the gateway to serve
-// it. A finished run once index.json is on main (the script's `indexed` output): ok when the name
-// serves it (the `cid` output) with every group of the county in it; a county left out, such as
-// the one transfer withdrew, or an index the name does not serve yet, is ok: false with its
-// reason, and the caller still runs withdraw. An index that never reached main is an error.
-// Publication pending issues are not opened here; nothing in the image can.
+// publish-index: publish-index.mjs on main's tip, as publish.yml's index step runs it. Finished
+// once index.json is on main; opens no Publication pending issue.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,9 +29,6 @@ export const command = {
     { name: 'ATLAS_COUNTY', required: true },
     { name: 'ATLAS_MAIN_SHA', required: true },
   ],
-  inputs: [],
-  outputs: ['result.json'],
-  /** publish-index.mjs's command line, read back through its GITHUB_OUTPUT, its step summary and the index it committed. */
   async run({ parameters, env, work, repository }, { runScript }) {
     const county = parameters.ATLAS_COUNTY;
     const root = checkoutMain(work, repository, parameters.ATLAS_MAIN_SHA);

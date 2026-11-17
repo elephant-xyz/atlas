@@ -4,8 +4,8 @@
   "engine": "container-command",
   "image": "PLACEHOLDER_ATLAS_COMMAND_IMAGE_PINNED_BY_DIGEST",
   "commands": {
-    "check-page": ["node", "/opt/atlas/command/check-page.mjs", "--configuration", "atlas-command-validation-public"],
-    "verify": ["node", "/opt/atlas/command/verify.mjs", "--configuration", "atlas-command-validation-public"]
+    "check-page": ["node", "/opt/atlas/command/check-page.mjs"],
+    "verify": ["node", "/opt/atlas/command/verify.mjs"]
   },
   "parameters": {
     "ATLAS_HEAD_SHA": { "pattern": "[0-9a-f]{40}", "required": true },

@@ -4,7 +4,7 @@
   "engine": "container-command",
   "image": "PLACEHOLDER_ATLAS_COMMAND_IMAGE_PINNED_BY_DIGEST",
   "commands": {
-    "publish-index": ["node", "/opt/atlas/command/publish-index.mjs", "--configuration", "atlas-command-index"]
+    "publish-index": ["node", "/opt/atlas/command/publish-index.mjs"]
   },
   "parameters": {
     "ATLAS_COUNTY": { "pattern": "[A-Z]{2}/[a-z0-9]+(?:-[a-z0-9]+)*", "required": true },

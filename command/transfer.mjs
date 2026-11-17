@@ -1,11 +1,6 @@
 #!/usr/bin/env node
-// transfer: transfer-roots.mjs --county <ST/name> on main as it is now, with publish.yml's
-// settings: every root of the county again (pinned ones are skipped) and what other counties are
-// owed, which a failure never withdraws. The county's withdrawn hold is the output held.json,
-// for withdraw. A county that is only deferred, or a service that is down, is a verdict to try
-// again (deferred: true), so nothing is withdrawn and a later run transfers it, as publish.yml
-// leaves it for the next run. A hold on a group the index already lists at those roots is no
-// part of the publication: it is reported, and does not fail the run.
+// transfer: transfer-roots.mjs --county on main's tip with publish.yml's settings. Other counties'
+// holds, and holds on groups the index already lists, never fail this county's run.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,9 +22,6 @@ export const command = {
     { name: 'ATLAS_MAIN_SHA', required: true },
     { name: 'ATLAS_GATEWAY_DEADLINE_MINUTES', required: false },
   ],
-  inputs: [],
-  outputs: ['result.json', HELD_FILE],
-  /** transfer-roots.mjs's command line, read back through the holds it writes (ATLAS_HELD) and its exit code. */
   async run({ parameters, env, work, repository }, { runScript }) {
     const county = parameters.ATLAS_COUNTY;
     const root = checkoutMain(work, repository, parameters.ATLAS_MAIN_SHA);

@@ -1,9 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # The image Transform's command executor runs the Atlas commands in (see command/README.md).
-# Built from the repository root, from a commit on main, with BuildKit (the syntax line above
-# gives `ADD --checksum`; command/Dockerfile.dockerignore keeps the context to what is copied):
+# Built with BuildKit from a clean checkout of main, at the repository root:
 #   docker build --platform linux/amd64 -f command/Dockerfile --build-arg ATLAS_SOURCE_SHA="$(git rev-parse HEAD)" .
-# Everything it runs is copied in here; county pages and history are fetched per run.
 
 # Node 22, the version the workflows run, pinned by its multi-platform index digest.
 FROM node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS cli
@@ -24,15 +22,16 @@ COPY --from=cli /tmp/elephant-cli/elephant-cli /usr/local/bin/elephant-cli
 WORKDIR /opt/atlas
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
-# Exactly the files command/lib.mjs compares with main before a command runs; the Dockerfile
-# stands for the Node base and the elephant-cli release above.
+# With this Dockerfile, IMAGE_PATHS in command/lib.mjs: a run refuses unless they are main's at
+# ATLAS_SOURCE_SHA.
 COPY schema/ schema/
 COPY scripts/ scripts/
-COPY command/*.mjs command/*.json command/known_hosts command/Dockerfile command/
+COPY command/*.mjs command/*.json command/known_hosts command/
 
 # The heap the workflows give the scripts: a full-county CAR is indexed in memory.
 ENV NODE_OPTIONS=--max-old-space-size=12288
-ARG ATLAS_SOURCE_SHA=unknown
+ARG ATLAS_SOURCE_SHA
+RUN printf "%s\n" "$ATLAS_SOURCE_SHA" > REVISION
 LABEL org.opencontainers.image.source="https://github.com/elephant-xyz/atlas" \
   org.opencontainers.image.revision="${ATLAS_SOURCE_SHA}"
 USER node

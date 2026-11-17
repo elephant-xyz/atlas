@@ -74,8 +74,10 @@ route starts one.
 
 ## Build, pin, register
 
-Every command refuses (exit 1) unless the image's package files, schema, scripts, command files
-and Dockerfile equal main's, so build from main's tip, with BuildKit, after any change to them:
+Every command refuses (exit 1) unless the revision the image records is on main and its package
+files, schema, scripts, command files and Dockerfile equal main's. Build it with BuildKit from a
+clean checkout of main's tip, with that commit passed as `ATLAS_SOURCE_SHA`, after any change
+to them:
 
 ```sh
 docker build --platform linux/amd64 -f command/Dockerfile --build-arg ATLAS_SOURCE_SHA="$(git rev-parse HEAD)" -t atlas-command .

@@ -1,11 +1,6 @@
 #!/usr/bin/env node
-// verify: Atlas's archive checks on a pull request's head: first check-page's checks, as
-// validate.yml runs validate-entry before verify-roots in one job, so a page that fails them
-// fetches nothing; then verifyGroup from verify-roots.mjs on every group whose cid, schema,
-// tables or car differ from the merge base, as that script's own command line runs it (the
-// archive by root, elephant-cli validate, the shape and schema claim, the schema, tables and
-// every Parquet part by CID). The CLI's error CSV is the output validation-errors.csv, redacted
-// like the log. A page or group that fails is a result (ok: false and its reason), not an error.
+// verify: check-page's checks first (validate.yml runs validate-entry before verify-roots), then
+// verify-roots.mjs on every group the head changes; the CLI's error CSV is an output.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,9 +19,6 @@ export const command = {
     { name: 'ATLAS_PAGE', required: true },
     { name: 'ATLAS_GATEWAY_DEADLINE_MINUTES', required: false },
   ],
-  inputs: [],
-  outputs: ['result.json', VALIDATION_CSV],
-  /** check-page's checks, then verify-roots.mjs's command line, on a checkout of the head; the CLI's CSV is returned as an output. */
   async run({ parameters, work, repository }, deps) {
     const { root, base, refused } = checkoutPullRequest(work, repository, parameters.ATLAS_HEAD_SHA, parameters.ATLAS_PAGE);
     if (refused) return { result: { ok: false, ...refused } };

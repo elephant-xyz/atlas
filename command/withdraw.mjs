@@ -1,12 +1,6 @@
 #!/usr/bin/env node
-// withdraw: take the county's withdrawn group off main with withdraw() from withdraw.mjs (back to
-// what was last published, or removed; never a revert), pushed through the deploy key. Its
-// input is the held.json transfer wrote, whose holds of the county must name the county's own
-// page. When main no longer holds what failed (a new version of the page merged, or the index
-// lists it after all), withdraw.mjs leaves it alone and so does this: a finished run with
-// withdrawn false, which is also what a run repeated after its result was lost returns. The
-// `Publication reverted` issue is the caller's to open (System, through Connect), and only when
-// withdrawn is true; withdraw.mjs's own command line would open it with gh.
+// withdraw: withdraw.mjs's withdraw() for the county's withdrawn holds on its own page. The caller
+// opens the Publication reverted issue.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,9 +16,6 @@ export const command = {
     { name: 'ATLAS_COUNTY', required: true },
     { name: 'ATLAS_MAIN_SHA', required: true },
   ],
-  inputs: [HELD_FILE],
-  outputs: ['result.json'],
-  /** withdraw() on a checkout of main, for the county's withdrawn holds on its own page only. */
   async run({ parameters, env, work, repository, inputs }, deps) {
     const county = parameters.ATLAS_COUNTY;
     const file = join(inputs, HELD_FILE);
