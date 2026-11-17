@@ -95,6 +95,15 @@ bearer token and every private gateway origin taken out.
 - Wait for a run as long as its configuration's limit plus 30 minutes: 10,800 seconds for the
   validation configurations, 23,400 for the others.
 
+## Go-live order
+
+A run starts when a System workflow step starts Transform's command-runs workflow; no HTTP
+route starts one.
+1. Validation: register only `atlas-command-validation-public` and `atlas-command-validation`;
+   `check-page` and `verify` only read, so they run beside `validate.yml`.
+2. Publication, once it moves to System: register `atlas-command-transfer`, `atlas-command-index`
+   and `atlas-command-withdrawal`, pause `publish.yml`, and run one county at a time, as above.
+
 ## Known differences from the workflows
 
 - One `transfer` runs `transfer-roots.mjs --county` in one process: every root of the county
@@ -141,8 +150,8 @@ for c in check-page verify transfer publish-index withdraw; do docker run --rm -
 ```
 
 Push it to an ECR repository listed in the installation's `CommandImageRepositoryArns` and take
-the digest the push prints. Register each configuration with `image` set to
-`<account>.dkr.ecr.<region>.amazonaws.com/<repository>@sha256:<digest>`, as a new `version`:
+the digest the push prints. Register the configurations in the go-live order, each with `image`
+set to `<account>.dkr.ecr.<region>.amazonaws.com/<repository>@sha256:<digest>`, as a new `version`:
 validate, register, then read it back and compare the digest. The committed files keep the
 placeholder `PLACEHOLDER_ATLAS_COMMAND_IMAGE_PINNED_BY_DIGEST`, which fails validation; an image
 cannot hold its own digest. The `result` field needs a Transform with the command executor. An
