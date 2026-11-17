@@ -1,5 +1,7 @@
+# syntax=docker/dockerfile:1.7
 # The image Transform's command executor runs the Atlas commands in (see command/README.md).
-# Built from the repository root, from a commit on main:
+# Built from the repository root, from a commit on main, with BuildKit (the syntax line above
+# gives `ADD --checksum`; command/Dockerfile.dockerignore keeps the context to what is copied):
 #   docker build --platform linux/amd64 -f command/Dockerfile --build-arg ATLAS_SOURCE_SHA="$(git rev-parse HEAD)" .
 # Everything it runs is copied in here; county pages and history are fetched per run.
 
@@ -21,11 +23,12 @@ COPY --from=cli /tmp/elephant-cli/elephant-cli /usr/local/bin/elephant-cli
 
 WORKDIR /opt/atlas
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-# Exactly the files command/lib.mjs compares with the base commit before a command runs.
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+# Exactly the files command/lib.mjs compares with main before a command runs; the Dockerfile
+# stands for the Node base and the elephant-cli release above.
 COPY schema/ schema/
 COPY scripts/ scripts/
-COPY command/*.mjs command/*.json command/known_hosts command/
+COPY command/*.mjs command/*.json command/known_hosts command/Dockerfile command/
 
 # The heap the workflows give the scripts: a full-county CAR is indexed in memory.
 ENV NODE_OPTIONS=--max-old-space-size=12288

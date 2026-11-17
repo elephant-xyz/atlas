@@ -1,0 +1,29 @@
+{
+  "id": "atlas-command-withdrawal",
+  "version": "1.0.0",
+  "engine": "container-command",
+  "image": "PLACEHOLDER_ATLAS_COMMAND_IMAGE_PINNED_BY_DIGEST",
+  "commands": {
+    "withdraw": ["node", "/opt/atlas/command/withdraw.mjs", "--configuration", "atlas-command-withdrawal"]
+  },
+  "parameters": {
+    "ATLAS_COUNTY": { "pattern": "[A-Z]{2}/[a-z0-9]+(?:-[a-z0-9]+)*", "required": true },
+    "ATLAS_MAIN_SHA": { "pattern": "[0-9a-f]{40}", "required": true }
+  },
+  "secretEnvironment": {
+    "ATLAS_DEPLOY_KEY": "secretsmanager:transform/commands/atlas/deploy-key"
+  },
+  "inputs": [
+    { "name": "held.json", "required": true }
+  ],
+  "outputs": [
+    { "name": "result.json", "required": true }
+  ],
+  "result": "result.json",
+  "limits": {
+    "cpu": 4096,
+    "memoryMiB": 16384,
+    "ephemeralStorageGiB": 50,
+    "timeoutMinutes": 360
+  }
+}

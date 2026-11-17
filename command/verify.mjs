@@ -1,22 +1,26 @@
 #!/usr/bin/env node
-// verify: Atlas's archive checks on a pull request's head: verifyGroup from verify-roots.mjs on
-// every group whose cid, schema, tables or car differ from the merge base, as that script's own
-// command line runs it (the archive by root, elephant-cli validate, the shape and schema claim,
-// the schema, tables and every Parquet part by CID). The CLI's error CSV is the output
-// validation-errors.csv. A group that fails is a result (ok: false), not an error.
+// verify: Atlas's archive checks on a pull request's head: first check-page's checks, as
+// validate.yml runs validate-entry before verify-roots in one job, so a page that fails them
+// fetches nothing; then verifyGroup from verify-roots.mjs on every group whose cid, schema,
+// tables or car differ from the merge base, as that script's own command line runs it (the
+// archive by root, elephant-cli validate, the shape and schema claim, the schema, tables and
+// every Parquet part by CID). The CLI's error CSV is the output validation-errors.csv, redacted
+// like the log. A page or group that fails is a result (ok: false and its reason), not an error.
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gatewayList } from '../scripts/gateways.mjs';
-import { changedGroups, pagesAt, readPages } from '../scripts/lib.mjs';
+import { changedGroups, indexAt, pagesAt, readPages } from '../scripts/lib.mjs';
+import { validateRegistry } from '../scripts/validate-entry.mjs';
 import { validateCar, verifyGroup } from '../scripts/verify-roots.mjs';
-import { checkoutPullRequest, runCommand } from './lib.mjs';
+import { Reason, checkoutPullRequest, runCommand } from './lib.mjs';
 
 const VALIDATION_CSV = 'validation-errors.csv';
 
 export const command = {
   name: 'verify',
-  summary: "verify-roots.mjs (with the image's elephant-cli) on every group the pull request's head changes against its merge base",
-  returns: '{ ok, summary }: summary has one `ok <page> group <key>` or `FAIL <page> group <key>: <reason>` line per group',
+  summary: "check-page's checks, then verify-roots.mjs (with the image's elephant-cli) on every group the pull request's head changes against its merge base",
+  returns: '{ ok, reason?, summary }: summary has one `ok <page> group <key>` or `FAIL <page> group <key>: <reason>` line per group, or the page problems that kept it from fetching anything',
   parameters: [
     { name: 'ATLAS_HEAD_SHA', required: true },
     { name: 'ATLAS_PAGE', required: true },
@@ -25,13 +29,16 @@ export const command = {
   secrets: { required: [], optional: ['ATLAS_GATEWAYS', 'ATLAS_GATEWAY_TOKEN'] },
   inputs: [],
   outputs: ['result.json', VALIDATION_CSV],
-  /** verify-roots.mjs's command line, on a checkout of the head, with the CSV in the outputs. */
-  async run({ parameters, work, repository, outputs }, deps) {
-    const { root, base } = checkoutPullRequest(work, repository, parameters.ATLAS_HEAD_SHA, parameters.ATLAS_PAGE);
+  /** check-page's checks, then verify-roots.mjs's command line, on a checkout of the head; the CLI's CSV is returned as an output. */
+  async run({ parameters, work, repository }, deps) {
+    const { root, base, refused } = checkoutPullRequest(work, repository, parameters.ATLAS_HEAD_SHA, parameters.ATLAS_PAGE);
+    if (refused) return { result: { ok: false, ...refused } };
+    const problems = validateRegistry(root, indexAt(base, root));
+    if (problems.length) return { result: { ok: false, reason: Reason.INVALID_PAGE, summary: ['nothing verified: the page fails check-page', ...problems].join('\n') } };
     const targets = changedGroups(readPages(root), pagesAt(base, root));
     if (!targets.length) return { result: { ok: true, summary: 'no changed groups to verify' } };
     console.log(`gateways, in order: ${gatewayList().join(', ')}`);
-    const csv = join(outputs, VALIDATION_CSV);
+    const csv = join(work, VALIDATION_CSV);
     const lines = [];
     let failed = 0;
     for (const t of targets) {
@@ -46,7 +53,9 @@ export const command = {
         console.error(lines.at(-1));
       }
     }
-    return { result: { ok: failed === 0, summary: lines.join('\n') } };
+    const summary = lines.join('\n');
+    const files = existsSync(csv) ? { [VALIDATION_CSV]: readFileSync(csv, 'utf8') } : {};
+    return { result: failed ? { ok: false, reason: Reason.GROUP_FAILED, summary } : { ok: true, summary }, files };
   },
   deps: { verifyGroup, validateCar },
 };

@@ -1,10 +1,10 @@
 // What every Atlas command shares when Transform's command executor runs it: the configuration
-// it was started under (the argv `--configuration <id>`, one of the two in this directory),
+// it was started under (the argv `--configuration <id>`, one of those in this directory),
 // parameters from the environment checked against it, secrets kept to the command that needs
 // them and out of every log and result, a checkout of the registry fetched from GitHub, the check
-// that this image runs the base commit's scripts, and result.json written only on success. A
-// command is `{ name, summary, returns, parameters, secrets, inputs, outputs, run, deps }`; its
-// file calls runCommand(command), which exits 0 with result.json written or 1 with none.
+// that this image runs main's scripts, and result.json written only on success. A command is
+// `{ name, summary, returns, parameters, secrets, inputs, outputs, run, deps }`; its file calls
+// runCommand(command), which exits 0 with result.json written or 1 with none.
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,16 +12,20 @@ import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { format } from 'node:util';
+import { token as filebaseToken } from '../scripts/filebase.mjs';
 import { redactGateways } from '../scripts/gateways.mjs';
 import { baseRef, git, refExists } from '../scripts/lib.mjs';
 
 /** The repository root, where the image keeps the Atlas files it runs (/opt/atlas). */
 export const IMAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 /**
- * The image's command configurations, by id: pull-request checks under one, publication under
- * the other, so the task that checks a pull request is never given a publication secret.
+ * The image's command configurations, by id. Each gives its commands only the secrets every one
+ * of them uses: none to the checks of a pull request from a fork (and to check-page always), the
+ * gateways to verify on a pull request from this repository, no deploy key to a transfer, no
+ * Filebase key to a withdrawal. A task receives every secret its configuration declares, and
+ * deleting one from process.env does not take it out of the process's environment block.
  */
-const CONFIGURATION_IDS = ['atlas-command-validation', 'atlas-command-publication'];
+const CONFIGURATION_IDS = ['atlas-command-validation-public', 'atlas-command-validation', 'atlas-command-transfer', 'atlas-command-index', 'atlas-command-withdrawal'];
 const CONFIGURATIONS = new Map(CONFIGURATION_IDS.map((id) => [id, JSON.parse(readFileSync(new URL(`./${id}.json`, import.meta.url), 'utf8'))]));
 const allOf = (field) => [...new Set([...CONFIGURATIONS.values()].flatMap((configuration) => Object.keys(configuration[field])))];
 /** Every secret and parameter any Atlas configuration declares. */
@@ -42,6 +46,30 @@ const HELP = '--help';
 const SUCCEEDED = 0;
 const FAILED = 1;
 
+/** Why a result is `ok: false`: its `reason`. Every one is a finished run (exit 0). */
+export const Reason = Object.freeze({
+  /** The page fails validate-entry's checks. */
+  INVALID_PAGE: 'invalid-page',
+  /** The pull request changes something else than exactly its county page. */
+  NOT_ONE_PAGE: 'not-one-page',
+  /** The pull request removes its county page. */
+  PAGE_REMOVED: 'page-removed',
+  /** The page is a symbolic link, or another git mode than a regular file. */
+  NOT_REGULAR_FILE: 'not-regular-file',
+  /** A changed group failed verify-roots.mjs's checks. */
+  GROUP_FAILED: 'group-failed',
+  /** The county's publication must come off main (held.json holds it). */
+  WITHDRAWN: 'withdrawn',
+  /** The county's publication waits for a later run; nothing is withdrawn. */
+  DEFERRED: 'deferred',
+  /** The gateways or Filebase were down before the first root; nothing was done. */
+  OUTAGE: 'outage',
+  /** The index was published without one of the county's groups. */
+  COUNTY_LEFT_OUT: 'county-left-out',
+  /** index.json is on main, but the IPNS name did not serve it. */
+  NOT_SERVED: 'not-served',
+});
+
 /**
  * Reads are anonymous over HTTPS (the repository is public); pushes use the deploy key over SSH
  * on port 443, the only port the executor's tasks may reach. ATLAS_REPOSITORY_URL replaces both
@@ -59,8 +87,9 @@ const OWNER_ONLY = 0o600;
 /** Who the commits made through the deploy key are by: not the Actions bot, which still runs today. */
 const COMMIT_NAME = 'Atlas command executor';
 const COMMIT_EMAIL = 'atlas-command@elephant.invalid';
-/** git's name-status for the page change a pull request may make: added or modified. */
-const PAGE_CHANGES = ['A', 'M'];
+/** git's status for a removed file, and the mode of a regular, non-executable file. */
+const REMOVED = 'D';
+const REGULAR_FILE = '100644';
 
 /**
  * Settings publish.yml gives transfer-roots.mjs and publish-index.mjs (repository variables at
@@ -82,13 +111,10 @@ export const PUBLICATION_SETTINGS = {
   ATLAS_SKIP_STORED_SHARDS: '0',
 };
 
-/**
- * The most result.json may hold: Transform's MAX_COMMAND_RESULT_BYTES, beyond which the executor
- * fails the run with InvalidCommandResult (System refuses a larger leaf answer). A summary that
- * would not fit is shortened, and the run's log keeps all of it.
- */
-const MAX_RESULT_BYTES = 64 * 1024;
-const SHORTENED = "… (shortened to fit the 64 KiB result; the run's log has all of it)";
+/** The most result.json may hold: under the executor's 60 KiB result limit. */
+const MAX_RESULT_BYTES = 60_000;
+/** The last line of a summary shortened to fit; the run's log keeps all of it. */
+const SHORTENED = "… (shortened to fit the result's 60,000 bytes; the run's log has all of it)";
 
 /** What replaces a secret value in logs and results; shorter pieces are not taken for secrets. */
 const REDACTED = '***';
@@ -96,12 +122,13 @@ const MIN_SECRET_PIECE = 8;
 
 /**
  * The files the image copies from the repository (see command/Dockerfile). What the image runs
- * must be exactly what the base commit holds at these paths.
+ * must be exactly what main holds at these paths; the Dockerfile stands for the Node base image
+ * and the elephant-cli release the image was built with.
  */
 const IMAGE_TOP_FILES = ['package.json', 'package-lock.json'];
 const IMAGE_WHOLE_DIRECTORIES = ['schema', 'scripts'];
 const COMMAND_DIRECTORY = 'command';
-const IMAGE_COMMAND_FILE = /^command\/(?:[a-z-]+\.(?:mjs|json)|known_hosts)$/;
+const IMAGE_COMMAND_FILE = /^command\/(?:[a-z-]+\.(?:mjs|json)|known_hosts|Dockerfile)$/;
 
 /** Whether the repository path `path` is one of the image's Atlas files. */
 const inImage = (path) => IMAGE_TOP_FILES.includes(path) || IMAGE_WHOLE_DIRECTORIES.some((dir) => path.startsWith(`${dir}/`)) || IMAGE_COMMAND_FILE.test(path);
@@ -135,9 +162,9 @@ function startedUnder(command, argv) {
 }
 
 /**
- * Refuse to run when a secret another Atlas configuration declares reached this task: a
- * validation command must never run with the deploy key or the Filebase keys present, however
- * the configuration was registered. Names only, never values.
+ * Refuse to run when an Atlas secret the configuration does not declare reached this task: a
+ * command never runs beside a secret its configuration was not meant to give it, however the
+ * configuration was registered. Names only, never values.
  */
 function refuseForeignSecrets(command, configuration, env) {
   const foreign = SECRET_NAMES.filter((name) => !Object.hasOwn(configuration.secretEnvironment, name) && env[name] !== undefined);
@@ -168,8 +195,8 @@ function readParameters(command, configuration, env) {
 
 /**
  * Drop from `env` every Atlas secret the command does not use, so neither the scripts nor the
- * CLI they start ever see it (a second line behind the configuration declaring only what its
- * commands use), and require the ones it cannot run without.
+ * CLI they start see it in their environment (a second line behind the configuration declaring
+ * only what its commands use), and require the ones it cannot run without.
  */
 function keepSecrets(command, env) {
   const { required, optional } = command.secrets;
@@ -178,14 +205,17 @@ function keepSecrets(command, env) {
   if (missing.length) throw new Error(`secret(s) ${missing.join(', ')} required`);
 }
 
+/** The Kubo RPC bearer token scripts/filebase.mjs makes from the Filebase keys, or '' without them. */
+const filebaseBearer = (env) => (env.FILEBASE_ACCESS_KEY && env.FILEBASE_SECRET_KEY ? filebaseToken({ ...env, FILEBASE_BUCKET: PUBLICATION_SETTINGS.FILEBASE_BUCKET }) : '');
+
 /**
  * A function that takes every configured secret's value (and each of its lines or
- * comma-separated pieces) and every private gateway origin out of a text. The executor's logs
- * are not masked the way GitHub Actions masks secrets, and summaries are posted on pull requests.
+ * comma-separated pieces), the Filebase RPC bearer token made from the Filebase keys, and every
+ * private gateway origin out of a text. The executor's logs are not masked the way GitHub
+ * Actions masks secrets, and summaries are posted on pull requests.
  */
 function redactor(env) {
-  const pieces = SECRET_NAMES
-    .flatMap((name) => [env[name] ?? '', ...(env[name] ?? '').split(/[\n,]/)])
+  const pieces = [...SECRET_NAMES.flatMap((name) => [env[name] ?? '', ...(env[name] ?? '').split(/[\n,]/)]), filebaseBearer(env)]
     .map((piece) => piece.trim())
     .filter((piece) => piece.length >= MIN_SECRET_PIECE)
     .sort((a, b) => b.length - a.length);
@@ -219,7 +249,7 @@ function fitResult(result) {
     const cut = result.summary.lastIndexOf('\n', keep);
     return { ...result, summary: `${result.summary.slice(0, cut > 0 ? cut : keep)}\n${SHORTENED}` };
   };
-  if (typeof result.summary !== 'string' || bytesOf(shortened(0)) > MAX_RESULT_BYTES) throw new Error(`result.json would be ${bytesOf(result)} bytes; the executor returns at most ${MAX_RESULT_BYTES}`);
+  if (typeof result.summary !== 'string' || bytesOf(shortened(0)) > MAX_RESULT_BYTES) throw new Error(`result.json would be ${bytesOf(result)} bytes; at most ${MAX_RESULT_BYTES} fit`);
   let [fits, fails] = [0, result.summary.length];
   while (fails - fits > 1) {
     const keep = Math.floor((fits + fails) / 2);
@@ -230,9 +260,9 @@ function fitResult(result) {
 }
 
 /**
- * Write `files` ({ name: JSON value }, result.json last) to `dir`, each through a temporary name
- * the executor does not copy, then renamed; on any failure every file already written is removed,
- * so a run never leaves part of a success behind.
+ * Write `files` ({ name: text or JSON value }, result.json last) to `dir`, each through a
+ * temporary name the executor does not copy, then renamed; on any failure every file already
+ * written is removed, so a run never leaves part of a success behind.
  */
 function writeOutputs(dir, files) {
   const written = [];
@@ -240,7 +270,7 @@ function writeOutputs(dir, files) {
     for (const [name, value] of Object.entries(files)) {
       const partial = join(dir, `.${name}.partial`);
       written.push(name);
-      writeFileSync(partial, serialize(value));
+      writeFileSync(partial, typeof value === 'string' ? value : serialize(value));
       renameSync(partial, join(dir, name));
     }
   } catch (e) {
@@ -249,10 +279,17 @@ function writeOutputs(dir, files) {
   }
 }
 
+/** The configuration --help describes the command under: the one `argv` names, else the first that lists it. */
+function helpConfiguration(command, argv) {
+  const named = argv[0] === CONFIGURATION_FLAG ? CONFIGURATIONS.get(argv[1]) : undefined;
+  if (named && Object.hasOwn(named.commands, command.name)) return named;
+  return [...CONFIGURATIONS.values()].find((configuration) => Object.hasOwn(configuration.commands, command.name));
+}
+
 /** --help: what the command does, takes and returns under `configuration`. */
 function usage(command, configuration) {
   const parameter = ({ name, required }) => `  ${name.padEnd(32)} ${required ? 'required' : 'optional'}  ${configuration.parameters[name].pattern}`;
-  const secrets = [...command.secrets.required.map((name) => `${name} (required)`), ...command.secrets.optional];
+  const secrets = Object.keys(configuration.secretEnvironment).map((name) => (command.secrets.required.includes(name) ? `${name} (required)` : name));
   return [
     `atlas-command ${command.name} (${configuration.id}): ${command.summary}`,
     '',
@@ -278,7 +315,7 @@ export async function runCommand(command, { argv = process.argv.slice(2), env = 
   const restore = routeConsole(stdout, stderr, redact);
   try {
     if (argv.includes(HELP)) {
-      console.log(usage(command, [...CONFIGURATIONS.values()].find((configuration) => Object.hasOwn(configuration.commands, command.name))));
+      console.log(usage(command, helpConfiguration(command, argv)));
       return SUCCEEDED;
     }
     const configuration = startedUnder(command, argv);
@@ -336,13 +373,13 @@ function cloneMain(work, { fetchUrl }) {
 }
 
 /**
- * Differences between the image's Atlas files and the same paths at `base` in the checkout at
+ * Differences between the image's Atlas files and the same paths on main in the checkout at
  * `root`, compared by git blob id: `<path> differs`, `<path> is not in the image`, `<path> is
- * not at the base`. Empty when the image runs exactly the base's scripts.
+ * not on main`. Empty when the image runs exactly main's scripts.
  */
-function imageDifferences(root, base, imageRoot) {
-  const atBase = new Map(
-    git(root, 'ls-tree', '-r', '-z', '--full-tree', base)
+function imageDifferences(root, imageRoot) {
+  const onMain = new Map(
+    git(root, 'ls-tree', '-r', '-z', '--full-tree', ORIGIN_MAIN)
       .split('\0')
       .filter(Boolean)
       .map((line) => {
@@ -355,50 +392,59 @@ function imageDifferences(root, base, imageRoot) {
   const ids = execFileSync('git', ['-C', root, 'hash-object', '--no-filters', '--stdin-paths'], { input: mine.map((path) => join(imageRoot, path)).join('\n'), encoding: 'utf8' }).split('\n');
   const differences = [];
   for (const [i, path] of mine.entries()) {
-    if (!atBase.has(path)) differences.push(`${path} is not at the base`);
-    else if (atBase.get(path) !== ids[i]) differences.push(`${path} differs`);
+    if (!onMain.has(path)) differences.push(`${path} is not on main`);
+    else if (onMain.get(path) !== ids[i]) differences.push(`${path} differs`);
   }
-  for (const path of atBase.keys()) if (!mine.includes(path)) differences.push(`${path} is not in the image`);
+  for (const path of onMain.keys()) if (!mine.includes(path)) differences.push(`${path} is not in the image`);
   return differences;
 }
 
 /**
- * Refuse to run unless this image's Atlas files are exactly the ones at `base`: the checks that
- * judge a pull request are its merge base's, and a publication runs main's own scripts, never
- * code fetched with the pages.
+ * Refuse to run unless this image's Atlas files are exactly main's as the checkout at `root`
+ * cloned it: a pull request is judged by main's checks, as validate.yml judges the merge commit,
+ * and a publication runs main's own scripts, never code fetched with the pages. Only an image
+ * built from main and registered again fixes this, so it is an error, not a verdict.
  */
-function requireImageIsBase(root, base, imageRoot = IMAGE_ROOT) {
-  const differences = imageDifferences(root, base, imageRoot);
-  if (differences.length) throw new Error(`this image's Atlas files are not the ones at ${base}, the commit whose checks must run (${differences.join('; ')}); update the pull request with main, or build and register an image from main`);
+function requireImageIsMain(root, imageRoot = IMAGE_ROOT) {
+  const differences = imageDifferences(root, imageRoot);
+  if (differences.length) throw new Error(`this image's Atlas files are not main's at ${git(root, 'rev-parse', ORIGIN_MAIN).trim()} (${differences.join('; ')}); build and register an image from main`);
 }
 
 /**
- * Refuse unless the pull request's head changes exactly `page` (added or modified) against its
- * base: then the head's scripts are the base's, which is what lets the image's scripts judge it.
+ * Why the pull request's head cannot be checked as one county page, or undefined when it changes
+ * exactly `page` against its base, added or modified, as a regular file: { reason, summary }. It
+ * reads git's record of the change only, so nothing is read through a link.
  */
-function requireOnlyPage(root, base, page) {
-  const fields = git(root, 'diff', '--name-status', '--no-renames', '-z', base, 'HEAD').split('\0').filter(Boolean);
+function pageRefusal(root, base, page) {
+  const fields = git(root, 'diff', '--raw', '--no-renames', '-z', base, 'HEAD').split('\0').filter(Boolean);
   const changes = [];
-  for (let i = 0; i < fields.length; i += 2) changes.push({ status: fields[i], path: fields[i + 1] });
-  if (changes.length !== 1 || changes[0].path !== page) throw new Error(`the pull request changes ${changes.length} file(s) against its base ${base}, not only ${page}`);
-  if (!PAGE_CHANGES.includes(changes[0].status)) throw new Error(`${page} is not added or modified (git status ${changes[0].status}); a removed page has nothing to check`);
+  for (let i = 0; i < fields.length; i += 2) {
+    const [, mode, , , status] = fields[i].split(' ');
+    changes.push({ mode, status, path: fields[i + 1] });
+  }
+  if (changes.length !== 1 || changes[0].path !== page) return { reason: Reason.NOT_ONE_PAGE, summary: `the pull request changes ${changes.length} file(s) against its base ${base}, not only ${page}: ${changes.map(({ path }) => path).join(', ')}` };
+  const [{ mode, status }] = changes;
+  if (status === REMOVED) return { reason: Reason.PAGE_REMOVED, summary: `${page} is removed; a pull request that removes a page has nothing to check here` };
+  if (mode !== REGULAR_FILE) return { reason: Reason.NOT_REGULAR_FILE, summary: `${page} is not a regular file (git mode ${mode}, expected ${REGULAR_FILE}); nothing was read from it` };
+  return undefined;
 }
 
 /**
  * The registry at a pull request's head, compared with its merge base the way the scripts do
- * (baseRef: where the head left origin/main). The head is fetched by SHA when main does not hold
- * it, as GitHub serves pull-request heads. Returns { root, base }.
+ * (baseRef: where the head left origin/main), once this image is known to run main's scripts.
+ * The head is fetched by SHA when main does not hold it, as GitHub serves pull-request heads.
+ * Returns { root, base, refused }: `refused` ({ reason, summary }) when the head is not exactly
+ * one added or modified regular county page, which the caller returns as its verdict.
  */
 export function checkoutPullRequest(work, repository, headSha, page) {
   const root = cloneMain(work, repository);
+  requireImageIsMain(root);
   if (!refExists(root, headSha)) git(root, 'fetch', '--quiet', 'origin', headSha);
   git(root, 'checkout', '--quiet', '--detach', headSha);
   const base = baseRef(root);
   if (!refExists(root, base)) throw new Error(`the head ${headSha} has no base on main`);
   console.log(`checked out ${headSha}; base ${git(root, 'rev-parse', base).trim()}`);
-  requireOnlyPage(root, base, page);
-  requireImageIsBase(root, base);
-  return { root, base };
+  return { root, base, refused: pageRefusal(root, base, page) };
 }
 
 /**
@@ -418,9 +464,8 @@ export function checkoutMain(work, repository, mainSha) {
   }
   if (!onMain) throw new Error(`${mainSha} is not on main; a publication runs only for a commit main holds`);
   git(root, 'checkout', '--quiet', '--detach', ORIGIN_MAIN);
-  const tip = git(root, 'rev-parse', 'HEAD').trim();
-  console.log(`checked out main at ${tip}, which holds ${mainSha}`);
-  requireImageIsBase(root, tip);
+  console.log(`checked out main at ${git(root, 'rev-parse', 'HEAD').trim()}, which holds ${mainSha}`);
+  requireImageIsMain(root);
   return root;
 }
 
