@@ -25,7 +25,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Exactly the files command/lib.mjs compares with the base commit before a command runs.
 COPY schema/ schema/
 COPY scripts/ scripts/
-COPY command/*.mjs command/configuration.json command/known_hosts command/
+COPY command/*.mjs command/*.json command/known_hosts command/
 
 # The heap the workflows give the scripts: a full-county CAR is indexed in memory.
 ENV NODE_OPTIONS=--max-old-space-size=12288

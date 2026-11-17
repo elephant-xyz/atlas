@@ -1,20 +1,16 @@
 {
-  "id": "atlas-command",
+  "id": "atlas-command-publication",
   "version": "1.0.0",
   "engine": "container-command",
   "image": "PLACEHOLDER_ATLAS_COMMAND_IMAGE_PINNED_BY_DIGEST",
   "commands": {
-    "check-page": ["node", "/opt/atlas/command/check-page.mjs"],
-    "verify": ["node", "/opt/atlas/command/verify.mjs"],
-    "transfer": ["node", "/opt/atlas/command/transfer.mjs"],
-    "publish-index": ["node", "/opt/atlas/command/publish-index.mjs"],
-    "withdraw": ["node", "/opt/atlas/command/withdraw.mjs"]
+    "transfer": ["node", "/opt/atlas/command/transfer.mjs", "--configuration", "atlas-command-publication"],
+    "publish-index": ["node", "/opt/atlas/command/publish-index.mjs", "--configuration", "atlas-command-publication"],
+    "withdraw": ["node", "/opt/atlas/command/withdraw.mjs", "--configuration", "atlas-command-publication"]
   },
   "parameters": {
-    "ATLAS_HEAD_SHA": { "pattern": "[0-9a-f]{40}", "required": false },
-    "ATLAS_PAGE": { "pattern": "counties/[A-Za-z0-9_-][A-Za-z0-9._-]*/[A-Za-z0-9_-][A-Za-z0-9._-]*\\.json", "required": false },
-    "ATLAS_COUNTY": { "pattern": "[A-Z]{2}/[a-z0-9]+(?:-[a-z0-9]+)*", "required": false },
-    "ATLAS_MAIN_SHA": { "pattern": "[0-9a-f]{40}", "required": false },
+    "ATLAS_COUNTY": { "pattern": "[A-Z]{2}/[a-z0-9]+(?:-[a-z0-9]+)*", "required": true },
+    "ATLAS_MAIN_SHA": { "pattern": "[0-9a-f]{40}", "required": true },
     "ATLAS_GATEWAY_DEADLINE_MINUTES": { "pattern": "[1-9][0-9]{0,2}", "required": false }
   },
   "secretEnvironment": {
@@ -27,8 +23,7 @@
   "inputs": [{ "name": "held.json", "required": false }],
   "outputs": [
     { "name": "result.json", "required": true },
-    { "name": "held.json", "required": false },
-    { "name": "validation-errors.csv", "required": false }
+    { "name": "held.json", "required": false }
   ],
   "limits": {
     "cpu": 4096,

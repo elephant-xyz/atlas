@@ -1,9 +1,10 @@
-// What every Atlas command shares when Transform's command executor runs it: parameters from
-// the environment checked against command/configuration.json, secrets kept to the command that
-// needs them and out of every log and result, a checkout of the registry fetched from GitHub,
-// the check that this image runs the base commit's scripts, and result.json written only on
-// success. A command is `{ name, summary, returns, parameters, secrets, inputs, outputs, run, deps }`;
-// its file calls runCommand(command), which exits 0 with result.json written or 1 with none.
+// What every Atlas command shares when Transform's command executor runs it: the configuration
+// it was started under (the argv `--configuration <id>`, one of the two in this directory),
+// parameters from the environment checked against it, secrets kept to the command that needs
+// them and out of every log and result, a checkout of the registry fetched from GitHub, the check
+// that this image runs the base commit's scripts, and result.json written only on success. A
+// command is `{ name, summary, returns, parameters, secrets, inputs, outputs, run, deps }`; its
+// file calls runCommand(command), which exits 0 with result.json written or 1 with none.
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,7 +17,17 @@ import { baseRef, git, refExists } from '../scripts/lib.mjs';
 
 /** The repository root, where the image keeps the Atlas files it runs (/opt/atlas). */
 export const IMAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
-const CONFIGURATION = JSON.parse(readFileSync(new URL('./configuration.json', import.meta.url), 'utf8'));
+/**
+ * The image's command configurations, by id: pull-request checks under one, publication under
+ * the other, so the task that checks a pull request is never given a publication secret.
+ */
+const CONFIGURATION_IDS = ['atlas-command-validation', 'atlas-command-publication'];
+const CONFIGURATIONS = new Map(CONFIGURATION_IDS.map((id) => [id, JSON.parse(readFileSync(new URL(`./${id}.json`, import.meta.url), 'utf8'))]));
+const allOf = (field) => [...new Set([...CONFIGURATIONS.values()].flatMap((configuration) => Object.keys(configuration[field])))];
+/** Every secret and parameter any Atlas configuration declares. */
+const SECRET_NAMES = allOf('secretEnvironment');
+const PARAMETER_NAMES = allOf('parameters');
+const CONFIGURATION_FLAG = '--configuration';
 const KNOWN_HOSTS = fileURLToPath(new URL('./known_hosts', import.meta.url));
 
 /** Where the executor mounts a run's inputs (read-only) and copies its outputs from. */
@@ -82,7 +93,7 @@ const MIN_SECRET_PIECE = 8;
 const IMAGE_TOP_FILES = ['package.json', 'package-lock.json'];
 const IMAGE_WHOLE_DIRECTORIES = ['schema', 'scripts'];
 const COMMAND_DIRECTORY = 'command';
-const IMAGE_COMMAND_FILE = /^command\/(?:[a-z-]+\.mjs|configuration\.json|known_hosts)$/;
+const IMAGE_COMMAND_FILE = /^command\/(?:[a-z-]+\.(?:mjs|json)|known_hosts)$/;
 
 /** Whether the repository path `path` is one of the image's Atlas files. */
 const inImage = (path) => IMAGE_TOP_FILES.includes(path) || IMAGE_WHOLE_DIRECTORIES.some((dir) => path.startsWith(`${dir}/`)) || IMAGE_COMMAND_FILE.test(path);
@@ -102,21 +113,45 @@ export function imageFiles(root) {
 const wholeValue = (pattern) => new RegExp(`^(?:${pattern})$`, 'u');
 
 /**
- * The command's parameter values from `env`. Every one the command reads must be declared in the
+ * The configuration `argv` (`--configuration <id>`, as the configuration's own argv for the
+ * command gives it) names, which must be one of this image's and list the command; a run cannot
+ * change the argv, so this is the configuration the task was started under.
+ */
+function startedUnder(command, argv) {
+  const [flag, id, ...rest] = argv;
+  if (flag !== CONFIGURATION_FLAG || id === undefined || rest.length) throw new Error(`must be started with ${CONFIGURATION_FLAG} <id> (${CONFIGURATION_IDS.join(' or ')}), as its configuration's argv does; parameters come as environment variables`);
+  const configuration = CONFIGURATIONS.get(id);
+  if (!configuration) throw new Error(`'${id}' is not a configuration of this image (${CONFIGURATION_IDS.join(', ')})`);
+  if (!Object.hasOwn(configuration.commands, command.name)) throw new Error(`${command.name} is not a command of ${id}`);
+  return configuration;
+}
+
+/**
+ * Refuse to run when a secret another Atlas configuration declares reached this task: a
+ * validation command must never run with the deploy key or the Filebase keys present, however
+ * the configuration was registered. Names only, never values.
+ */
+function refuseForeignSecrets(command, configuration, env) {
+  const foreign = SECRET_NAMES.filter((name) => !Object.hasOwn(configuration.secretEnvironment, name) && env[name] !== undefined);
+  if (foreign.length) throw new Error(`${foreign.join(', ')} reached ${command.name} under ${configuration.id}, which does not declare it; refusing to run`);
+}
+
+/**
+ * The command's parameter values from `env`. Every one the command reads must be declared in its
  * configuration and match its pattern; a parameter of another command is refused, so a miswired
  * step fails before anything is fetched. Messages name the parameter, never the value.
  */
-function readParameters(command, env) {
+function readParameters(command, configuration, env) {
   const mine = new Set(command.parameters.map(({ name }) => name));
-  const problems = Object.keys(CONFIGURATION.parameters)
-    .filter((name) => env[name] !== undefined && !mine.has(name))
-    .map((name) => `${name} is not a parameter of ${command.name}`);
+  const problems = PARAMETER_NAMES.filter((name) => env[name] !== undefined && !mine.has(name)).map((name) => `${name} is not a parameter of ${command.name}`);
   const values = {};
   for (const { name, required } of command.parameters) {
     const value = env[name];
-    if (value === undefined) {
+    const declared = configuration.parameters[name];
+    if (!declared) problems.push(`${name} is not declared by ${configuration.id}`);
+    else if (value === undefined) {
       if (required) problems.push(`${name} is required`);
-    } else if (!wholeValue(CONFIGURATION.parameters[name].pattern).test(value)) problems.push(`${name} does not match its pattern`);
+    } else if (!wholeValue(declared.pattern).test(value)) problems.push(`${name} does not match its pattern`);
     else values[name] = value;
   }
   if (problems.length) throw new Error(problems.join('; '));
@@ -124,12 +159,13 @@ function readParameters(command, env) {
 }
 
 /**
- * Drop from `env` every configured secret the command does not use, so neither the scripts nor
- * the CLI they start ever see it, and require the ones it cannot run without.
+ * Drop from `env` every Atlas secret the command does not use, so neither the scripts nor the
+ * CLI they start ever see it (a second line behind the configuration declaring only what its
+ * commands use), and require the ones it cannot run without.
  */
 function keepSecrets(command, env) {
   const { required, optional } = command.secrets;
-  for (const name of Object.keys(CONFIGURATION.secretEnvironment)) if (!required.includes(name) && !optional.includes(name)) delete env[name];
+  for (const name of SECRET_NAMES) if (!required.includes(name) && !optional.includes(name)) delete env[name];
   const missing = required.filter((name) => !env[name]?.trim());
   if (missing.length) throw new Error(`secret(s) ${missing.join(', ')} required`);
 }
@@ -140,7 +176,7 @@ function keepSecrets(command, env) {
  * are not masked the way GitHub Actions masks secrets, and summaries are posted on pull requests.
  */
 function redactor(env) {
-  const pieces = Object.keys(CONFIGURATION.secretEnvironment)
+  const pieces = SECRET_NAMES
     .flatMap((name) => [env[name] ?? '', ...(env[name] ?? '').split(/[\n,]/)])
     .map((piece) => piece.trim())
     .filter((piece) => piece.length >= MIN_SECRET_PIECE)
@@ -179,12 +215,12 @@ function writeOutputs(dir, files) {
   }
 }
 
-/** --help: what the command does, takes and returns. */
-function usage(command) {
-  const parameter = ({ name, required }) => `  ${name.padEnd(32)} ${required ? 'required' : 'optional'}  ${CONFIGURATION.parameters[name].pattern}`;
+/** --help: what the command does, takes and returns under `configuration`. */
+function usage(command, configuration) {
+  const parameter = ({ name, required }) => `  ${name.padEnd(32)} ${required ? 'required' : 'optional'}  ${configuration.parameters[name].pattern}`;
   const secrets = [...command.secrets.required.map((name) => `${name} (required)`), ...command.secrets.optional];
   return [
-    `atlas-command ${command.name}: ${command.summary}`,
+    `atlas-command ${command.name} (${configuration.id}): ${command.summary}`,
     '',
     'Parameters (environment variables, whole value matching the pattern):',
     ...(command.parameters.length ? command.parameters.map(parameter) : ['  none']),
@@ -196,8 +232,8 @@ function usage(command) {
 }
 
 /**
- * Run `command` as the executor does: no arguments, parameters and secrets in `env`, inputs in
- * `inputs`, outputs to `outputs`. Returns 0 once result.json (and any other success output) is
+ * Run `command` as the executor does: started under the configuration `argv` names, parameters
+ * and secrets in `env`, inputs in `inputs`, outputs to `outputs`. Returns 0 once result.json (and any other success output) is
  * written, 1 with a message on stderr and no success output otherwise. Every line logged and
  * every value written has the secrets taken out. The work directory (checkout, deploy key) is
  * removed whatever happens.
@@ -207,11 +243,12 @@ export async function runCommand(command, { argv = process.argv.slice(2), env = 
   const restore = routeConsole(stdout, stderr, redact);
   try {
     if (argv.includes(HELP)) {
-      console.log(usage(command));
+      console.log(usage(command, [...CONFIGURATIONS.values()].find((configuration) => Object.hasOwn(configuration.commands, command.name))));
       return SUCCEEDED;
     }
-    if (argv.length) throw new Error(`takes no arguments; parameters come as environment variables (see ${HELP})`);
-    const parameters = readParameters(command, env);
+    const configuration = startedUnder(command, argv);
+    refuseForeignSecrets(command, configuration, env);
+    const parameters = readParameters(command, configuration, env);
     keepSecrets(command, env);
     env.GIT_TERMINAL_PROMPT = '0';
     const work = mkdtempSync(join(tmpdir(), 'atlas-command-'));

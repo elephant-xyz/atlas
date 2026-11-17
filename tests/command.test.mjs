@@ -13,8 +13,15 @@ import { IMAGE_ROOT, imageFiles, runCommand, runNode } from '../command/lib.mjs'
 import { buildEntries } from '../scripts/lib.mjs';
 import { CID_A, CID_B, CID_C, CID_D, group, page } from './helpers.mjs';
 
-const CONFIGURATION = JSON.parse(readFileSync(new URL('../command/configuration.json', import.meta.url), 'utf8'));
+const configurationFile = (id) => JSON.parse(readFileSync(new URL(`../command/${id}.json`, import.meta.url), 'utf8'));
+const VALIDATION = configurationFile('atlas-command-validation');
+const PUBLICATION = configurationFile('atlas-command-publication');
+const CONFIGURATIONS = [VALIDATION, PUBLICATION];
 const COMMANDS = { 'check-page': checkPage, verify, transfer, 'publish-index': publishIndex, withdraw };
+const configurationOf = (name) => CONFIGURATIONS.find((c) => Object.hasOwn(c.commands, name));
+/** The arguments a configuration starts an entry point with, after `node <entry point>`. */
+const startedUnder = (configuration) => ['--configuration', configuration.id];
+const PUBLICATION_ONLY_SECRETS = ['ATLAS_DEPLOY_KEY', 'FILEBASE_ACCESS_KEY', 'FILEBASE_SECRET_KEY'];
 
 const HENNEPIN = 'counties/MN/hennepin.json';
 const LEE = 'counties/FL/lee.json';
@@ -22,7 +29,8 @@ const hennepin = (overrides = {}) => page({ county: 'hennepin', state: 'MN', fip
 const lee = page({ groups: { county: group({ cid: CID_C, tables: CID_D }) } });
 const indexOf = (...pages) => ({ version: 1, generated_from: 'x', counties: buildEntries(pages.map((page) => ({ page })), () => undefined) });
 const PRIVATE_GATEWAY = 'https://private-gateway.test';
-const SECRETS = { ATLAS_GATEWAYS: PRIVATE_GATEWAY, ATLAS_GATEWAY_TOKEN: 'gateway-token-value', FILEBASE_ACCESS_KEY: 'filebase-access-value', FILEBASE_SECRET_KEY: 'filebase-secret-value', ATLAS_DEPLOY_KEY: '-----BEGIN OPENSSH PRIVATE KEY-----\nnot-a-real-deploy-key\n-----END OPENSSH PRIVATE KEY-----' };
+const GATEWAY_SECRETS = { ATLAS_GATEWAYS: PRIVATE_GATEWAY, ATLAS_GATEWAY_TOKEN: 'gateway-token-value' };
+const SECRETS = { ...GATEWAY_SECRETS, FILEBASE_ACCESS_KEY: 'filebase-access-value', FILEBASE_SECRET_KEY: 'filebase-secret-value', ATLAS_DEPLOY_KEY: '-----BEGIN OPENSSH PRIVATE KEY-----\nnot-a-real-deploy-key\n-----END OPENSSH PRIVATE KEY-----' };
 const withdrawnHold = (overrides = {}) => ({ path: HENNEPIN, county: 'MN/hennepin', key: 'county', kind: 'withdrawn', cid: CID_A, tables: CID_B, root: CID_A, reason: `/ipfs/${CID_A}?format=car not available from any gateway within 20 min`, ...overrides });
 
 const g = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -77,37 +85,84 @@ function atlasRemote(files) {
 }
 
 /** Run `command` in process as the executor would, with `inputs` ({ name: object }) staged; returns its exit code, outputs and log. */
-async function run(command, { env, inputs = {}, deps } = {}) {
+async function run(command, { env, inputs = {}, deps, argv = startedUnder(configurationOf(command.name)) } = {}) {
   const inputsDir = mkdtempSync(join(tmpdir(), 'atlas-inputs-'));
   const outputs = mkdtempSync(join(tmpdir(), 'atlas-outputs-'));
   for (const [name, value] of Object.entries(inputs)) writeFileSync(join(inputsDir, name), JSON.stringify(value));
   const out = [];
   const err = [];
-  const code = await runCommand(command, { argv: [], env: { ...env }, inputs: inputsDir, outputs, deps, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => err.push(s) } });
+  const code = await runCommand(command, { argv, env: { ...env }, inputs: inputsDir, outputs, deps, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => err.push(s) } });
   const read = (name) => (existsSync(join(outputs, name)) ? JSON.parse(readFileSync(join(outputs, name), 'utf8')) : undefined);
   return { code, result: read('result.json'), held: read('held.json'), outputs, out: out.join(''), err: err.join('') };
 }
 
-const prEnv = (remote, head, extra = {}) => ({ ATLAS_REPOSITORY_URL: remote.url, ATLAS_HEAD_SHA: head, ATLAS_PAGE: HENNEPIN, ...SECRETS, ...extra });
+const prEnv = (remote, head, extra = {}) => ({ ATLAS_REPOSITORY_URL: remote.url, ATLAS_HEAD_SHA: head, ATLAS_PAGE: HENNEPIN, ...GATEWAY_SECRETS, ...extra });
 const mainEnv = (remote, extra = {}) => ({ ATLAS_REPOSITORY_URL: remote.url, ATLAS_COUNTY: 'MN/hennepin', ATLAS_MAIN_SHA: remote.main(), ...SECRETS, ...extra });
 const registryWithLee = () => atlasRemote({ [LEE]: lee, 'index.json': indexOf(lee) });
 
-// ---- the configuration
+// ---- the configurations
 
-test('the configuration names the five commands, each running its own entry point in the image', () => {
-  assert.deepEqual(Object.keys(CONFIGURATION.commands).sort(), Object.keys(COMMANDS).sort());
+test('two configurations of one image split the commands: validation for pull requests, publication for main', () => {
+  assert.deepEqual([VALIDATION.id, PUBLICATION.id], ['atlas-command-validation', 'atlas-command-publication']);
+  for (const { id } of CONFIGURATIONS) assert.ok(id.length <= 64, `${id} fits Transform's 64-character id`);
+  assert.deepEqual(Object.keys(VALIDATION.commands).sort(), ['check-page', 'verify']);
+  assert.deepEqual(Object.keys(PUBLICATION.commands).sort(), ['publish-index', 'transfer', 'withdraw']);
+  assert.equal(VALIDATION.image, PUBLICATION.image, 'the same image');
   const dockerfile = readFileSync(new URL('../command/Dockerfile', import.meta.url), 'utf8');
   assert.match(dockerfile, /^WORKDIR \/opt\/atlas$/m);
-  for (const [name, command] of Object.entries(COMMANDS)) {
-    assert.equal(command.name, name);
-    assert.deepEqual(CONFIGURATION.commands[name], ['node', `/opt/atlas/command/${name}.mjs`]);
-    for (const { name: parameter } of command.parameters) assert.ok(CONFIGURATION.parameters[parameter], `${name} reads ${parameter}, which the configuration must declare`);
-    for (const secret of [...command.secrets.required, ...command.secrets.optional]) assert.ok(CONFIGURATION.secretEnvironment[secret], `${name} uses ${secret}`);
+  for (const configuration of CONFIGURATIONS) {
+    const commands = Object.keys(configuration.commands).map((name) => COMMANDS[name]);
+    for (const command of commands) assert.deepEqual(configuration.commands[command.name], ['node', `/opt/atlas/command/${command.name}.mjs`, ...startedUnder(configuration)]);
+    // Each declares exactly what its own commands use, and nothing for the other configuration's.
+    const used = (pick) => [...new Set(commands.flatMap(pick))].sort();
+    assert.deepEqual(Object.keys(configuration.parameters).sort(), used((c) => c.parameters.map(({ name }) => name)), `${configuration.id} parameters`);
+    assert.deepEqual(Object.keys(configuration.secretEnvironment).sort(), used((c) => [...c.secrets.required, ...c.secrets.optional]), `${configuration.id} secrets`);
+    assert.deepEqual(configuration.inputs.map(({ name }) => name).sort(), used((c) => c.inputs), `${configuration.id} inputs`);
+    assert.deepEqual(configuration.outputs.map(({ name }) => name).sort(), used((c) => c.outputs), `${configuration.id} outputs`);
   }
 });
 
-test("parameter patterns accept the consumer's values as whole values only", () => {
-  const whole = (name) => new RegExp(`^(?:${CONFIGURATION.parameters[name].pattern})$`, 'u');
+test('a validation command can never see a publication secret', async () => {
+  assert.deepEqual(Object.keys(VALIDATION.secretEnvironment).sort(), ['ATLAS_GATEWAYS', 'ATLAS_GATEWAY_TOKEN']);
+  for (const secret of PUBLICATION_ONLY_SECRETS) assert.ok(!Object.hasOwn(VALIDATION.secretEnvironment, secret), `${VALIDATION.id} declares ${secret}`);
+  const env = { ATLAS_REPOSITORY_URL: '/nonexistent/atlas.git', ATLAS_HEAD_SHA: 'a'.repeat(40), ATLAS_PAGE: HENNEPIN, ...GATEWAY_SECRETS };
+  for (const command of [checkPage, verify]) {
+    // A task that received one anyway (a configuration registered otherwise) is refused before anything runs.
+    for (const secret of PUBLICATION_ONLY_SECRETS) {
+      const { code, result, err } = await run(command, { env: { ...env, [secret]: SECRETS[secret] } });
+      assert.equal(code, 1);
+      assert.equal(result, undefined);
+      assert.ok(err.includes(`${secret} reached ${command.name} under atlas-command-validation, which does not declare it`), err);
+      assert.ok(!err.includes('clone') && !err.includes(SECRETS[secret].split('\n')[1]), err);
+    }
+  }
+});
+
+test('an entry point refuses to run unless the configuration it was started under has its command', async () => {
+  for (const command of Object.values(COMMANDS)) {
+    const other = CONFIGURATIONS.find((c) => c !== configurationOf(command.name));
+    for (const [argv, message] of [
+      [startedUnder(other), `${command.name} is not a command of ${other.id}`],
+      [[], 'must be started with --configuration <id>'],
+      [['--configuration', 'atlas-command'], "'atlas-command' is not a configuration of this image"],
+    ]) {
+      const { code, result, err } = await run(command, { argv, env: { ATLAS_REPOSITORY_URL: '/nonexistent/atlas.git' } });
+      assert.equal(code, 1, `${command.name} ${argv.join(' ')}`);
+      assert.equal(result, undefined);
+      assert.ok(err.includes(message), err);
+    }
+  }
+});
+
+test("parameter patterns accept the consumer's values as whole values only, the same in both configurations", () => {
+  const patterns = {};
+  for (const configuration of CONFIGURATIONS) {
+    for (const [name, { pattern }] of Object.entries(configuration.parameters)) {
+      assert.equal(patterns[name] ?? pattern, pattern, `${name} has one pattern`);
+      patterns[name] = pattern;
+    }
+  }
+  const whole = (name) => new RegExp(`^(?:${patterns[name]})$`, 'u');
   const samples = {
     ATLAS_HEAD_SHA: ['5d3c1f0e9a2b4c6d8e0f1a2b3c4d5e6f7a8b9c0d', ['5d3c1f0e', '5D3C1F0E9A2B4C6D8E0F1A2B3C4D5E6F7A8B9C0D']],
     ATLAS_MAIN_SHA: ['fd148cd58a79ed54cbbc6df3459695646a55d4a2', ['main', 'fd148cd']],
@@ -115,7 +170,7 @@ test("parameter patterns accept the consumer's values as whole values only", () 
     ATLAS_COUNTY: ['MN/hennepin', ['MN/Hennepin', 'mn/hennepin', 'MN/hennepin/x']],
     ATLAS_GATEWAY_DEADLINE_MINUTES: ['20', ['0', '20m', '-1']],
   };
-  assert.deepEqual(Object.keys(CONFIGURATION.parameters).sort(), Object.keys(samples).sort());
+  assert.deepEqual(Object.keys(patterns).sort(), Object.keys(samples).sort());
   for (const [name, [good, bad]] of Object.entries(samples)) {
     assert.ok(whole(name).test(good), `${name} accepts ${good}`);
     for (const value of [...bad, `${good}\n`, ` ${good}`]) assert.ok(!whole(name).test(value), `${name} refuses ${JSON.stringify(value)}`);
@@ -124,18 +179,22 @@ test("parameter patterns accept the consumer's values as whole values only", () 
   assert.ok(whole('ATLAS_PAGE').test('counties/mn/Hennepin_County.json'));
 });
 
-test('the committed configuration never names an image digest: the image is pinned when it is registered', () => {
-  assert.doesNotMatch(CONFIGURATION.image, /@sha256:[a-f0-9]{64}$/);
-  assert.equal(CONFIGURATION.image, 'PLACEHOLDER_ATLAS_COMMAND_IMAGE_PINNED_BY_DIGEST');
+test('the committed configurations never name an image digest: the image is pinned when they are registered', () => {
+  for (const { image } of CONFIGURATIONS) {
+    assert.doesNotMatch(image, /@sha256:[a-f0-9]{64}$/);
+    assert.equal(image, 'PLACEHOLDER_ATLAS_COMMAND_IMAGE_PINNED_BY_DIGEST');
+  }
 });
 
 // ---- what every command does before it runs anything
 
 test('--help lists the parameters with their patterns, the secrets, inputs and outputs', async () => {
   const out = [];
-  const code = await runCommand(transfer, { argv: ['--help'], env: {}, stdout: { write: (s) => out.push(s) }, stderr: { write: () => {} } });
+  const code = await runCommand(transfer, { argv: [...startedUnder(PUBLICATION), '--help'], env: {}, stdout: { write: (s) => out.push(s) }, stderr: { write: () => {} } });
   assert.equal(code, 0);
   const text = out.join('');
+  assert.match(text, /^atlas-command transfer \(atlas-command-publication\): /);
+  assert.match(text, /^atlas-command transfer \(atlas-command-publication\): /);
   assert.match(text, /ATLAS_COUNTY\s+required\s+\[A-Z\]\{2\}/);
   assert.match(text, /ATLAS_GATEWAY_DEADLINE_MINUTES\s+optional/);
   assert.match(text, /FILEBASE_ACCESS_KEY/);
@@ -399,7 +458,7 @@ test('a script runs in a process of its own, its output redacted and its stderr 
   const script = join(dir, 'script.mjs');
   writeFileSync(script, `console.log('stdout ' + process.env.TOKEN); console.error('stderr line'); process.exit(3);\n`);
   const out = [];
-  const code = await runCommand({ ...checkPage, parameters: [], run: async ({ env }) => ({ result: await runNode(script, [], { cwd: dir, env: { ...env, TOKEN: SECRETS.ATLAS_GATEWAY_TOKEN } }) }) }, { argv: [], env: { ...SECRETS }, outputs: dir, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => out.push(s) } });
+  const code = await runCommand({ ...checkPage, parameters: [], run: async ({ env }) => ({ result: await runNode(script, [], { cwd: dir, env: { ...env, TOKEN: SECRETS.ATLAS_GATEWAY_TOKEN } }) }) }, { argv: startedUnder(VALIDATION), env: { ...GATEWAY_SECRETS }, outputs: dir, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => out.push(s) } });
   assert.equal(code, 0);
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'result.json'), 'utf8')), { code: 3, signal: null, stderr: ['stderr line'] });
   assert.ok(out.join('').includes('stdout ***'), out.join(''));

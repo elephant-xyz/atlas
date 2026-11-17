@@ -1,0 +1,30 @@
+{
+  "id": "atlas-command-validation",
+  "version": "1.0.0",
+  "engine": "container-command",
+  "image": "PLACEHOLDER_ATLAS_COMMAND_IMAGE_PINNED_BY_DIGEST",
+  "commands": {
+    "check-page": ["node", "/opt/atlas/command/check-page.mjs", "--configuration", "atlas-command-validation"],
+    "verify": ["node", "/opt/atlas/command/verify.mjs", "--configuration", "atlas-command-validation"]
+  },
+  "parameters": {
+    "ATLAS_HEAD_SHA": { "pattern": "[0-9a-f]{40}", "required": true },
+    "ATLAS_PAGE": { "pattern": "counties/[A-Za-z0-9_-][A-Za-z0-9._-]*/[A-Za-z0-9_-][A-Za-z0-9._-]*\\.json", "required": true },
+    "ATLAS_GATEWAY_DEADLINE_MINUTES": { "pattern": "[1-9][0-9]{0,2}", "required": false }
+  },
+  "secretEnvironment": {
+    "ATLAS_GATEWAYS": "secretsmanager:transform/commands/atlas/gateways",
+    "ATLAS_GATEWAY_TOKEN": "secretsmanager:transform/commands/atlas/gateway-token"
+  },
+  "inputs": [],
+  "outputs": [
+    { "name": "result.json", "required": true },
+    { "name": "validation-errors.csv", "required": false }
+  ],
+  "limits": {
+    "cpu": 4096,
+    "memoryMiB": 16384,
+    "ephemeralStorageGiB": 50,
+    "timeoutMinutes": 150
+  }
+}
