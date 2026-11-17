@@ -22,6 +22,8 @@ const configurationOf = (name) => CONFIGURATIONS.find((c) => Object.hasOwn(c.com
 /** The arguments a configuration starts an entry point with, after `node <entry point>`. */
 const startedUnder = (configuration) => ['--configuration', configuration.id];
 const PUBLICATION_ONLY_SECRETS = ['ATLAS_DEPLOY_KEY', 'FILEBASE_ACCESS_KEY', 'FILEBASE_SECRET_KEY'];
+/** Transform's MAX_COMMAND_RESULT_BYTES: the executor fails a run whose result output is larger. */
+const MAX_RESULT_BYTES = 64 * 1024;
 
 const HENNEPIN = 'counties/MN/hennepin.json';
 const LEE = 'counties/FL/lee.json';
@@ -93,6 +95,15 @@ async function run(command, { env, inputs = {}, deps, argv = startedUnder(config
   const err = [];
   const code = await runCommand(command, { argv, env: { ...env }, inputs: inputsDir, outputs, deps, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => err.push(s) } });
   const read = (name) => (existsSync(join(outputs, name)) ? JSON.parse(readFileSync(join(outputs, name), 'utf8')) : undefined);
+  // What the executor requires of every run: exit 0 exactly when the command finished and wrote
+  // its result, and that result one JSON object of at most 64 KiB.
+  const resultFile = join(outputs, 'result.json');
+  assert.equal(code === 0, existsSync(resultFile), `exit ${code} ${existsSync(resultFile) ? 'with' : 'without'} result.json`);
+  if (existsSync(resultFile)) {
+    assert.ok(statSync(resultFile).size <= MAX_RESULT_BYTES, `result.json is ${statSync(resultFile).size} bytes`);
+    const result = read('result.json');
+    assert.ok(result !== null && typeof result === 'object' && !Array.isArray(result), 'result.json holds one JSON object');
+  }
   return { code, result: read('result.json'), held: read('held.json'), outputs, out: out.join(''), err: err.join('') };
 }
 
@@ -113,6 +124,9 @@ test('two configurations of one image split the commands: validation for pull re
   for (const configuration of CONFIGURATIONS) {
     const commands = Object.keys(configuration.commands).map((name) => COMMANDS[name]);
     for (const command of commands) assert.deepEqual(configuration.commands[command.name], ['node', `/opt/atlas/command/${command.name}.mjs`, ...startedUnder(configuration)]);
+    // The executor returns this output's JSON as the run's `result`.
+    assert.equal(configuration.result, 'result.json');
+    assert.ok(configuration.outputs.some(({ name, required }) => name === configuration.result && required), `${configuration.id} requires its result output`);
     // Each declares exactly what its own commands use, and nothing for the other configuration's.
     const used = (pick) => [...new Set(commands.flatMap(pick))].sort();
     assert.deepEqual(Object.keys(configuration.parameters).sort(), used((c) => c.parameters.map(({ name }) => name)), `${configuration.id} parameters`);
@@ -431,12 +445,12 @@ test("withdraw takes the county's withdrawn group off main with the scripts and 
   remote.merge({ [HENNEPIN]: hennepin() });
   const { code, result } = await run(withdraw, { env: mainEnv(remote), inputs: { 'held.json': [withdrawnHold(), withdrawnHold({ path: LEE, county: 'FL/lee', cid: CID_C, tables: CID_D, root: CID_C })] } });
   assert.equal(code, 0);
-  assert.deepEqual(result, { commitSha: remote.main(), root: CID_A, summary: `Withdrew MN/hennepin county: ${withdrawnHold().reason}.` });
+  assert.deepEqual(result, { withdrawn: true, commitSha: remote.main(), root: CID_A, summary: `Withdrew MN/hennepin county: ${withdrawnHold().reason}.` });
   assert.equal(remote.onMain(HENNEPIN), '', 'the page is gone from main');
   assert.equal(remote.onMain(LEE), LEE, "another county's hold is left to its own run");
 });
 
-test('withdraw fails without a hold of the county, and when main no longer holds what failed', async () => {
+test('withdraw fails without a hold of the county, and reports when main no longer holds what failed', async () => {
   const remote = registryWithLee();
   remote.merge({ [HENNEPIN]: hennepin() });
   const noInput = await run(withdraw, { env: mainEnv(remote) });
@@ -445,10 +459,62 @@ test('withdraw fails without a hold of the county, and when main no longer holds
   const deferred = await run(withdraw, { env: mainEnv(remote), inputs: { 'held.json': [withdrawnHold({ kind: 'deferred' })] } });
   assert.ok(deferred.err.includes('held.json names no withdrawn group of MN/hennepin'), deferred.err);
   remote.merge({ [HENNEPIN]: hennepin({ groups: { county: group({ cid: CID_D, tables: CID_C }) } }) });
+  // Main moved on (a new version of the page merged): withdraw.mjs leaves it alone and says so; that is a finished run.
+  const tip = remote.main();
   const changed = await run(withdraw, { env: mainEnv(remote), inputs: { 'held.json': [withdrawnHold()] } });
-  assert.equal(changed.code, 1);
-  assert.equal(changed.result, undefined);
-  assert.ok(changed.err.includes('nothing left to withdraw on main for MN/hennepin'), changed.err);
+  assert.equal(changed.code, 0);
+  assert.deepEqual(changed.result, { withdrawn: false, commitSha: null, root: CID_A, summary: 'Nothing left to withdraw on main for MN/hennepin: main no longer holds the roots that failed, or the index lists them.' });
+  assert.equal(remote.main(), tip, 'nothing was pushed');
+});
+
+// ---- results the executor can return
+
+test("a result always fits the executor's 64 KiB as one JSON object, its summary shortened when it must be", async () => {
+  const SHORTENED = /… \(shortened to fit the 64 KiB result; the run's log has all of it\)$/;
+  // check-page on a page with thousands of broken groups: validate-entry reports three problems for each.
+  const remote = registryWithLee();
+  const broken = Object.fromEntries(Array.from({ length: 4_000 }, (_, i) => [`g${i}`, group({ cid: 'not-a-cid', schema: 'not-a-cid', tables: 'not-a-cid' })]));
+  const head = remote.pullRequest({ [HENNEPIN]: hennepin({ groups: broken }) });
+  const checked = await run(checkPage, { env: prEnv(remote, head) });
+  assert.equal(checked.result.ok, false);
+  assert.ok(checked.result.summary.startsWith('counties/MN/hennepin.json: /groups/g0/cid must match pattern'), checked.result.summary.slice(0, 200));
+  assert.match(checked.result.summary, SHORTENED);
+  assert.ok(checked.err.split('\n').filter((line) => line.startsWith(`${HENNEPIN}: `)).length >= 12_000, 'the log keeps every problem');
+
+  // publish-index while every county of a full registry is left out of the index.
+  remote.merge({ [HENNEPIN]: hennepin() });
+  const counties = Array.from({ length: 3_143 }, (_, i) => page({ state: 'TX', county: `county-${i}`, fips: String(10_000 + i), groups: { county: group(), property_improvement: group(), hoa: group() } }));
+  const everyCountyLeft = async (_script, _args, { cwd, env }) => {
+    writeFileSync(join(cwd, 'index.json'), JSON.stringify(indexOf(...counties, hennepin()), null, 2) + '\n');
+    writeFileSync(env.GITHUB_OUTPUT, 'indexed=true\ncid=bafkreiindex\n');
+    const stderr = [...counties, hennepin()].flatMap((p) => Object.keys(p.groups).map((key) => `not indexed: ${p.state}/${p.county} ${key} (deferred): Filebase does not list ${CID_A} as pinned (not listed)`));
+    return { code: 1, stderr };
+  };
+  const published = await run(publishIndex, { env: mainEnv(remote), deps: { runScript: everyCountyLeft } });
+  assert.deepEqual(published.result.groups, [{ group: 'county', archiveCid: CID_A }], 'only the county asked about');
+  assert.equal(published.result.countyIndexed, false, 'judged on every line, not the shortened summary');
+  assert.match(published.result.summary, SHORTENED);
+
+  // transfer with thousands of holds and a withdrawal whose reason is one very long line.
+  const reason = `/ipfs/${CID_A}?format=car not available from any gateway within 20 min: ${Array.from({ length: 5_000 }, (_, i) => `https://gw${i}.test/ipfs/${CID_A}?format=car: HTTP 504`).join('; ')}`;
+  const holds = [withdrawnHold({ reason }), ...Array.from({ length: 3_000 }, (_, i) => withdrawnHold({ county: `TX/county-${i}`, path: `counties/TX/county-${i}.json`, kind: 'deferred', reason: 'pin/ls: HTTP 500' }))];
+  const runScript = async (_script, _args, { env }) => (writeFileSync(env.ATLAS_HELD, JSON.stringify(holds)), { code: 1, stderr: [] });
+  const transferred = await run(transfer, { env: mainEnv(remote), deps: { runScript } });
+  assert.deepEqual([transferred.result.withdraw, transferred.result.root], [true, CID_A]);
+  assert.match(transferred.result.summary, SHORTENED);
+  assert.equal(transferred.held[0].reason, reason, 'held.json is an output, not the result: it keeps the whole reason');
+});
+
+test('a result that cannot fit, or is not one JSON object, fails the run and writes nothing', async () => {
+  for (const [result, message] of [
+    [{ groups: Array.from({ length: 10_000 }, (_, i) => ({ group: `g${i}`, archiveCid: CID_A })) }, 'bytes; the executor returns at most 65536'],
+    [['not', 'an', 'object'], 'result must be one JSON object'],
+    [null, 'result must be one JSON object'],
+  ]) {
+    const outcome = await run({ ...checkPage, parameters: [], run: async () => ({ result }) }, { env: {} });
+    assert.equal(outcome.code, 1);
+    assert.ok(outcome.err.includes(message), outcome.err);
+  }
 });
 
 // ---- running a script

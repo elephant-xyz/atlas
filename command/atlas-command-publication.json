@@ -25,6 +25,7 @@
     { "name": "result.json", "required": true },
     { "name": "held.json", "required": false }
   ],
+  "result": "result.json",
   "limits": {
     "cpu": 4096,
     "memoryMiB": 16384,

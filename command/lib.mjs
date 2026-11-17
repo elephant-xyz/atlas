@@ -82,6 +82,14 @@ export const PUBLICATION_SETTINGS = {
   ATLAS_SKIP_STORED_SHARDS: '0',
 };
 
+/**
+ * The most result.json may hold: Transform's MAX_COMMAND_RESULT_BYTES, beyond which the executor
+ * fails the run with InvalidCommandResult (System refuses a larger leaf answer). A summary that
+ * would not fit is shortened, and the run's log keeps all of it.
+ */
+const MAX_RESULT_BYTES = 64 * 1024;
+const SHORTENED = "… (shortened to fit the 64 KiB result; the run's log has all of it)";
+
 /** What replaces a secret value in logs and results; shorter pieces are not taken for secrets. */
 const REDACTED = '***';
 const MIN_SECRET_PIECE = 8;
@@ -195,6 +203,32 @@ function routeConsole(stdout, stderr, redact) {
   return () => Object.assign(console, saved);
 }
 
+/** A JSON output as it is written, and so as the executor measures it. */
+const serialize = (value) => `${JSON.stringify(value, null, 2)}\n`;
+const bytesOf = (value) => Buffer.byteLength(serialize(value));
+
+/**
+ * `result` as result.json may hold it: one JSON object of at most MAX_RESULT_BYTES. A `summary`
+ * too long for that keeps as much of its start as fits, whole lines where it can, and says it
+ * was shortened; a result that does not fit even then, or is not an object, is an error.
+ */
+function fitResult(result) {
+  if (result === null || typeof result !== 'object' || Array.isArray(result)) throw new Error('the result must be one JSON object');
+  if (bytesOf(result) <= MAX_RESULT_BYTES) return result;
+  const shortened = (keep) => {
+    const cut = result.summary.lastIndexOf('\n', keep);
+    return { ...result, summary: `${result.summary.slice(0, cut > 0 ? cut : keep)}\n${SHORTENED}` };
+  };
+  if (typeof result.summary !== 'string' || bytesOf(shortened(0)) > MAX_RESULT_BYTES) throw new Error(`result.json would be ${bytesOf(result)} bytes; the executor returns at most ${MAX_RESULT_BYTES}`);
+  let [fits, fails] = [0, result.summary.length];
+  while (fails - fits > 1) {
+    const keep = Math.floor((fits + fails) / 2);
+    if (bytesOf(shortened(keep)) <= MAX_RESULT_BYTES) fits = keep;
+    else fails = keep;
+  }
+  return shortened(fits);
+}
+
 /**
  * Write `files` ({ name: JSON value }, result.json last) to `dir`, each through a temporary name
  * the executor does not copy, then renamed; on any failure every file already written is removed,
@@ -206,7 +240,7 @@ function writeOutputs(dir, files) {
     for (const [name, value] of Object.entries(files)) {
       const partial = join(dir, `.${name}.partial`);
       written.push(name);
-      writeFileSync(partial, `${JSON.stringify(value, null, 2)}\n`);
+      writeFileSync(partial, serialize(value));
       renameSync(partial, join(dir, name));
     }
   } catch (e) {
@@ -233,10 +267,11 @@ function usage(command, configuration) {
 
 /**
  * Run `command` as the executor does: started under the configuration `argv` names, parameters
- * and secrets in `env`, inputs in `inputs`, outputs to `outputs`. Returns 0 once result.json (and any other success output) is
- * written, 1 with a message on stderr and no success output otherwise. Every line logged and
- * every value written has the secrets taken out. The work directory (checkout, deploy key) is
- * removed whatever happens.
+ * and secrets in `env`, inputs in `inputs`, outputs to `outputs`. Returns 0 once the command has
+ * finished and result.json (and any other success output) is written, whatever verdict the
+ * result holds; 1, with a message on stderr and no success output, when it could not finish.
+ * Every line logged and every value written has the secrets taken out. The work directory
+ * (checkout, deploy key) is removed whatever happens.
  */
 export async function runCommand(command, { argv = process.argv.slice(2), env = process.env, inputs = INPUTS_DIR, outputs = OUTPUTS_DIR, stdout = process.stdout, stderr = process.stderr, deps = {} } = {}) {
   const redact = redactor(env);
@@ -256,6 +291,7 @@ export async function runCommand(command, { argv = process.argv.slice(2), env = 
       const repository = { fetchUrl: env[REPOSITORY_OVERRIDE] ?? REPOSITORY_URL, pushUrl: env[REPOSITORY_OVERRIDE] ?? PUSH_URL };
       const { result, files = {} } = await command.run({ parameters, env, work, inputs, outputs, repository }, { ...command.deps, ...deps });
       const written = redactDeep({ ...files, [RESULT_FILE]: result }, redact);
+      written[RESULT_FILE] = fitResult(written[RESULT_FILE]);
       writeOutputs(outputs, written);
       console.log(`${RESULT_FILE}: ${JSON.stringify(written[RESULT_FILE])}`);
       return SUCCEEDED;

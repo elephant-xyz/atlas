@@ -34,6 +34,12 @@ when a secret only the other configuration declares is in its environment, so a 
 checks never run beside the deploy key or the Filebase keys, however a configuration was
 registered. Each command also drops the secrets it does not use before it runs anything.
 
+Both name `result.json` as their `result`, so a run returns that file's JSON as `result`. That
+field needs a Transform with the command executor: prismteam-ai/transform
+`feat/command-executor-routes` (`eaef267`) accepts both configurations, while main (`16f753c`)
+refuses `result` as an unrecognized key. Register them on the first Transform release that
+includes the executor.
+
 ## Build, pin, register
 
 From a commit on main, at the repository root:
@@ -53,8 +59,11 @@ validation; an image cannot hold its own digest.
 ## Commands
 
 Parameters arrive as environment variables, each matching its pattern as a whole value. A
-parameter of another command is refused, and so is a missing required one. Success is exit 0 with `result.json`; anything else is
-exit 1 with the reason on stderr and no `result.json`.
+parameter of another command is refused, and so is a missing required one. Exit 0 means the
+command finished and wrote `result.json`, whatever its verdict; exit 1 means it could not
+finish, with the reason on stderr and no `result.json`. `result.json` is one JSON object of at
+most 64 KiB, the executor's limit: a longer `summary` is shortened and the run's log keeps all
+of it.
 
 | Configuration | Command | Parameters | `result.json` | Other files |
 | --- | --- | --- | --- | --- |
@@ -62,9 +71,11 @@ exit 1 with the reason on stderr and no `result.json`.
 | validation | `verify` | `ATLAS_HEAD_SHA`, `ATLAS_PAGE`, `ATLAS_GATEWAY_DEADLINE_MINUTES`? | `{ok, summary}`: one `ok` or `FAIL` line per changed group | output `validation-errors.csv` |
 | publication | `transfer` | `ATLAS_COUNTY`, `ATLAS_MAIN_SHA`, `ATLAS_GATEWAY_DEADLINE_MINUTES`? | `{withdraw, root?, summary}` | output `held.json` when `withdraw` |
 | publication | `publish-index` | `ATLAS_COUNTY`, `ATLAS_MAIN_SHA` | `{indexCid, groups: [{group, archiveCid}], countyIndexed, summary}` | |
-| publication | `withdraw` | `ATLAS_COUNTY`, `ATLAS_MAIN_SHA` | `{commitSha, root, summary}` | input `held.json` from `transfer` |
+| publication | `withdraw` | `ATLAS_COUNTY`, `ATLAS_MAIN_SHA` | `{withdrawn, commitSha, root, summary}` | input `held.json`: `transfer`'s output `s3Uri` |
 
-- `ok: false` is a result: the page or an archive failed its checks.
+- Verdicts, exit 0: `ok: false` (the page or an archive failed its checks), `withdraw: true`,
+  `countyIndexed: false`, and `withdrawn: false` with `commitSha: null` when main no longer
+  holds what failed (withdraw.mjs then leaves it alone).
 - The publication commands run on main's tip, which must hold `ATLAS_MAIN_SHA`, as
   `publish.yml` takes main as it is when it starts. `transfer` runs
   `transfer-roots.mjs --county`: a county that is only deferred, or a service that is down, is
@@ -92,6 +103,11 @@ ECS starts a task only when every referenced secret exists.
 
 Both: 4 vCPU and 16 GiB, the GitHub-hosted runner the workflows use (the scripts get the same
 12 GB heap), and 50 GiB of disk for a county CAR and its shard parts (Travis's archive is
-4.3 GB). Validation runs up to 150 minutes (verifying Travis takes about 25), inside the draft's
-3-hour `Verify` step; publication up to 360 minutes, a transfer job's limit. The gateway
-deadline is the scripts' default, 20 minutes.
+4.3 GB). Validation runs up to 150 minutes (verifying Travis takes about 25); publication up
+to 360 minutes, a transfer job's limit. The gateway deadline is the scripts' default, 20
+minutes.
+
+A caller waiting for a run must wait the configuration's limit plus 30 minutes, which covers
+preparing and finishing the run: 10,800 seconds for every validation command (`check-page`
+included, since the limit belongs to the configuration) and 23,400 seconds for every
+publication command.
