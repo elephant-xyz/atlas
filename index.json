@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "3eb91a0fe2372966583787d391e1a2f5369fe6b4",
+  "generated_from": "7421729cfa1705a62fcad24088dbbe5d26c374eb",
   "counties": [
     {
       "county": "santa-clara",
@@ -573,6 +573,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerawg62f2y6ivqiergxfoko32samnupfji54x6dsmjlyfhti3tq6mya",
           "published_at": "2026-11-12T20:35:37.000Z"
+        }
+      }
+    },
+    {
+      "county": "hennepin",
+      "state": "MN",
+      "fips": "27053",
+      "groups": {
+        "county": {
+          "cid": "baguqeerasltc322lvu73uuzx35ko6mr4gwm6ehnnec7ov7mc6y64h5mopnpa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerawhwvgebjfnv33wd25ncfiy7q6kfrrxmvjtjli4qilockljmvahia",
+          "published_at": "2026-11-14T17:15:48.000Z"
         }
       }
     },
