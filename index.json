@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "718364be6929710f29375daa151569b57bc3f9af",
+  "generated_from": "5c0dfcba3ba93fa77f2b9319fedda8ff187f4cbc",
   "counties": [
     {
       "county": "santa-clara",
@@ -34,10 +34,10 @@
       "fips": "12003",
       "groups": {
         "county": {
-          "cid": "baguqeerawluvutqlrwazdyekzj5v5mdowawwihtsoeffw2xwnfm4u2jh4qba",
+          "cid": "baguqeeraep4ja474ofznxrqn3eyupe5cicifuhtpkhppc4dgza62vvks427a",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeraxdply2zw56oprch6wmk6nwuzxtwvgc35e3rfyhyyapgdwvmaghma",
-          "published_at": "2026-11-03T17:41:08.000Z"
+          "tables": "baguqeerab26nziud73nlrmrpgdqnchvojpg2dwpywsqa522lwtpnzzreoyqa",
+          "published_at": "2026-11-19T18:33:13.000Z"
         },
         "property_management": {
           "cid": "baguqeeraurdf6lbrdb56injj5ig5jm6rflw2obspxdrkxiteapaqbbeeiu2a",
