@@ -24,10 +24,12 @@ jobs:
       # CLI, then schema, tables and every part by CID. Nothing is resolved by path.
       # The CLI is version 2 (one binary, no Node), pinned to one release and to the digest of its
       # archive, so a new CLI reaches this gate only through a pull request here.
+      # From this build on `hash` writes a data group of a property as one packed block, and
+      # `validate` reads both that layout and the earlier one (a block per file) with no option.
       - name: Install elephant-cli
         env:
-          VERSION: v2.0.0-alpha.0
-          SHA256: 94cff190683dcee4b5307aaeaa0a3392cd83748335e6110cf501838b7a063f1b
+          VERSION: build-94db3af645d575a43462f3249978415585a271f0
+          SHA256: bf795fcd7fe8236968642c7a7ebbb9fdaad565063ef64d84edaedf9b4dd9f03c
         run: |
           mkdir -p ~/elephant-cli && cd ~/elephant-cli
           curl -fsSL --retry 3 -o cli.tar.gz "https://github.com/elephant-xyz/elephant-cli/releases/download/$VERSION/elephant-cli-x86_64-unknown-linux-gnu.tar.gz"
