@@ -1,0 +1,10 @@
+# BuildKit reads this for command/Dockerfile instead of a .dockerignore at the root: the build
+# context is the repository root, and only what the Dockerfile copies is sent.
+*
+!package.json
+!package-lock.json
+!schema
+!scripts
+!command
+command/README.md
+command/Dockerfile.dockerignore
