@@ -10,7 +10,7 @@ import * as dagJson from '@ipld/dag-json';
 import * as raw from 'multiformats/codecs/raw';
 import { pinStatus, poll, token } from '../scripts/filebase.mjs';
 import { buildEntries, claimOrder, holdBack, holdConflicts, latestPublished, pool, publishedGroup } from '../scripts/lib.mjs';
-import { pinLookup, publishable, pushToMain, requireMainIndex } from '../scripts/publish-index.mjs';
+import { leftOutSummary, pinLookup, publishable, pushToMain, requireMainIndex } from '../scripts/publish-index.mjs';
 import { openIssues, pendingIssues, revertedIssue, withdraw } from '../scripts/withdraw.mjs';
 import { DEFAULT_GATEWAYS, fetchFromAny, gatewayList, redactGateways } from '../scripts/gateways.mjs';
 import { TransferFailed, carKey, inChild, outage, planGroups, planTransfers, runTransfers, settleHolds, transferArchive, transferArchiveFromCar, transferArchiveViaS3, transferTables, transferTablesViaS3 } from '../scripts/transfer-roots.mjs';
@@ -350,6 +350,39 @@ test('the index lists an owed group only when Filebase has both its roots pinned
   const { pages: out, left } = await publishable(twice, indexOf(page()), { pinned: ask([CID_A, CID_D]) });
   assert.deepEqual(buildEntries(out, () => undefined).map((e) => `${e.state}/${e.county}`), ['FL/lee']);
   assert.deepEqual(holds({ held: left }), ['withdrawn GA/fulton county']);
+});
+
+test('a county whose roots are not pinned does not hold back the others: it keeps its published entry, or stays out', async () => {
+  // Lee was published on CID_A/CID_B; main now has a new lee version and a new county, fulton.
+  const LEE2 = { county: group({ cid: CID_C, tables: CID_D }) };
+  const pages = [at(LEE, page({ groups: LEE2 })), at(FULTON, fulton({ county: group({ cid: CID_A, tables: CID_B }) }))];
+  const index = indexOf(page());
+  const unpinned = async () => ({ pinned: false, why: 'not listed' });
+  const { pages: out, left } = await publishable(pages, index, { pinned: unpinned });
+  const entries = buildEntries(out, () => undefined);
+  assert.deepEqual(entries.map((e) => [`${e.state}/${e.county}`, e.groups.county.cid, e.groups.county.tables]), [['FL/lee', CID_A, CID_B]], 'lee keeps its published version; fulton, never published, is not listed');
+  assert.deepEqual(holds({ held: left }), ['deferred FL/lee county', 'deferred GA/fulton county']);
+});
+
+test('the job summary names each group left out, what the index lists for it instead, and why', () => {
+  const published = publishedGroup(indexOf(page()));
+  assert.equal(leftOutSummary([], published), '');
+  const left = [
+    { path: LEE, county: 'FL/lee', key: 'county', kind: 'deferred', cid: CID_C, reason: `Filebase does not list ${CID_C} as pinned (not listed)` },
+    { path: FULTON, county: 'GA/fulton', key: 'county', kind: 'deferred', cid: CID_D, reason: 'gateway https://secret-gw.example/ipfs/x | HTTP 504\nretry' },
+  ];
+  const prev = process.env.ATLAS_GATEWAYS;
+  process.env.ATLAS_GATEWAYS = 'https://secret-gw.example/';
+  try {
+    const md = leftOutSummary(left, published);
+    assert.match(md, /^### 2 publication\(s\) on main left out of the index$/m);
+    assert.ok(md.includes(`| FL/lee | county | deferred | previous version (\`${CID_A}\`) | Filebase does not list ${CID_C} as pinned (not listed) |`));
+    assert.ok(md.includes('| GA/fulton | county | deferred | nothing (never published) | gateway https://<private gateway>/ipfs/x \\| HTTP 504 retry |'));
+    assert.ok(!md.includes('secret-gw'));
+  } finally {
+    if (prev === undefined) delete process.env.ATLAS_GATEWAYS;
+    else process.env.ATLAS_GATEWAYS = prev;
+  }
 });
 
 test('the index step asks about every owed root, unless Filebase cannot even list what it published last', async () => {

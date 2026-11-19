@@ -2,13 +2,17 @@
 // Regenerate index.json from every group on HEAD that is publishable: already listed, or with
 // both roots pinned in the bucket (asked of Filebase here, not taken from what the transfer step
 // reported, so a transfer that failed, crashed, or never ran cannot put a root in the index),
-// and not colliding with another group on a root. Exits 1, after publishing the rest, when a
-// group on main was left out, and opens a `Publication pending` issue for one left out for more
-// than ATLAS_PENDING_HOURS (default 12). Commit it if it changed, add it to the bucket, point the IPNS name at
+// and not colliding with another group on a root. A group on main that is left out keeps its
+// previously published entry (or stays out when it never had one) and does not hold back the
+// rest: it is listed in the job summary, written to GITHUB_OUTPUT as left=<count> and
+// left_groups=<list> (the workflow's `left out of the index` job turns red on it), and gets a
+// `Publication pending` issue once left out for more than ATLAS_PENDING_HOURS (default 12).
+// Commit it if it changed, add it to the bucket, point the IPNS name at
 // it, and require the name to resolve and the gateway to serve the committed bytes.
 // Idempotent: the add is content-addressed, the commit is skipped when unchanged, and the IPNS
 // publish is skipped when the name already resolves to the CID (so a re-dispatch after a
-// network failure finishes the job). Exits 1 on any failure; nothing here is a revert.
+// network failure finishes the job). Exits 1 on any failure to publish the index; nothing here
+// is a revert.
 // Once the name serves the index it writes GITHUB_OUTPUT cid=<index CID>, which upload-index-s3
 // holds its copy to.
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -17,6 +21,7 @@ import { readIndex, writeIndex } from './build-index.mjs';
 import { pinStatus, poll, rpc } from './filebase.mjs';
 import { claimOrder, git, gitPublishedAt, groupsOf, holdBack, holdConflicts, holdOf, indexAt, isOwed, latestPublished, pool, publishedGroup, readPages } from './lib.mjs';
 import { openIssues, pendingIssues } from './withdraw.mjs';
+import { redactGateways } from './gateways.mjs';
 
 const GATEWAY = (process.env.ATLAS_GATEWAY || 'https://ipfs.filebase.io').replace(/\/$/, '');
 const KEY = process.env.ATLAS_IPNS_KEY ?? 'elephant-atlas';
@@ -45,6 +50,31 @@ export async function publishable(pages, index, { pinned, claimed }) {
   }), 4);
   const left = holdConflicts(pages, index, held.filter(Boolean), { claimed });
   return { pages: holdBack(pages, left, published), left };
+}
+
+/**
+ * The job summary for the groups `left` out of the index: for each, what the published index
+ * lists for it instead (its previous version, per `published(path, key)`, or nothing) and why
+ * it was left out. Empty when nothing was left out. Private gateways are redacted.
+ */
+export function leftOutSummary(left, published) {
+  if (!left.length) return '';
+  const cell = (text) => redactGateways(String(text)).replace(/\r?\n/g, ' ').replaceAll('|', '\\|');
+  const rows = left.map((h) => {
+    const was = published(h.path, h.key);
+    const listed = was ? `previous version (\`${was.cid}\`)` : 'nothing (never published)';
+    return `| ${h.county} | ${h.key} | ${h.kind} | ${listed} | ${cell(h.reason)} |`;
+  });
+  return [
+    `### ${left.length} publication(s) on main left out of the index`,
+    '',
+    'The index was published with every other county. Each group below is listed as it was last published, or not at all; the next run tries it again.',
+    '',
+    '| County | Group | Held | Index lists | Reason |',
+    '| --- | --- | --- | --- | --- |',
+    ...rows,
+    '',
+  ].join('\n');
 }
 
 /**
@@ -108,6 +138,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const index = readIndex(root);
   const { pages, left } = await publishable(readPages(root), index, { pinned: await pinLookup(latestPublished(index)), claimed: claimOrder(root) });
   for (const h of left) console.error(`not indexed: ${h.county} ${h.key} (${h.kind}): ${h.reason}`);
+  // Reported before the index is published, so a run that then fails still says what it left out.
+  if (left.length) {
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${leftOutSummary(left, publishedGroup(index))}\n`);
+    if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `left=${left.length}\nleft_groups=${left.map((h) => `${h.county} ${h.key} (${h.kind})`).join(', ')}\n`);
+  }
   const changed = writeIndex(root, pages);
   const bytes = readFileSync(`${root}/index.json`);
 
@@ -167,12 +202,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `cid=${cid}\n`);
-  // Red whenever main holds a publication the index does not list, whatever the transfer step
-  // ended as: nobody should have to notice a missing county on a green run.
+  // A publication the index does not list does not fail this step: the index with every other
+  // county is published, and one county must not hold the registry back. It is not passed over in
+  // silence either: the summary above lists it, the `left out of the index` job turns the run red
+  // on the left=<count> output, and one left out too long gets a `Publication pending` issue.
   if (left.length) {
-    console.error(`${left.length} publication(s) on main are not in the index; the next run tries again (publish-retry starts one, or run publish now)`);
+    console.log(`::warning title=Left out of the index::${left.length} publication(s) on main are not in the index; the next run tries again (publish-retry starts one, or run publish now)`);
     const olderThan = Date.now() - Number(process.env.ATLAS_PENDING_HOURS ?? 12) * 3_600_000;
-    await openIssues(pendingIssues(left, process.env.RUN_URL, { since: gitPublishedAt(root, 'HEAD'), olderThan }));
-    process.exit(1);
+    const unopened = await openIssues(pendingIssues(left, process.env.RUN_URL, { since: gitPublishedAt(root, 'HEAD'), olderThan }));
+    if (unopened.length) process.exit(1);
   }
 }
