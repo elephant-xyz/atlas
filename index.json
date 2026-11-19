@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "7421729cfa1705a62fcad24088dbbe5d26c374eb",
+  "generated_from": "ddd7ac72d5653cb66c16bdf4e79131e1b2fa9ff1",
   "counties": [
     {
       "county": "santa-clara",
@@ -105,10 +105,10 @@
       "fips": "12019",
       "groups": {
         "county": {
-          "cid": "baguqeeraoh7ortedccikfq3vw44r7pmt5tas4x56yzh6l5yb5ok2swx42n2a",
+          "cid": "baguqeeravdwjgk7tqxzc6mtao6rs5snjorhuw7buctdunclfcbqkamq6i2nq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeraunacqwuibyrmpnboiw63eyakp5fld5dc6u3m6qiz44ute4allh7a",
-          "published_at": "2026-11-12T20:33:28.000Z"
+          "tables": "baguqeera7fl56sxmz7jytlahmeacahuo42waynldu2gvk7xz6zuvi6rjojka",
+          "published_at": "2026-11-19T22:11:24.000Z"
         }
       }
     },
@@ -195,10 +195,10 @@
       "fips": "12055",
       "groups": {
         "county": {
-          "cid": "baguqeerazhvaazpwibbg6iwnkmd3oiiyc4immpwh7lr4ygisrjxag33crz7q",
+          "cid": "baguqeeraeztynol7dwgak3uk4si5se6y6bz2e7pxrpi5zmtz44gvjpixurba",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeera7z7kzkcnfc4uextclcaqcgoxtd7f5ir3n3i722ixurvpz3hzr5sq",
-          "published_at": "2026-11-03T23:54:18.000Z"
+          "tables": "baguqeeray2kr6d3mx3gjy7ykyfy73fapov6sri66yplrjji6ych2ntf3id2q",
+          "published_at": "2026-11-19T22:11:24.000Z"
         }
       }
     },
@@ -221,10 +221,10 @@
       "fips": "12061",
       "groups": {
         "county": {
-          "cid": "baguqeerakzaoffknq4ioqou5lya5nrrt2ozp3y6bub7hfuenhfkefxx4cqqa",
+          "cid": "baguqeeralr22vz7oqjpnv5eepm7qgp7zo5ixlza75ipkn254ak5mmns7npkq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeera6d3hqkrxzccrtsfra7q7k6wuud2cg3n66khw4v7sf2ym4yrg6fca",
-          "published_at": "2026-11-03T17:21:36.000Z"
+          "tables": "baguqeera252tgbgy3odmnk3phquq5lu5rhid566trvma2vwa7nerfadulb7a",
+          "published_at": "2026-11-19T22:11:24.000Z"
         }
       }
     },
@@ -305,10 +305,10 @@
       "fips": "12085",
       "groups": {
         "county": {
-          "cid": "baguqeera5shesgl2ffdhikaj3y6xch725tgbgarlh6erebzidm72fjin4i2a",
+          "cid": "baguqeera7yz2is6pjni5sgjvmiw567jxigvg2lcvlm6rwodxk3cxkjw7ey4a",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerazsxigdfzuause3geqjzyh642ahls7suniyxu44x4sfnrss4dbbda",
-          "published_at": "2026-11-03T23:55:49.000Z"
+          "tables": "baguqeeraegkfrdnwdt6h4vo4mjt7jncx2sh3ialekibzjapvrzj72gcepi6a",
+          "published_at": "2026-11-19T22:11:24.000Z"
         }
       }
     },
@@ -434,10 +434,10 @@
       "fips": "12107",
       "groups": {
         "county": {
-          "cid": "baguqeeratssrqvumi5pltovqrqk24564iaxdz2ifmeo66ktgklt2n3gnegea",
+          "cid": "baguqeerau57khrfaadh4zr2ogy2liwi4pz3v3jj3cbsbcwbb57cf4yebvfuq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerarvnrvairkmvwuyrqajxrk6io5ohk3t6ukxjb6dprk6trokgewreq",
-          "published_at": "2026-11-03T16:37:34.000Z"
+          "tables": "baguqeeraaka3syuimbdg6ojf3gjglhra44rzbhiolxfwx2uosdzwbfna57vq",
+          "published_at": "2026-11-19T22:11:24.000Z"
         }
       }
     },
@@ -517,10 +517,10 @@
       "fips": "12119",
       "groups": {
         "county": {
-          "cid": "baguqeerauo34q2cq66ncvpubgqsadqc4rupnxhks4nkp3ytti5qdo7v4xu4q",
+          "cid": "baguqeeraius3n77nxwmerai54bb5mcv45nss5zagl3awhdbi4cfjlimyng6a",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeratoottnt6ub2ctyeftuahuimugajnyo5o3rogfp4kzkssf5g57mea",
-          "published_at": "2026-11-03T17:28:01.000Z"
+          "tables": "baguqeera34zauikmnhzwtrw6mbn274qxtnow5prigkabk2i62hxgxdm6jl3a",
+          "published_at": "2026-11-19T22:11:24.000Z"
         }
       }
     },
