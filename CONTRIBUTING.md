@@ -27,6 +27,12 @@ is not publishable, whatever the upload logs say.
    For a large archive (millions of blocks), also add the CAR file itself to IPFS as a file
    (for example, upload it to a Filebase bucket; the object's CID is its `car`) and set `car`
    on the group: gateways export a DAG of millions of small blocks too slowly for `validate`.
+   From build `94db3af` of Elephant CLI 2 on, `hash` writes each data group of a property as
+   one packed block (its root, relationships and entities), which leaves an archive with a
+   fraction of the blocks; `hash --linked` writes one block per file, as the archives
+   registered before that build have it. The gate reads both layouts, and a page may hold
+   groups of either. A packed archive has other CIDs than the linked one of the same data:
+   supersede a group by registering the new `cid` and `tables` as usual.
 2. Clone Atlas and branch from `main`:
 
    ```bash
@@ -41,7 +47,8 @@ is not publishable, whatever the upload logs say.
    has nothing left. See `schema/entry.schema.json` for every field.
 4. Check locally before pushing. `verify` needs `elephant-cli` on your PATH (or `ELEPHANT_CLI`)
    and only checks groups your branch changed since it left `origin/main`; `--all` rechecks
-   everything.
+   everything. Use at least the build the gate pins in `.github/workflows/validate.yml`: an
+   older CLI rejects a packed archive with `unexpected property 'entities'`.
 
    ```bash
    npm test

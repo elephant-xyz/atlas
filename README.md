@@ -163,7 +163,9 @@ atlas/
 
 1. Oracle finishes a county for one data group: `validate`, `hash --output-car`,
    `validate <county>.car`, `export-tables`, `upload` of the CAR and of the tables directory.
-   The uploads report the `CountyIndex` root and the `CountyTables` root.
+   The uploads report the `CountyIndex` root and the `CountyTables` root. An archive holds a
+   data group of a property as one packed block or, from `hash --linked` and from CLIs before
+   packing, as one block per file; the gate reads both.
 2. A generator writes the county's page and opens a pull request that touches exactly one
    file under `counties/`. One file per county is what lets many counties publish in parallel
    without conflicts.
