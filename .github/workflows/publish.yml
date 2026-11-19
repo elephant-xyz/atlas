@@ -184,6 +184,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       index_cid: ${{ steps.index.outputs.cid }}
+      left: ${{ steps.index.outputs.left }}
+      left_groups: ${{ steps.index.outputs.left_groups }}
     steps:
       # main is protected by a ruleset that GITHUB_TOKEN cannot bypass; the bot commits (index.json,
       # withdrawals) go through the write deploy key registered as a bypass actor, so the checkout's
@@ -226,9 +228,10 @@ jobs:
       # if it changed (pushed through the deploy key, rebased first when main moved during the
       # run; the commit touches only index.json, outside this workflow's path filter, so it does
       # not retrigger), add it to the bucket, point the IPNS name at it, and require the gateway
-      # to serve the committed bytes. It ends red when a group on main was left out, after
-      # publishing the rest. A failure here is not a withdrawal; re-run the workflow
-      # (workflow_dispatch) and it finishes idempotently.
+      # to serve the committed bytes. A group on main that is left out keeps its previously
+      # published entry (or stays out) and does not fail this step: it is listed in the job
+      # summary and the `left-out` job below turns the run red. A failure here is not a
+      # withdrawal; re-run the workflow (workflow_dispatch) and it finishes idempotently.
       - id: index
         env:
           GH_TOKEN: ${{ github.token }} # a `Publication pending` issue for a group left out too long
@@ -250,6 +253,30 @@ jobs:
           ATLAS_HELD: ${{ runner.temp }}/held.json
         run: node scripts/withdraw.mjs
 
+  # 4b. Red, on its own, whenever main holds a publication the published index does not list
+  # (publish-index's left=<count>), so nobody has to notice a missing county on a green run,
+  # without one county that cannot be pinned holding back the index for every other county.
+  # The publish job's summary says which groups and why; publish-retry starts the next try.
+  left-out:
+    name: left out of the index
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.outputs.left != '' && needs.publish.outputs.left != '0' }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    env:
+      FILEBASE_ACCESS_KEY: ''
+      FILEBASE_SECRET_KEY: ''
+      ATLAS_GATEWAYS: ''
+      ATLAS_GATEWAY_TOKEN: ''
+      LEFT: ${{ needs.publish.outputs.left }}
+      LEFT_GROUPS: ${{ needs.publish.outputs.left_groups }}
+    steps:
+      - run: |
+          msg="$LEFT publication(s) on main are not in the published index: $LEFT_GROUPS. Every other county was published; see the publish job's summary for why, and the next run tries again."
+          echo "::error title=Left out of the index::$msg"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
   # 5. Optional: copy the published index.json to S3 for consumers that read it from a bucket
   # (Persist's registered IPFS indexes). Off unless the ATLAS_INDEX_S3_URI repository variable is
   # set. It runs only after the IPNS name serves the new index, in its own job so the OIDC token
@@ -260,7 +287,7 @@ jobs:
   index-s3:
     needs: publish
     # Whenever publish-index published an index (it then sets the CID), also when the publish job
-    # ends red over a group it could not publish: the index it did publish is what S3 must hold.
+    # ends red afterwards: the index it did publish is what S3 must hold.
     if: ${{ !cancelled() && needs.publish.outputs.index_cid != '' && vars.ATLAS_INDEX_S3_URI != '' }}
     runs-on: ubuntu-latest
     permissions:

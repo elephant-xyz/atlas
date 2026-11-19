@@ -85,12 +85,15 @@ root the registry cannot serve:
    within three hours when no merge does, and a publication still waiting after 12 hours gets a
    `Publication pending` issue.
 3. `index.json` is regenerated from every group whose roots Filebase lists as pinned (asked
-   at that moment, not taken from the transfer's own report; the run is red when a publication
-   on `main` is left out) and committed, added to the bucket, and the IPNS name
+   at that moment, not taken from the transfer's own report) and committed, added to the bucket, and the IPNS name
    `elephant-atlas` (`k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04`) is
    pointed at its CID. The job ends only when the name resolves to that CID and
    <https://ipfs.filebase.io/ipns/k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04>
    serves the committed bytes. A failure at this step is not a revert: re-run the workflow.
+   A group on `main` that is left out (its roots are not pinned yet, or another group holds
+   one) does not hold back the rest: the index lists it as it was last published, or not at
+   all, the publish job's summary lists it with the reason, and the separate
+   `left out of the index` job turns the run red.
 4. Optionally, the published `index.json` is copied to S3 (see below).
 
 ### Copy to S3 (optional)
@@ -103,7 +106,7 @@ object must be the published bytes, never a re-serialization.
 
 The job is off unless the `ATLAS_INDEX_S3_URI` repository variable is set; without it, publish
 behaves as before. It runs only after the IPNS name serves the new index (also when the
-`publish` job then ends red over a publication it could not complete, since the index it did
+`publish` job then ends red, since the index it did
 publish is what the copy must hold), and uploads `main`'s `index.json` only when `scripts/unixfs.mjs` computes
 the CID `publish-index` published for it; otherwise (a later publication superseded the run)
 it fails without writing. The object gets `Content-Type: application/json`,
