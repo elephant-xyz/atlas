@@ -14,8 +14,11 @@ export const git = (root, ...args) => execFileSync('git', ['-C', root, ...args],
 /** Wait `ms` milliseconds. */
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** An abort signal for a request: after `ms`, or as soon as `signal` (optional) aborts. */
-export const timeoutSignal = (ms, signal) => AbortSignal.any([AbortSignal.timeout(ms), ...(signal ? [signal] : [])]);
+/**
+ * An abort signal for a request: after `ms`, or as soon as `signal` (optional) aborts. `ms` is often what is left of a
+ * deadline measured with performance.now(), so it is rounded up: AbortSignal.timeout() throws on a fraction.
+ */
+export const timeoutSignal = (ms, signal) => AbortSignal.any([AbortSignal.timeout(Math.max(1, Math.ceil(ms))), ...(signal ? [signal] : [])]);
 
 /**
  * Run `jobs` (functions returning promises), `n` at a time. Each job is called with a signal;
