@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "ddd7ac72d5653cb66c16bdf4e79131e1b2fa9ff1",
+  "generated_from": "3e29b4df340af0ed47afe96c98b7c315ff706dca",
   "counties": [
     {
       "county": "santa-clara",
@@ -331,10 +331,10 @@
       "fips": "12091",
       "groups": {
         "county": {
-          "cid": "baguqeeraitirnbyk3bctboptvd4fex6fuczgiighrv32v3t4csxzcoydz66q",
+          "cid": "baguqeerayu45xy2fqywibn34j5lavx4gqcj2zqyuso677lrm5sfz5azpmziq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeraihbarj5mgcbn35bqmbz4ivjla7qws2lqapq55njl6kfxec4peela",
-          "published_at": "2026-11-03T16:34:19.000Z"
+          "tables": "baguqeerayhj5le2axd7q3hsbrroiawy7flwkkerqdidqak6aqvku2oniiakq",
+          "published_at": "2026-11-21T17:45:01.000Z"
         }
       }
     },
@@ -479,10 +479,10 @@
       "fips": "12109",
       "groups": {
         "county": {
-          "cid": "baguqeerahqwklxvhczmurzis4bklntnwdikgbb3tfjsabrhv4gog4dauuc7q",
+          "cid": "baguqeera5lbvhppu7f6ykfsii5gwjqp5nz7b3gunxvojh4i4zfgmv2j5jrga",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerapdhefw2tp757dlsoo67kuso3igcgplxwpm7xnq4m6jaj5dbo3rja",
-          "published_at": "2026-11-04T01:41:16.000Z"
+          "tables": "baguqeerads26j767a7rxmkfmsa5z4ocnuhinihsxmgsdnfrpfqicxqisovra",
+          "published_at": "2026-11-21T17:45:01.000Z"
         },
         "property_management": {
           "cid": "baguqeerairfcc45nho7ndjcv66efz4rqt4l4s5vbfk64yuc5aw4vody65maq",
