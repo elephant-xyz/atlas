@@ -1,0 +1,13 @@
+{
+  "county": "los-angeles",
+  "state": "CA",
+  "fips": "06037",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraztoidv6d2kcko4vdk3fbgziydky63srg3dxdrrdksantyydrmzja",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraptqpvzqhsf22l6hwnfpj7eat7rahoiomayxm5fukntr3bb7tunuq",
+      "car": "bafybeienuukd52rla33qkbqcjze6k33zjs2j6ybrwh7rvmptqa7xgu545q"
+    }
+  }
+}
