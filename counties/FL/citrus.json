@@ -4,9 +4,10 @@
   "fips": "12017",
   "groups": {
     "county": {
-      "cid": "baguqeerabcbg4i5ahamouxvflrtddbgj24riyaiow5mufvltqnbbjm3tuzqa",
+      "cid": "baguqeera45mo3v2ph4zuv4ilvkegzr2fepczyatltpjorixuwzdw62i3jttq",
       "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-      "tables": "baguqeeraq7hwqongerr62jvbf4e765gtgkavflc22y5j7bbzhpbu3mmzlz2a"
+      "tables": "baguqeerameg4cr2oyei2gbgllup2hdxxubaugr2iv5r6qhrryj6hvxproc7q",
+      "car": "bafybeib4vifxc7c5a3zi7jzmicjdyob54yoxycwtqzegafwtc6fprvmihq"
     }
   }
 }
