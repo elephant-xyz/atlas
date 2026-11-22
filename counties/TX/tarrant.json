@@ -1,0 +1,13 @@
+{
+  "county": "tarrant",
+  "state": "TX",
+  "fips": "48439",
+  "groups": {
+    "county": {
+      "cid": "baguqeerahsndtreyznxcvtgctx7szjpud42gkmvh6dst772xj3g45e5j5jbq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeravxhwiw75kwe7yrizrxi3pfckbg47x3nqftu3uilx2kpj7edz6spq",
+      "car": "bafybeibwlcddtjqcmmg6ko5zqagcud2tzp22dk7fh4d2ufcs2xhebm2zha"
+    }
+  }
+}
