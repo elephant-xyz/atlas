@@ -1,0 +1,13 @@
+{
+  "county": "dallas",
+  "state": "TX",
+  "fips": "48113",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraaaalpszsuiyl6vanochcawdtktcbq4ixxewrum3j2loynrew5fwa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerajr4gueco3atk44ovhegvn5mpvgfef63ufbc3h77cpmycrwvyhoaq",
+      "car": "bafybeiabrkh52iptnxqrktpcaztkhlxfbwg3h2naq6wjg2eroeylpdeccu"
+    }
+  }
+}
