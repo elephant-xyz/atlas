@@ -1,0 +1,13 @@
+{
+  "county": "cook",
+  "state": "IL",
+  "fips": "17031",
+  "groups": {
+    "county": {
+      "cid": "baguqeeraix3alucwmlbj2hnb56ingnnczvn5vcawfilpjispzwl7tb7culca",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraqfpetuwmb7aehfzl6ricv435b2amoryqdzjlv2boyegrjrpeooeq",
+      "car": "bafybeicl2obk5gwvl6yfoafblgb3y5egwk5ecwggrd2zgst7p437b7ngbu"
+    }
+  }
+}
