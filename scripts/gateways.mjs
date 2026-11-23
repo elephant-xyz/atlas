@@ -88,7 +88,7 @@ export function gatewayClient({ gateways = gatewayList(), fetch = globalThis.fet
           if ((cooldown.get(gateway) ?? 0) > now()) continue;
           const url = `${gateway}/ipfs/${path}`;
           try {
-            const res = await fetch(url, { headers, signal: AbortSignal.timeout(requestMs) });
+            const res = await fetch(url, { headers, signal: timeoutSignal(requestMs) });
             if (res.ok) {
               preferred = gateway;
               return { res, url };

@@ -96,3 +96,17 @@ test('filebaseS3 takes the workflow\'s Filebase keys and s3.filebase.com unless 
   assert.throws(() => filebaseS3({}), /access key and secret are required/);
   assert.ok(filebaseS3({ FILEBASE_ACCESS_KEY: 'a', FILEBASE_SECRET_KEY: 'b' }).uploadFile);
 });
+
+test('timeoutSignal accepts a fractional time limit, as a deadline measured with performance.now() gives', async () => {
+  const { timeoutSignal } = await import('../scripts/lib.mjs');
+  // AbortSignal.timeout(220290.60009765625) throws "The value of "delay" is out of range. It must be an integer."
+  assert.throws(() => AbortSignal.timeout(220290.60009765625), RangeError);
+  for (const ms of [220290.60009765625, 272199.3000488281, 0.4, 0, -5]) {
+    const signal = timeoutSignal(ms);
+    assert.equal(signal.aborted, false, `timeoutSignal(${ms}) is a live signal`);
+  }
+  const outer = new AbortController();
+  const signal = timeoutSignal(1500.5, outer.signal);
+  outer.abort();
+  assert.equal(signal.aborted, true);
+});
