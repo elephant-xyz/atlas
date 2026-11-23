@@ -1,0 +1,13 @@
+{
+  "county": "miami-dade",
+  "state": "FL",
+  "fips": "12086",
+  "groups": {
+    "county": {
+      "cid": "baguqeeracjmdnn3gzrwq2stiw4imvaqyih3hrg5ienpczu6edqygipyc4pna",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeera5465dbbrsbrowg4gsaabgjeapqgzjkdq7rabfgbpizvz7zw62wyq",
+      "car": "bafybeiceih7ntbfyiwv247lloxauhvdeg7ajao5k57gehyxtyclxl3lsi4"
+    }
+  }
+}
