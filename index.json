@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "352d32e41c0f742b1cf529fc1347ec7565f8a643",
+  "generated_from": "dd77486719a7c6256ee99376cae552c54d93ed00",
   "counties": [
     {
       "county": "santa-clara",
@@ -266,10 +266,10 @@
       "fips": "12071",
       "groups": {
         "county": {
-          "cid": "baguqeerah2lmffigrt5qlqfyj2djoakepokaphpxokhb2qm7aipumyu4n5jq",
+          "cid": "baguqeerap7hhwmxptzelyotyadlf3u2vj6yemirllbswdpfkavjov7j5ybza",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerave3uvj7xeo767g2lp7mt4pqf3phizp4qvivae6go36ek6bsrc6rq",
-          "published_at": "2026-11-03T17:33:49.000Z"
+          "tables": "baguqeerar7fnovw5r3lkysyughcxyp7wb6djgyjjrb6nv7vs3u4uorw2anyq",
+          "published_at": "2026-11-23T15:45:07.000Z"
         },
         "property_management": {
           "cid": "baguqeerajnfzbwp72bxukma3dvhzf2bhdzipovmc22ffm6n5wusgy5x7rbwq",
@@ -315,6 +315,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraegkfrdnwdt6h4vo4mjt7jncx2sh3ialekibzjapvrzj72gcepi6a",
           "published_at": "2026-11-19T22:11:24.000Z"
+        }
+      }
+    },
+    {
+      "county": "miami-dade",
+      "state": "FL",
+      "fips": "12086",
+      "groups": {
+        "county": {
+          "cid": "baguqeeracjmdnn3gzrwq2stiw4imvaqyih3hrg5ienpczu6edqygipyc4pna",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeera5465dbbrsbrowg4gsaabgjeapqgzjkdq7rabfgbpizvz7zw62wyq",
+          "published_at": "2026-11-23T15:45:19.000Z"
         }
       }
     },
@@ -683,6 +696,32 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeranbb744yoy4xaqkw2agcizfeaau2la5zhwcs5jvxazkiwheli4vdq",
           "published_at": "2026-11-23T15:45:07.000Z"
+        }
+      }
+    },
+    {
+      "county": "dallas",
+      "state": "TX",
+      "fips": "48113",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraaaalpszsuiyl6vanochcawdtktcbq4ixxewrum3j2loynrew5fwa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerajr4gueco3atk44ovhegvn5mpvgfef63ufbc3h77cpmycrwvyhoaq",
+          "published_at": "2026-11-23T15:45:19.000Z"
+        }
+      }
+    },
+    {
+      "county": "harris",
+      "state": "TX",
+      "fips": "48201",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraqy3ejljldzu4kb7u2kgfyvxe5lgngu6o63fkhmnslp22skxylcaa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeragwqe4w6nyh4tcthsofbirtrs4cgljfggwgdtqch2rgoc66ot7w6a",
+          "published_at": "2026-11-23T15:45:19.000Z"
         }
       }
     },
