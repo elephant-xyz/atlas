@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "a21e9b2312051eb933423c0ca633698f59a24b1e",
+  "generated_from": "2c72e903a83b74b5d0d2f81f33142580fe0f17d6",
   "counties": [
     {
       "county": "santa-clara",
@@ -79,10 +79,10 @@
       "fips": "12015",
       "groups": {
         "county": {
-          "cid": "baguqeeraxxfxxwnmlo4c7di5x45ymnfud4cghoy57qyu66wz2hhwe32zkova",
+          "cid": "baguqeerazktnj3i2g5o2447l442rwp2ltugmipz4zhblx3e5lrsq6yn4e7mq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerajt2a4irvp6isfl4ccjlk66uxeiiowcdmfupxroy2a3qwiwrglsoq",
-          "published_at": "2026-11-03T17:47:20.000Z"
+          "tables": "baguqeerayobhn7eihhsqbmz2ggwjupbg5ce3d4evjpdbqkaude4qhuwepcqq",
+          "published_at": "2026-11-23T15:44:51.000Z"
         }
       }
     },
@@ -246,6 +246,12 @@
       "state": "FL",
       "fips": "12069",
       "groups": {
+        "county": {
+          "cid": "baguqeera3riku7snlu4nehxuqwzkbgp4umiod22bkduagbt6jchdoau24meq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerarwsqk43gz4jkb6imb3g32f4t2spirw5byjd2c5bewt4qsrjljusa",
+          "published_at": "2026-11-23T15:44:51.000Z"
+        },
         "property_improvement": {
           "cid": "baguqeerazxzsvfmtpcz4on6jiimtagn6vswe37opywi6wxipb5sep5o6hcja",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
@@ -292,10 +298,10 @@
       "fips": "12081",
       "groups": {
         "county": {
-          "cid": "baguqeerad5zhvuozdveekvrv7lj45a3hbxkfjhde745fzavpph3hdzine7pa",
+          "cid": "baguqeera6cufxts2ioyn72hmfozwqekia66sxhpyzrcro3ey7ne34wgbrbvq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeratjdtwbedpm7h5sgncrpeu24xwqsdqyafrwvzujkkuj6oikavqata",
-          "published_at": "2026-11-04T01:31:43.000Z"
+          "tables": "baguqeeragivlvf65sug5b4vt6smsne7ntnjv2hrwogya5zodzigff7qnuvga",
+          "published_at": "2026-11-23T15:44:51.000Z"
         }
       }
     },
