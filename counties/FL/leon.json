@@ -4,9 +4,10 @@
   "fips": "12073",
   "groups": {
     "county": {
-      "cid": "baguqeeraklonk5acaonberzxfvocah2kvlhgyehcqc2iunzenbuyntsrc6za",
+      "cid": "baguqeeratb45cf5ksloy5s2asln5thfhei5ont62jdvt2kw77hoi7gi666ha",
       "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-      "tables": "baguqeerakcljgpvu2w5bdmsfhee65xn6evidmdvjimtvrdsys3yc5fpasrsa"
+      "tables": "baguqeeraxwbg2llvfotu4kplgqha562oj6y6wtqaulq57fit6ltx3grrxbrq",
+      "car": "bafybeic3mwmroycrlspoljsvwhiu23elmoi7cpebfhm3u77d3z64irv3tu"
     }
   }
 }
