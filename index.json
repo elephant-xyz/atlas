@@ -1,7 +1,20 @@
 {
   "version": 1,
-  "generated_from": "dd77486719a7c6256ee99376cae552c54d93ed00",
+  "generated_from": "6d9f6d6b82b198daa6ebf46af6ddc601fca3396b",
   "counties": [
+    {
+      "county": "los-angeles",
+      "state": "CA",
+      "fips": "06037",
+      "groups": {
+        "county": {
+          "cid": "baguqeeraztoidv6d2kcko4vdk3fbgziydky63srg3dxdrrdksantyydrmzja",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraptqpvzqhsf22l6hwnfpj7eat7rahoiomayxm5fukntr3bb7tunuq",
+          "published_at": "2026-11-23T16:31:42.000Z"
+        }
+      }
+    },
     {
       "county": "santa-clara",
       "state": "CA",
