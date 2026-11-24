@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "c0609984ea4ac21db1277e6ff9c120b15b4b8170",
+  "generated_from": "94b59c2575e69faab0d2cbfccecd68a3df5cf46f",
   "counties": [
     {
       "county": "los-angeles",
@@ -380,6 +380,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraxwp6gdcphmixg4dklokipdth7zhvbbgzyzh32w32xmfhwxuhu6la",
           "published_at": "2026-11-23T15:45:07.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeera7cztdwlyvz3eztn2zotm26ce2x5qefdg27h44n7juuwwbohxetqq",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeerafgwtmqa2csytkzda2w4gnbbps4fzc7h3g5mscpfwfp22laa4kycq",
+          "published_at": "2026-11-24T21:31:15.000Z"
         }
       }
     },
@@ -457,6 +463,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerao3wth5fqad4pwatwzxu7ejh7a6fik3hz5xupbekowsnk6uqgtjca",
           "published_at": "2026-11-23T15:45:07.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeeramjpmgpzfuqutmmifhjzmc5p4chhjosjmsuesf454f4hwekol24oa",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeera3k2kcsfc3itfgfrwn4uu4ji577go6b66w75wuiidmjmdrauulmsa",
+          "published_at": "2026-11-24T21:31:15.000Z"
         }
       }
     },
@@ -566,6 +578,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeera55qfcs32grnlvlrcrkg4svl4aj4zurfi4nuiogtewohddt26wwha",
           "published_at": "2026-11-23T15:44:51.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeeraa74ihb25pfbltsbd4yb5zbvjl74lyhozvq6dqkaudbdp7f5gy63a",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeerakf7s2lq2b33rupiavbs5vnh4xycsrvfhvf53opuoo6elwrvvd4ta",
+          "published_at": "2026-11-24T21:30:59.000Z"
         }
       }
     },
@@ -631,6 +649,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerawhwvgebjfnv33wd25ncfiy7q6kfrrxmvjtjli4qilockljmvahia",
           "published_at": "2026-11-14T17:15:48.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerarucs3nli5kxjusg72ito57diekyn4ladamb4ocef3blucif7anha",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeerafj7eyqmnyg5ve2th7ojf7bwaf3iktysuctar4y53hkhzn6e3re5q",
+          "published_at": "2026-11-24T21:30:42.000Z"
         }
       }
     },
@@ -644,6 +668,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerawwv3u56npyzytzwpfbdrsgecvzdr5mi7qvtbvecrinb7bjlu6yfq",
           "published_at": "2026-11-12T20:36:01.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerawbm4c5p4enxwettb7xzhkrowxbhpeb6dekiercmd2lcqbmh5wafq",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeera5jfrh57c5k7lydkjyfh7hlxfrlgd7bpjve3e5q525w3rhnenyyma",
+          "published_at": "2026-11-24T21:31:15.000Z"
         }
       }
     },
@@ -657,6 +687,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeragynintxgjwhkkcqtasgmttxrxdhiuzkad777odf75tydz7tbsg2q",
           "published_at": "2026-11-12T20:35:25.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerabnot7s7vgbczw6roegjigb72to3u6hr7r3g3b6rhrueumbtsvpqa",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeradzazapyi5r7zihgoj462rfymcybzokwcxg454ot5kuhvmhqnrrxa",
+          "published_at": "2026-11-24T21:30:42.000Z"
         }
       }
     },
@@ -683,6 +719,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraukavcvlfxlnmthgra7nau6tijeixafkvyqqijgopvnpzj7ayv2ca",
           "published_at": "2026-11-12T20:35:49.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerabv4kt7trzdmmv6jsonrq73yzedfygvnijnhiu7z5wykdozbj3shq",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeragrp4lo7ospu76qkdqb5mmhrpdovvf2kqherqmgtore27cbp2axda",
+          "published_at": "2026-11-24T21:31:15.000Z"
         }
       }
     },
@@ -709,6 +751,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeranbb744yoy4xaqkw2agcizfeaau2la5zhwcs5jvxazkiwheli4vdq",
           "published_at": "2026-11-23T15:45:07.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerasrzynv4wkrpfjhxx4d3du7u3kixa2siqp2nhkt7gs6yzfj6nggja",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeera7swnzh6v6cujrdxz7ty7yye52xphbalqyevq6o7ig3tq433g3waa",
+          "published_at": "2026-11-24T21:30:42.000Z"
         }
       }
     },
@@ -722,6 +770,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeerajr4gueco3atk44ovhegvn5mpvgfef63ufbc3h77cpmycrwvyhoaq",
           "published_at": "2026-11-23T15:45:19.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeera463sntto3duahgib3744itre2wraveehykfh36bdwtfqjnbduabq",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeraozjlhicdicmhoxbvrwwy5757tq26tj4wgvei7s5p3gu3ifj2fvsq",
+          "published_at": "2026-11-24T21:30:42.000Z"
         }
       }
     },
@@ -735,6 +789,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeragwqe4w6nyh4tcthsofbirtrs4cgljfggwgdtqch2rgoc66ot7w6a",
           "published_at": "2026-11-23T15:45:19.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeeraxwkyhjz7s6evjrq3cumtl4s4sv3q7y4ijvrkrc6jf5g6anyruz2a",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeraohyggadpq5arl6lds6aw4sfwhp4pyah3lycxpxzmakgx5ijqzxwa",
+          "published_at": "2026-11-24T21:30:59.000Z"
         }
       }
     },
@@ -748,6 +808,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeravxhwiw75kwe7yrizrxi3pfckbg47x3nqftu3uilx2kpj7edz6spq",
           "published_at": "2026-11-23T15:45:07.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerahcobnmca44etjkstsisykasevkbn2uvdsmito6aow4qysxjipsua",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeera5zgstnxyvwiwxxn7sr3hnpnejqeczg7qpt7arfxk3x5thlbvgfwq",
+          "published_at": "2026-11-24T21:30:59.000Z"
         }
       }
     },
@@ -793,6 +859,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraonejlgwcy3kxkl3lnbhf3kebsa6aod6plr3i45g4iwvyhfha22rq",
           "published_at": "2026-11-23T15:45:07.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeeraafe224yvcyh26uhf6i6ayvh3aabzk6654dezghpvwpn2nkg74w4q",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeerawb3ekb4gwaobta3gfsykai2hczbm5sae3zi7w7sb4qavlj23avnq",
+          "published_at": "2026-11-24T21:30:59.000Z"
         }
       }
     }
