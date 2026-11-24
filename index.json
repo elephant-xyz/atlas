@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "6d9f6d6b82b198daa6ebf46af6ddc601fca3396b",
+  "generated_from": "c0609984ea4ac21db1277e6ff9c120b15b4b8170",
   "counties": [
     {
       "county": "los-angeles",
@@ -757,16 +757,16 @@
       "fips": "48453",
       "groups": {
         "county": {
-          "cid": "baguqeerab4tomoh53pxzdg4hf2c77ysqjhtd57aprg2i2p275c4mme55pwxq",
+          "cid": "baguqeeran6dwffqocvdinqg5baiztzlcgkpb7lij74triphbcsdowvm26ppq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerac2fzcbmcpepqcjinln7nzobztzv2tag5kim46jgwzrzgfli7o5fa",
-          "published_at": "2026-11-04T18:46:16.000Z"
+          "tables": "baguqeerahhwfeypygiellcar62txfxvazyzv2jtetr65nsi4g3fagv4za4ca",
+          "published_at": "2026-11-24T21:30:25.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerah3asyaq3ditrj46rjcmibukd7ktxeqksqdylhpqtwqlgo2rjsmpq",
+          "cid": "baguqeerapfqftythtw43hcq73ye5i7jynm4euw7quzbqwiq27t2x6jzqxu4a",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeraaixjsbyifs5gzxd4dqjtcog3cahm7u3bwj3sqnisyocyfksbcnba",
-          "published_at": "2026-11-10T23:04:57.000Z"
+          "tables": "baguqeera5cqyvgnmgvjpmgrmpa7syho7qr7qgdhrifiayv5bytvafbic4j2q",
+          "published_at": "2026-11-24T21:30:25.000Z"
         }
       }
     },
