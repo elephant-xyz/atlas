@@ -8,6 +8,12 @@
       "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
       "tables": "baguqeeragwqe4w6nyh4tcthsofbirtrs4cgljfggwgdtqch2rgoc66ot7w6a",
       "car": "bafybeidhzftvbp3qjck5kpnxquoolnscixgv7y5f3mfocbvhmdeoyref7e"
+    },
+    "property_improvement": {
+      "cid": "baguqeeraxwkyhjz7s6evjrq3cumtl4s4sv3q7y4ijvrkrc6jf5g6anyruz2a",
+      "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+      "tables": "baguqeeraohyggadpq5arl6lds6aw4sfwhp4pyah3lycxpxzmakgx5ijqzxwa",
+      "car": "bafybeihczsufrt2kdaowkdiydwsqlsrsmcvq7dgs4u7foevnm6nx27a5tu"
     }
   }
 }
