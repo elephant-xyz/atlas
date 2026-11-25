@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "40262e4cdfe51f516fc65a1a412d6c2964a786e6",
+  "generated_from": "c1dfe7fc2ce82ca1eeb786b6f6ecc3ad902fe5ed",
   "counties": [
     {
       "county": "los-angeles",
@@ -231,6 +231,12 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeeraswoyjni33v4ojqlenoyl7uxjpgceejtxqddxdjzjodi7rak6napa",
           "published_at": "2026-11-23T15:45:07.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerapq44vpwdkv62hvd3se3v66r4h65klwbe5fs3txvi7refhl2fzuyq",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeerar6f5qxxskncwn5oosndva4esiucnxpwz5xdlcd323kydgyh7tl4q",
+          "published_at": "2026-11-25T14:38:27.000Z"
         }
       }
     },
