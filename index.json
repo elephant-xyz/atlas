@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "c1dfe7fc2ce82ca1eeb786b6f6ecc3ad902fe5ed",
+  "generated_from": "7ca3b74432c3533fd4617eec6e9e5c2aa20d1de2",
   "counties": [
     {
       "county": "los-angeles",
@@ -156,10 +156,10 @@
       "fips": "12031",
       "groups": {
         "county": {
-          "cid": "baguqeerazuedrno6gn6b22456iuoxmehtmcud3n3m3tx6ipusnu6nidjz7iq",
+          "cid": "baguqeera2s43oxrzol4cwio22wao77tktjfffghp4qdr7yy5jporz2p7hopq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerahcj6dfqm3phyu3r76ynj3vpnfyvt3fgt66n3ozsmbvv7au34neqq",
-          "published_at": "2026-11-11T02:20:17.000Z"
+          "tables": "baguqeeraxni6va76slqytmenzbeo7vjxchpka3chytgnaptcgdvncc3xgp5q",
+          "published_at": "2026-11-25T14:39:05.000Z"
         }
       }
     },
