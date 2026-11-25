@@ -1,0 +1,19 @@
+{
+  "county": "gwinnett",
+  "state": "GA",
+  "fips": "13135",
+  "groups": {
+    "county": {
+      "cid": "baguqeeralenbxqmcbhj4yuib4ywrhkhqhjpywk4a62dt6mcaco44j25hrxzq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeragayi2yeqai7epliny4dzzqibbc5j6gtglaq4dqgsko3u64uivnfq",
+      "car": "bafybeifqxxpwui7k5sfr74ucbsnzegflxvz44lpc27t2g32uie3ioezfei"
+    },
+    "property_improvement": {
+      "cid": "baguqeeraeugyouohwpliqbwh36d6gtqnkvzux7wl2bkpjmwd7tjemyieqqwq",
+      "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+      "tables": "baguqeerarp22rtw5rtfdlgtfb6nkauh37bztgnv3a7dkzabugwikl25v3cxa",
+      "car": "bafybeibnjik4tpd76miwngp7qkm62uivhmkfbsc27id2nk4imtvrpixmuq"
+    }
+  }
+}
