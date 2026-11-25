@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "7ca3b74432c3533fd4617eec6e9e5c2aa20d1de2",
+  "generated_from": "33dc58b31bface94c45a132f8b08d4a07ffed968",
   "counties": [
     {
       "county": "los-angeles",
@@ -609,6 +609,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeera2hfrmja7d3buhiukb3zlvqi3rqii4lywujhfbosivwgocaxtktka",
           "published_at": "2026-11-19T18:33:25.000Z"
+        }
+      }
+    },
+    {
+      "county": "gwinnett",
+      "state": "GA",
+      "fips": "13135",
+      "groups": {
+        "property_improvement": {
+          "cid": "baguqeeraeugyouohwpliqbwh36d6gtqnkvzux7wl2bkpjmwd7tjemyieqqwq",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeerarp22rtw5rtfdlgtfb6nkauh37bztgnv3a7dkzabugwikl25v3cxa",
+          "published_at": "2026-11-25T19:36:55.000Z"
         }
       }
     },
