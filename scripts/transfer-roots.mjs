@@ -975,7 +975,10 @@ async function checkArchiveCar(root, file, what, { asRoot = true } = {}) {
  *     is done whatever the upload answers later;
  *   - an upload whose ending request (PUT, CompleteMultipartUpload) the proxy dropped (502, 504, a
  *     reset, a timeout) is not sent again when the object is there: pin/ls is watched. Any other
- *     failed upload is sent again, up to 3 times in all; 4xx other than 429 is final;
+ *     failed upload is sent again, up to 3 times in all; 4xx other than 429 is final. An error
+ *     document in a 200 answer (Filebase's "ServiceUnavailable: Upload temporarily unavailable.
+ *     Please retry." at CompleteMultipartUpload, 2026-11-25) is the server's failure, like a 5xx,
+ *     and is sent again;
  *   - an object Filebase marks Pinning-Status failed ends the wait at once.
  * Every failure here is an ordinary Error (deferred, never withdrawn).
  */
@@ -1016,7 +1019,7 @@ async function importCarViaS3(root, file, key, d, pinMs = d.pinMs) {
         if (ok) d.log(`uploaded ${key}: ${ok.parts} part(s), ${ok.size} bytes; watching pin/ls for ${root}`);
         else if (error.name === 'AbortError') throw error;
         else if (error.phase === 'complete' && isDropped(error) && imported(await head())) d.log(`upload of ${key} ended at the proxy (${error.message.split('\n')[0]}) with the object stored; watching pin/ls for up to ${minutes} min`);
-        else if (attempts < 3 && !(error instanceof S3Error && error.status < 500 && error.status !== 429) && d.now() < until) {
+        else if (attempts < 3 && !(error instanceof S3Error && error.status < 500 && error.status !== 429 && error.status !== 200) && d.now() < until) {
           d.log(`upload of ${key} failed (${error.message.split('\n')[0]}); sending it again`);
           start();
           continue;
