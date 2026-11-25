@@ -1,7 +1,20 @@
 {
   "version": 1,
-  "generated_from": "5dc3301335a527ec1863d5d4f06b8fada5d33c22",
+  "generated_from": "c479a0d86b158f506164209bfe3007820a1c2219",
   "counties": [
+    {
+      "county": "maricopa",
+      "state": "AZ",
+      "fips": "04013",
+      "groups": {
+        "property_improvement": {
+          "cid": "baguqeeravbfjdjm4mxipl47od5dt6y2e45talldkplrfi7tjsu7pmubbhmaa",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeraqqtgcxud5g5dtssn3mfj4p53ojgmqf53i4zlvfbr25k4lvhfhz2q",
+          "published_at": "2026-11-25T21:50:06.000Z"
+        }
+      }
+    },
     {
       "county": "los-angeles",
       "state": "CA",
