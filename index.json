@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "034642f2468c17d83f69958936d4caa3c8af4e4d",
+  "generated_from": "7a4b7a21c736b6d57c0875c0eafa0fa535494ba5",
   "counties": [
     {
       "county": "maricopa",
@@ -252,16 +252,16 @@
       "fips": "12057",
       "groups": {
         "county": {
-          "cid": "baguqeeraq25gshpemrj6tbhawx7rkcyyk75qgf7a2q5ngxtdw2dfm7ktehhq",
+          "cid": "baguqeeraw5hwr5enthvext34cmxwd3evgfbotlqtfy2qji76zffaz5o4xlca",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeera6fni47sonsehlfrbh7ys6ge7dnew4upinudijdwrgjg5qsvuh56a",
-          "published_at": "2026-11-26T14:26:54.000Z"
+          "tables": "baguqeeravqsuiqtdynsid6ciep2g5oecx5vnehun4rymqbvdkkkuvnomni7q",
+          "published_at": "2026-11-26T18:43:41.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeeraecppqg4cuuc6vu6cmrpevkogv7m6eqiq2qzwsnci44yo4xge5wmq",
+          "cid": "baguqeera2b5mqgiiwd2eetl7wz5uxfh7kvlmyu4nqxizzwm743edym6hdlxq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeraepjsen3o6giwmq5yn5ytdfwzl726a6g5vrgxwiwpfu3vkvnqldla",
-          "published_at": "2026-11-26T14:26:54.000Z"
+          "tables": "baguqeeraryfvk54x63we7qhwik4wrc4ycsetawhcswfxymqdzjrkqymkmhoa",
+          "published_at": "2026-11-26T18:43:41.000Z"
         }
       }
     },
