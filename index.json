@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "ece066453c49174cf1a6a1645ba359ed6b364e7b",
+  "generated_from": "e2aee1ac0fb635ef717757d49971ffd316e69572",
   "counties": [
     {
       "county": "maricopa",
@@ -246,16 +246,16 @@
       "fips": "12057",
       "groups": {
         "county": {
-          "cid": "baguqeera3z66vtdvkg7fuvos26qsrcf6yshrxrmnlawncgzxstfkaawg26vq",
+          "cid": "baguqeeraq25gshpemrj6tbhawx7rkcyyk75qgf7a2q5ngxtdw2dfm7ktehhq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeraswoyjni33v4ojqlenoyl7uxjpgceejtxqddxdjzjodi7rak6napa",
-          "published_at": "2026-11-23T15:45:07.000Z"
+          "tables": "baguqeera6fni47sonsehlfrbh7ys6ge7dnew4upinudijdwrgjg5qsvuh56a",
+          "published_at": "2026-11-26T14:26:54.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerapq44vpwdkv62hvd3se3v66r4h65klwbe5fs3txvi7refhl2fzuyq",
+          "cid": "baguqeeraecppqg4cuuc6vu6cmrpevkogv7m6eqiq2qzwsnci44yo4xge5wmq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeerar6f5qxxskncwn5oosndva4esiucnxpwz5xdlcd323kydgyh7tl4q",
-          "published_at": "2026-11-25T14:38:27.000Z"
+          "tables": "baguqeeraepjsen3o6giwmq5yn5ytdfwzl726a6g5vrgxwiwpfu3vkvnqldla",
+          "published_at": "2026-11-26T14:26:54.000Z"
         }
       }
     },
@@ -714,10 +714,10 @@
       "fips": "37119",
       "groups": {
         "county": {
-          "cid": "baguqeerauujzyet66rnrr7ebaiel5flyuzjtzet6ehddffvzirnq5tbfcgwa",
+          "cid": "baguqeeraqdcymvgfwy6rbiljjt4wtb6gduw7rwznj534nerqmezy3t663hmq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerawwv3u56npyzytzwpfbdrsgecvzdr5mi7qvtbvecrinb7bjlu6yfq",
-          "published_at": "2026-11-12T20:36:01.000Z"
+          "tables": "baguqeeratsgnauol25jsxwzwl34xz55ohrssa2y3dq4pvyvru2hisqwjo4kq",
+          "published_at": "2026-11-26T13:35:13.000Z"
         },
         "property_improvement": {
           "cid": "baguqeeraajzyiype7g3jysxc7jesbsdg275x6vxyq4afc4os4g77neh4glta",
