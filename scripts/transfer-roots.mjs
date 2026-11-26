@@ -835,6 +835,36 @@ async function blockHashes(cid, bytes) {
 const cidKey = (cid) => Buffer.from(cid.bytes).toString('latin1');
 
 /**
+ * A set of CID keys that can hold more than V8's limit of 2^24 entries per Set (AZ/maricopa's
+ * 31.5M-block archive, 2026-11-25: "RangeError: Set maximum size exceeded" in appendCar). The
+ * same has/add/size and iteration as a Set, split over Sets of at most `chunk` keys.
+ */
+export class KeySet {
+  constructor(items = [], chunk = 8_000_000) {
+    this.chunk = chunk;
+    this.sets = [new Set()];
+    for (const k of items) this.add(k);
+  }
+  has(k) {
+    for (const s of this.sets) if (s.has(k)) return true;
+    return false;
+  }
+  add(k) {
+    if (this.has(k)) return this;
+    let s = this.sets[this.sets.length - 1];
+    if (s.size >= this.chunk) this.sets.push((s = new Set()));
+    s.add(k);
+    return this;
+  }
+  get size() {
+    return this.sets.reduce((n, s) => n + s.size, 0);
+  }
+  *[Symbol.iterator]() {
+    for (const s of this.sets) yield* s;
+  }
+}
+
+/**
  * Copy the blocks of the CAR `source` (an async iterable of bytes) into `writer`, each hashed
  * against its CID (a block that does not is TransferFailed: the gateway, or the publication, sent
  * bad bytes) and written once (`seen`, CID keys). Returns the set of `want` CIDs it carried.
@@ -975,7 +1005,10 @@ async function checkArchiveCar(root, file, what, { asRoot = true } = {}) {
  *     is done whatever the upload answers later;
  *   - an upload whose ending request (PUT, CompleteMultipartUpload) the proxy dropped (502, 504, a
  *     reset, a timeout) is not sent again when the object is there: pin/ls is watched. Any other
- *     failed upload is sent again, up to 3 times in all; 4xx other than 429 is final;
+ *     failed upload is sent again, up to 3 times in all; 4xx other than 429 is final. An error
+ *     document in a 200 answer (Filebase's "ServiceUnavailable: Upload temporarily unavailable.
+ *     Please retry." at CompleteMultipartUpload, 2026-11-25) is the server's failure, like a 5xx,
+ *     and is sent again;
  *   - an object Filebase marks Pinning-Status failed ends the wait at once.
  * Every failure here is an ordinary Error (deferred, never withdrawn).
  */
@@ -1016,7 +1049,7 @@ async function importCarViaS3(root, file, key, d, pinMs = d.pinMs) {
         if (ok) d.log(`uploaded ${key}: ${ok.parts} part(s), ${ok.size} bytes; watching pin/ls for ${root}`);
         else if (error.name === 'AbortError') throw error;
         else if (error.phase === 'complete' && isDropped(error) && imported(await head())) d.log(`upload of ${key} ended at the proxy (${error.message.split('\n')[0]}) with the object stored; watching pin/ls for up to ${minutes} min`);
-        else if (attempts < 3 && !(error instanceof S3Error && error.status < 500 && error.status !== 429) && d.now() < until) {
+        else if (attempts < 3 && !(error instanceof S3Error && error.status < 500 && error.status !== 429 && error.status !== 200) && d.now() < until) {
           d.log(`upload of ${key} failed (${error.message.split('\n')[0]}); sending it again`);
           start();
           continue;
@@ -1055,7 +1088,7 @@ export async function transferArchiveViaS3(t, deps = {}) {
       what = `the CAR built from the gateways`;
       const writer = createCarFile(file, root);
       try {
-        await appendArchiveFromGateways(root, writer, new Set(), d);
+        await appendArchiveFromGateways(root, writer, new KeySet(), d);
       } finally {
         writer.close();
       }
@@ -1084,7 +1117,7 @@ export async function transferTablesViaS3(t, deps = {}) {
   const file = join(d.tmp, `${root}.car`);
   const full = join(d.tmp, `${root}.full.car`);
   try {
-    const seen = new Set([cidKey(CID.parse(root))]);
+    const seen = new KeySet([cidKey(CID.parse(root))]);
     const writer = createCarFile(file, root);
     try {
       writer.put(CID.parse(root), bytes);
@@ -1106,8 +1139,8 @@ export async function transferTablesViaS3(t, deps = {}) {
     if (!countyRoot) throw new TransferFailed(root, 'the tables block has no county_root link to send the archive by');
     const writer2 = createCarFile(full, root);
     try {
-      await appendCar(root, 'the tables CAR', createReadStream(file), writer2, new Set());
-      const seen2 = new Set(seen);
+      await appendCar(root, 'the tables CAR', createReadStream(file), writer2, new KeySet());
+      const seen2 = new KeySet(seen);
       if (t.archiveCar) {
         const res = await gatewayGet(root, t.archiveCar, '*/*', d);
         await appendCar(root, `car file ${t.archiveCar}`, Readable.fromWeb(res.body), writer2, seen2);
