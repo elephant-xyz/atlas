@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "26dbccb91e441193f2213c7e40386a7f2c6993d0",
+  "generated_from": "b4a49f4eb1e38e0fb235a9f08867119e9475f9da",
   "counties": [
     {
       "county": "maricopa",
@@ -634,6 +634,19 @@
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
           "tables": "baguqeera2hfrmja7d3buhiukb3zlvqi3rqii4lywujhfbosivwgocaxtktka",
           "published_at": "2026-11-19T18:33:25.000Z"
+        }
+      }
+    },
+    {
+      "county": "fulton",
+      "state": "GA",
+      "fips": "13121",
+      "groups": {
+        "property_improvement": {
+          "cid": "baguqeera6y2rsehwwkvcvz4c5emnsghjt2nsejxnovnwmlcswnja3koed2ua",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeravedxsx7wc5v44g6was3f4kdvpeamklydqqw4dxtvcmbyvqkotq6q",
+          "published_at": "2026-11-26T22:22:17.000Z"
         }
       }
     },
