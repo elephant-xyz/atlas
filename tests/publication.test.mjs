@@ -1271,6 +1271,36 @@ test('a part download the gateway drops every time fails after 5 attempts instea
   }
 });
 
+/** The gateway's real response for `url` with its first block's head overwritten, so the CAR does not decode. */
+const garbled = async (fetch, url, init) => {
+  const bytes = new Uint8Array(await (await fetch(url, init)).arrayBuffer());
+  const header = bytes[0] + 1; // these CARs' header length fits one varint byte
+  bytes[header + 1] = 0x0a; // after the block's length varint
+  return new Response(bytes);
+};
+
+test('a part one gateway serves unreadable every time is taken from the next gateway', async () => {
+  const f = await s3Fixture();
+  try {
+    const G2 = 'https://gw2.test';
+    const part = `/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
+    const asked = [];
+    const fetch = async (url, init) => {
+      if (!String(url).endsWith(part)) return f.deps.fetch(String(url).replace(G2, f.G), init);
+      asked.push(new URL(url).origin);
+      return String(url).startsWith(f.G) ? garbled(f.deps.fetch, url, init) : f.deps.fetch(String(url).replace(G2, f.G), init);
+    };
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, gateways: [f.G, G2], tablesCar: 'parts', fetch });
+    assert.deepEqual(asked, [f.G, G2], 'the retry went to the second gateway, not the first again');
+    assert.equal(f.logs.filter((l) => /download dropped \(.+\); retry 1\/4/.test(l)).length, 1, 'one unreadable download, then the other gateway');
+    const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
+    assert.deepEqual(blocks.sort(), [f.tables, f.part].map((b) => b.cid.toString()).sort());
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
+  } finally {
+    await f.s3.close();
+  }
+});
+
 /** The gateway's real response for `url`, cut off mid-block and ended cleanly (no stream error). */
 const truncated = async (fetch, url, init) => {
   const bytes = new Uint8Array(await (await fetch(url, init)).arrayBuffer());
