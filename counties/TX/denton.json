@@ -1,0 +1,17 @@
+{
+  "county": "denton",
+  "state": "TX",
+  "fips": "48121",
+  "groups": {
+    "county": {
+      "cid": "baguqeera3ic3u6fbh43lcz7apf2wartwizij7rasxenbedjq2fvazcss5hsq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeraq6oimykgto72s7eo7tvyxzs2hsldwzxpelc6ykystwngixgxtovq"
+    },
+    "property_improvement": {
+      "cid": "baguqeeraxkggnbwqro4ac6czfqzmgfiquq47utnk6pply4ixgowkwcvnpzsa",
+      "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+      "tables": "baguqeeraimzlermeyvypfpa7wzashvyhoaqzchlrlvtzt4jm5coa2af3edxq"
+    }
+  }
+}
