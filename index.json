@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "e7d13ad98f93247a1f5d0d0ec187552eb5439dfb",
+  "generated_from": "26dbccb91e441193f2213c7e40386a7f2c6993d0",
   "counties": [
     {
       "county": "maricopa",
@@ -745,10 +745,10 @@
           "published_at": "2026-11-12T20:35:25.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerabnot7s7vgbczw6roegjigb72to3u6hr7r3g3b6rhrueumbtsvpqa",
+          "cid": "baguqeeragv6htztndboaswiawujjyc74rxbuu5iryzj36kl7zplcncf5vxmq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeradzazapyi5r7zihgoj462rfymcybzokwcxg454ot5kuhvmhqnrrxa",
-          "published_at": "2026-11-24T21:30:42.000Z"
+          "tables": "baguqeeraikmpxo7wxihe2jpf6gublrqju2ucguuyc7gjwkqwklihsrlissta",
+          "published_at": "2026-11-26T20:26:11.000Z"
         }
       }
     },
