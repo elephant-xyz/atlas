@@ -1,12 +1,18 @@
 {
   "version": 1,
-  "generated_from": "c479a0d86b158f506164209bfe3007820a1c2219",
+  "generated_from": "3dabff1f04b4b3638381f9c461db0c4bda69a957",
   "counties": [
     {
       "county": "maricopa",
       "state": "AZ",
       "fips": "04013",
       "groups": {
+        "county": {
+          "cid": "baguqeera35bnyblmb2bp4wmza4xi2nwpfygtpfejlylmflldteks5iuuqmqq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerarry37bj253ycerqi2dlx7sfyavj3s6avu77btd55sj7ztd2r4x6a",
+          "published_at": "2026-11-25T21:50:06.000Z"
+        },
         "property_improvement": {
           "cid": "baguqeeravbfjdjm4mxipl47od5dt6y2e45talldkplrfi7tjsu7pmubbhmaa",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
