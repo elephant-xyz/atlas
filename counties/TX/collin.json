@@ -1,0 +1,17 @@
+{
+  "county": "collin",
+  "state": "TX",
+  "fips": "48085",
+  "groups": {
+    "county": {
+      "cid": "baguqeerabfxxyzjtthlbikvosp5vjehkl24fedpt4ydwdypazxfvjpgywkrq",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerasvanbu2u63tpb73izcvktzbnfvex4mw2dydbbijjvvud3ohyktiq"
+    },
+    "property_improvement": {
+      "cid": "baguqeerafzcyewpvg3hdvidazzw3xypqkmest3b23tb7pinkkzu27un4yapq",
+      "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+      "tables": "baguqeera2gxhkezhc5cdgmf4xnpef7x7eq4n42u2roau4oqdrcqt5gbnsepq"
+    }
+  }
+}
