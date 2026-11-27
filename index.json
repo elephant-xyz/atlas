@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "b4a49f4eb1e38e0fb235a9f08867119e9475f9da",
+  "generated_from": "c06ab4820cf43db370cf53abfe683843e687a036",
   "counties": [
     {
       "county": "maricopa",
@@ -733,10 +733,10 @@
       "fips": "37119",
       "groups": {
         "county": {
-          "cid": "baguqeeraxy7il4r3pvmvqesyyxprthf73g7ldnuz4l7iqytr4xvabaczzg3q",
+          "cid": "baguqeeraj2l4joz7sxbbh65b46r6iylrpjo2urv4g7fdpyjn5reyxyyywnga",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerai7cms5m2vytdo5yd25r72bn7yske6dpcajapf57qyb4z5vweytda",
-          "published_at": "2026-11-26T20:14:47.000Z"
+          "tables": "baguqeeraexcwfqen2yrecjxwomktduqwurzqd4fyjzxo452z2ptncje57xhq",
+          "published_at": "2026-11-27T06:05:21.000Z"
         },
         "property_improvement": {
           "cid": "baguqeeraajzyiype7g3jysxc7jesbsdg275x6vxyq4afc4os4g77neh4glta",
@@ -816,16 +816,16 @@
       "fips": "48029",
       "groups": {
         "county": {
-          "cid": "baguqeerapnsnr5xcjlhcjrwe7bqrt43fjav46ctium4edxn3f3leemcttc6q",
+          "cid": "baguqeeraqkoxejunzj6ueh6cyuosqa5t6zkc2fi4vly5py7a526tbeas75za",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeranbb744yoy4xaqkw2agcizfeaau2la5zhwcs5jvxazkiwheli4vdq",
-          "published_at": "2026-11-23T15:45:07.000Z"
+          "tables": "baguqeeraziocumubapkxljdmxjopp72clnf52cf47agw56kcdsq3hhaqyh4q",
+          "published_at": "2026-11-27T06:10:13.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerasrzynv4wkrpfjhxx4d3du7u3kixa2siqp2nhkt7gs6yzfj6nggja",
+          "cid": "baguqeerafqi3qbqwk46jrh3icd5b5ho66r33xycn26ld2eqisuxqw5vwpoaa",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeera7swnzh6v6cujrdxz7ty7yye52xphbalqyevq6o7ig3tq433g3waa",
-          "published_at": "2026-11-24T21:30:42.000Z"
+          "tables": "baguqeeratcgfq6rrwhgkwq66joc274ounhchzk5jt326s3glcnflyk5ybzwq",
+          "published_at": "2026-11-27T06:13:00.000Z"
         }
       }
     },
@@ -873,10 +873,10 @@
       "fips": "48201",
       "groups": {
         "county": {
-          "cid": "baguqeeraqy3ejljldzu4kb7u2kgfyvxe5lgngu6o63fkhmnslp22skxylcaa",
+          "cid": "baguqeera4ucrmm3d2bhfo4zqldtqqajkdwcoxssvxiq26ssqyo3kafnszbuq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeragwqe4w6nyh4tcthsofbirtrs4cgljfggwgdtqch2rgoc66ot7w6a",
-          "published_at": "2026-11-23T15:45:19.000Z"
+          "tables": "baguqeeradgkzep5m6a4asn6mon7vamchqxsqccqwgyo2wow6inklmrzadnna",
+          "published_at": "2026-11-27T06:09:30.000Z"
         },
         "property_improvement": {
           "cid": "baguqeeraxwkyhjz7s6evjrq3cumtl4s4sv3q7y4ijvrkrc6jf5g6anyruz2a",
