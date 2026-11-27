@@ -118,6 +118,29 @@ test('a 200 ServiceUnavailable at CompleteMultipartUpload is sent again with the
   }
 });
 
+test('a CompleteMultipartUpload whose connection is cut is sent again with the same upload; one cut after it finished is thrown for the caller to check the object', async () => {
+  let cuts = 1;
+  const s3 = await fakeS3({ respond: ({ op }) => (op === 'CompleteMultipartUpload' && cuts-- > 0 ? { reset: true } : undefined) });
+  try {
+    const client = s3Client({ endpoint: s3.url, accessKey: 'AK', secretKey: 'SK', sleep: fast });
+    assert.deepEqual(await client.uploadFile('b', 'k', await tempFile(Buffer.alloc(250, 6)), { partBytes: 100, parallel: 1 }), { parts: 3, size: 250 });
+    assert.deepEqual(s3.requests.map((r) => r.op), ['CreateMultipartUpload', 'UploadPart', 'UploadPart', 'UploadPart', 'CompleteMultipartUpload', 'CompleteMultipartUpload']);
+    assert.ok(s3.objects.has('b/k'));
+  } finally {
+    await s3.close();
+  }
+  let done = 1;
+  const s3b = await fakeS3({ respond: ({ op }) => (op === 'CompleteMultipartUpload' && done-- > 0 ? { reset: true, after: true } : undefined) });
+  try {
+    const client = s3Client({ endpoint: s3b.url, accessKey: 'AK', secretKey: 'SK', sleep: fast });
+    await assert.rejects(client.uploadFile('b', 'k', await tempFile(Buffer.alloc(250, 7)), { partBytes: 100 }), (e) => e.phase === 'complete' && e.code === 'ECONNRESET');
+    assert.equal(s3b.requests.filter((r) => r.op === 'CompleteMultipartUpload').length, 2, 'sent again, which found the upload finished');
+    assert.ok(s3b.objects.has('b/k'), 'the cut one finished it');
+  } finally {
+    await s3b.close();
+  }
+});
+
 test('filebaseS3 takes the workflow\'s Filebase keys and s3.filebase.com unless told otherwise', () => {
   assert.throws(() => filebaseS3({}), /access key and secret are required/);
   assert.ok(filebaseS3({ FILEBASE_ACCESS_KEY: 'a', FILEBASE_SECRET_KEY: 'b' }).uploadFile);

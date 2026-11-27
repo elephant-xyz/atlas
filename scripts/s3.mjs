@@ -51,6 +51,8 @@ export function signV4({ method, url, headers = {}, payloadHash = EMPTY_SHA256, 
 /** Error codes in a 200 CompleteMultipartUpload answer that mean "the server failed, send it again". */
 const RETRY_COMPLETE = new Set(['ServiceUnavailable', 'InternalError', 'SlowDown']);
 const COMPLETE_TRIES = 8;
+/** A CompleteMultipartUpload whose connection was cut before its answer (a reset, or a proxy's 502/503/504): it may or may not have taken effect. */
+const completeDropped = (e) => ['ECONNRESET', 'EPIPE'].includes(e?.code) || /^aborted$|socket hang up/.test(e?.message ?? '') || (e instanceof S3Error && [502, 503, 504].includes(e.status));
 
 export class S3Error extends Error {
   constructor(op, status, body) {
@@ -181,16 +183,28 @@ export function s3Client({ endpoint = DEFAULT_ENDPOINT, region = 'us-east-1', ac
         const xml = `<CompleteMultipartUpload>${etags.map((etag, i) => `<Part><PartNumber>${i + 1}</PartNumber><ETag>${etag}</ETag></Part>`).join('')}</CompleteMultipartUpload>`;
         // S3 may answer 200 with an error document once it has started streaming the response. A
         // server-side one (Filebase's "ServiceUnavailable: Upload temporarily unavailable. Please
-        // retry.") is sent again with the same UploadId and parts, as S3 documents: up to
-        // COMPLETE_TRIES times (about 6.5 min of backoff) within completeTimeoutMs. Re-sending every
-        // part instead costs hours on a large CAR.
+        // retry.") is sent again with the same UploadId and parts, as S3 documents, and so is one
+        // whose connection was cut before its answer (Filebase reset one after 15 min on a 50 GB
+        // import, 2026-11-27): Complete is idempotent for an UploadId. Up to COMPLETE_TRIES times
+        // within completeTimeoutMs. Re-sending every part instead costs hours on a large CAR. When a
+        // send after a cut finds the upload gone (NoSuchUpload), the cut one may have finished it, so
+        // the cut's error is thrown for the caller to check the object.
         const until = Date.now() + completeTimeoutMs;
+        let cut;
         for (let attempt = 1; ; attempt++) {
-          const res = await send('CompleteMultipartUpload', 'POST', objectUrl(bucket, key, `uploadId=${encode(uploadId)}`), { headers: { 'content-type': 'application/xml' }, body: Buffer.from(xml), timeoutMs: Math.max(1, until - Date.now()), signal }).catch((e) => Promise.reject(ending(e)));
-          if (!/<Error>/.test(res.text)) return { parts: count, size };
-          const e = ending(new S3Error('CompleteMultipartUpload', 200, res.text));
+          let e;
+          try {
+            const res = await send('CompleteMultipartUpload', 'POST', objectUrl(bucket, key, `uploadId=${encode(uploadId)}`), { headers: { 'content-type': 'application/xml' }, body: Buffer.from(xml), timeoutMs: Math.max(1, until - Date.now()), signal });
+            if (!/<Error>/.test(res.text)) return { parts: count, size };
+            e = new S3Error('CompleteMultipartUpload', 200, res.text);
+          } catch (err) {
+            e = err;
+          }
+          if (cut && e instanceof S3Error && e.code === 'NoSuchUpload') throw ending(cut);
           const wait = Math.min(120_000, 5_000 * 2 ** (attempt - 1));
-          if (!RETRY_COMPLETE.has(e.code) || attempt >= COMPLETE_TRIES || Date.now() + wait >= until || signal?.aborted) throw e;
+          const dropped = completeDropped(e);
+          if (!(dropped || (e.status === 200 && RETRY_COMPLETE.has(e.code))) || attempt >= COMPLETE_TRIES || Date.now() + wait >= until || signal?.aborted) throw ending(e);
+          if (dropped) cut = e;
           log(`CompleteMultipartUpload of ${key} attempt ${attempt}: ${e.message}; sending it again with the same upload in ${wait / 1000} s`);
           await sleep(wait);
         }

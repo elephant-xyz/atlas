@@ -122,6 +122,7 @@ export async function fakeS3({ accessKey = 'AK', secretKey = 'SK', pins = () => 
     if (!auth.startsWith(`AWS4-HMAC-SHA256 Credential=${accessKey}/`) || req.headers['x-amz-content-sha256'] !== hash || again.authorization !== auth) return send(403, '<Error><Code>SignatureDoesNotMatch</Code></Error>');
     const override = respond({ op, key, query: u.search });
     if (override?.hold) return; // never answered: the client's own timeout or signal ends it
+    if (override?.reset && !override.after) return (res.writeHead(200), res.write('<', () => res.socket.destroy())); // cut mid-answer (Node: "aborted"), not acted on
     if (override && !override.after) return send(override.status, override.body ?? '');
     if (op === 'HeadObject') {
       const o = objects.get(k);
@@ -146,6 +147,7 @@ export async function fakeS3({ accessKey = 'AK', secretKey = 'SK', pins = () => 
       uploads.delete(u.searchParams.get('uploadId'));
       await store(up.key, Buffer.concat(up.parts), up.metadata);
     } else if (op === 'AbortMultipartUpload') uploads.delete(u.searchParams.get('uploadId'));
+    if (override?.reset) return (res.writeHead(200), res.write('<', () => res.socket.destroy())); // acted on, then cut mid-answer
     if (override) return send(override.status, override.body ?? '');
     send(200, op === 'CompleteMultipartUpload' ? '<CompleteMultipartUploadResult></CompleteMultipartUploadResult>' : '');
   };

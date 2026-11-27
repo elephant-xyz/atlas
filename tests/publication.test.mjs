@@ -1416,16 +1416,19 @@ test('a cancelled run (d.signal aborted) during the parts-only tables upload sto
   }
 });
 
-test('an upload whose completion the proxy drops (504) with the object stored is not sent again; pin/ls is watched', async () => {
-  const f = await s3Fixture({ respond: ({ op }) => (op === 'CompleteMultipartUpload' ? { status: 504, after: true } : undefined) });
-  try {
-    // Filebase pins the root only after the proxy has dropped the request.
-    const rpc = async (path) => (f.logs.some((l) => /ended at the proxy/.test(l)) ? f.deps.rpc(path) : [{ Keys: {} }]);
-    await transferArchiveViaS3(f.target('archive', f.index.cid), { ...f.deps, rpc });
-    assert.equal(f.s3.requests.filter((r) => r.op === 'CreateMultipartUpload').length, 1, 'sent once');
-    assert.match(f.logs.join('\n'), /ended at the proxy .*HTTP 504.* with the object stored; watching pin\/ls/);
-  } finally {
-    await f.s3.close();
+test('an upload whose completion the proxy drops (504) or whose connection is cut, with the object stored, is not sent again; pin/ls is watched', async () => {
+  for (const drop of [{ status: 504, after: true }, { reset: true, after: true }]) {
+    const f = await s3Fixture({ respond: ({ op }) => (op === 'CompleteMultipartUpload' ? drop : undefined) });
+    try {
+      // Filebase pins the root only after the proxy has dropped the request.
+      const rpc = async (path) => (f.logs.some((l) => /ended at the proxy/.test(l)) ? f.deps.rpc(path) : [{ Keys: {} }]);
+      await transferArchiveViaS3(f.target('archive', f.index.cid), { ...f.deps, rpc });
+      assert.equal(f.s3.requests.filter((r) => r.op === 'CreateMultipartUpload').length, 1, 'sent once');
+      assert.match(f.logs.join('\n'), /ended at the proxy .* with the object stored; watching pin\/ls/);
+      if (drop.status) assert.match(f.logs.join('\n'), /ended at the proxy .*HTTP 504/);
+    } finally {
+      await f.s3.close();
+    }
   }
 });
 
