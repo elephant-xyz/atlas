@@ -279,7 +279,7 @@ async function transferSubtree(root, path, expect, tally, d) {
  * request after 60 minutes with HTTP 504, and under load answers 502 or drops the connection
  * (ECONNRESET, "socket hang up") while the node goes on working.
  */
-const isDropped = (e) => /HTTP 50[0234]\b|ECONNRESET|socket hang up|EPIPE|ETIMEDOUT/.test(e?.message ?? '') || e?.name === 'TimeoutError';
+const isDropped = (e) => /HTTP 50[0234]\b|ECONNRESET|socket hang up|EPIPE|ETIMEDOUT/.test(e?.message ?? '') || ['ECONNRESET', 'EPIPE', 'ETIMEDOUT'].includes(e?.code) || e?.name === 'TimeoutError';
 
 /**
  * Pin `root`, whose DAG is already in the bucket, and prove it pinned. A pinned import makes Filebase
