@@ -916,8 +916,11 @@ async function appendExports(root, items, writer, seen, d, label) {
       try {
         // A gateway can drop the connection partway through the body ("terminated", ECONNRESET);
         // gatewayGet only retries getting a response, so the whole download is retried here.
+        // One gateway can also send the same unreadable body for a path every time while another
+        // serves it whole, so each retry starts from the next gateway in the list.
+        const gateways = [...d.gateways];
         for (let attempt = 1; ; attempt++) {
-          const res = await gatewayGet(root, `${item.path}?format=car`, 'application/vnd.ipld.car', { ...d, signal });
+          const res = await gatewayGet(root, `${item.path}?format=car`, 'application/vnd.ipld.car', { ...d, gateways, signal });
           try {
             await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
             // A gateway can also end the body early without an error; the CAR then stops mid-block.
@@ -928,6 +931,7 @@ async function appendExports(root, items, writer, seen, d, label) {
             signal?.throwIfAborted();
             if (attempt >= DOWNLOAD_ATTEMPTS) throw e;
             d.log(`/ipfs/${item.path}: download dropped (${e.message}); retry ${attempt}/${DOWNLOAD_ATTEMPTS - 1}`);
+            gateways.push(gateways.shift());
             await d.sleep(Math.min(5_000 * 2 ** (attempt - 1), 60_000));
           }
         }
