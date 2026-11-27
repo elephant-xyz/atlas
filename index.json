@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "1ab1ec3ffcb7e9898b1908a328c2c1b2d6026f80",
+  "generated_from": "2cc0aa8b18df20aa5c4b82dc3f5d949f9b5765bc",
   "counties": [
     {
       "county": "maricopa",
@@ -181,10 +181,10 @@
           "published_at": "2026-11-26T17:34:22.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerabf2p7ezblbcct7csa3h2xmtz37akzyy2ic5cmvfewqwqzdrcu4pa",
+          "cid": "baguqeerau2lg5uow4yf6xmr2pqctw5abcifkriuaffrxizu7vktb2opow2qq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeera5xurhuoynrxx5cgkbsusjxgm2kn2fs7dzo7mlpxc42ezap7xv4yq",
-          "published_at": "2026-11-26T15:42:51.000Z"
+          "tables": "baguqeeraocwix4ukvvdvtt52qo3x3u3sfini7tmpqcyiywp76dl3b334lpga",
+          "published_at": "2026-11-27T19:07:48.000Z"
         }
       }
     },
@@ -258,10 +258,10 @@
           "published_at": "2026-11-26T18:43:41.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeera2b5mqgiiwd2eetl7wz5uxfh7kvlmyu4nqxizzwm743edym6hdlxq",
+          "cid": "baguqeera33jmpgsfzc4jx7vfbq7yb53f7v5fgpjrekrqyuslz47gbxuyfvfa",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeraryfvk54x63we7qhwik4wrc4ycsetawhcswfxymqdzjrkqymkmhoa",
-          "published_at": "2026-11-26T18:43:41.000Z"
+          "tables": "baguqeeragw6my63tcrif5ra6wa5gj7p3i3o76oxrsoz7rijjq6o3rnhqylyq",
+          "published_at": "2026-11-27T15:16:18.000Z"
         }
       }
     },
@@ -783,10 +783,10 @@
           "published_at": "2026-11-26T20:26:11.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerafqrzr6za56f6r7yk4jjy3by4fdrskqbfzewvqmqqau45vbb4yldq",
+          "cid": "baguqeeraulsxdilyorkgiugol6xcngluwcr7aot7f6b4hf2qht3pp35dlhca",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeragzzkejouh5qrn5mdyi3dksb36aogjx27ah6masah32zppbi4zvba",
-          "published_at": "2026-11-27T10:32:34.000Z"
+          "tables": "baguqeera4pzw6aiivqtuwdazugww2jgrow4wpq4v7ydzsgyfjoz35budgdqq",
+          "published_at": "2026-11-27T17:58:15.000Z"
         }
       }
     },
@@ -841,16 +841,16 @@
       "fips": "48029",
       "groups": {
         "county": {
-          "cid": "baguqeeraqkoxejunzj6ueh6cyuosqa5t6zkc2fi4vly5py7a526tbeas75za",
+          "cid": "baguqeeraruy5tpfyj4ne657w235ouwmzctdon2cw3mrxxz44zz3bdivd3efq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeraziocumubapkxljdmxjopp72clnf52cf47agw56kcdsq3hhaqyh4q",
-          "published_at": "2026-11-27T06:10:13.000Z"
+          "tables": "baguqeerappfksz5tjhlfbky3fns5qbikmzqyk4ss2w7huww2t7ohivwcefka",
+          "published_at": "2026-11-27T11:42:21.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerajo2bub2yrvzrbaqkdyfa2p5lrs4uka57n2cxzhfucbfhufhh4bgq",
+          "cid": "baguqeerashesyp3qqcykj6wko4yyltwdpgiaargy2jqipxermnohomv5d4nq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeerafliow2crt2bzjbytxvumfvdxql4brxuynlcskmifg7qr57elzm7q",
-          "published_at": "2026-11-27T12:47:15.000Z"
+          "tables": "baguqeera4cwl4yowqv3bg3bfer6mwsnqdjt7vkpereyab4tt5b5lazau35sq",
+          "published_at": "2026-11-27T14:51:52.000Z"
         }
       }
     },
@@ -889,6 +889,25 @@
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
           "tables": "baguqeera4f7wgqzzmkekxpdvyoj6owqiyw7db4zsbn3qo7mp7wp2l5eza7za",
           "published_at": "2026-11-27T12:46:52.000Z"
+        }
+      }
+    },
+    {
+      "county": "denton",
+      "state": "TX",
+      "fips": "48121",
+      "groups": {
+        "county": {
+          "cid": "baguqeera3ic3u6fbh43lcz7apf2wartwizij7rasxenbedjq2fvazcss5hsq",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeraq6oimykgto72s7eo7tvyxzs2hsldwzxpelc6ykystwngixgxtovq",
+          "published_at": "2026-11-27T18:11:27.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeeraxkggnbwqro4ac6czfqzmgfiquq47utnk6pply4ixgowkwcvnpzsa",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeraimzlermeyvypfpa7wzashvyhoaqzchlrlvtzt4jm5coa2af3edxq",
+          "published_at": "2026-11-27T18:11:27.000Z"
         }
       }
     },
