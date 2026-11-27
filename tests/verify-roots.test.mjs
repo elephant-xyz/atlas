@@ -229,3 +229,76 @@ test('a car file rooted elsewhere is rejected like a bad gateway export', async 
   await assert.rejects(verifyGroup({ ...w.group, car: CAR }, { ...w.deps, deadlineMs: 1 }));
   assert.ok(w.log.some((l) => l.startsWith(`${G}/ipfs/${CAR}: CAR roots are [${other.cid}]`)), w.log.join('\n'));
 });
+
+/** A body that sends the first `n` bytes of `bytes`, then fails like undici when a gateway drops the connection. */
+const cutBody = (bytes, n) => {
+  let sent = false;
+  return new ReadableStream({
+    async pull(c) {
+      // Later, like a real cut: the bytes sent so far reach the file first.
+      if (sent) return new Promise((r) => setTimeout(r, 50)).then(() => c.error(new TypeError('terminated')));
+      sent = true;
+      c.enqueue(new Uint8Array(bytes.subarray(0, n)));
+    },
+  });
+};
+
+/** A sharded world with a `car` file whose first download is cut halfway; `rest(init, file, n)` answers the retry. */
+async function droppedCarWorld(rest) {
+  const w = await shardedWorld();
+  const file = await car(w.index.cid, [w.index, ...w.shards, ...w.props]);
+  const CAR = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+  const n = Math.floor(file.length / 2);
+  w.carRequests = [];
+  const fetch = async (url, init = {}) => {
+    if (!url.endsWith(`/ipfs/${CAR}`)) return w.fetch(url, init);
+    w.carRequests.push({ url, range: init.headers?.range });
+    return w.carRequests.length === 1 ? new Response(cutBody(file, n)) : rest(init, file, n);
+  };
+  return { w, file, n, CAR, fetch };
+}
+
+test('a car download dropped partway resumes with a Range request from the next gateway and appends the 206', async () => {
+  const { w, file, n, CAR, fetch } = await droppedCarWorld((init, file) => {
+    const from = Number(/^bytes=(\d+)-$/.exec(init.headers?.range ?? '')?.[1]);
+    return new Response(file.subarray(from), { status: 206, headers: { 'content-range': `bytes ${from}-${file.length - 1}/${file.length}` } });
+  });
+  const seen = [];
+  await verifyGroup({ ...w.group, car: CAR }, { ...w.deps, fetch, gateways: [G, G2], parallel: 4, validateCar: (f) => (seen.push(f), { ok: true, report: 'ok' }) });
+  assert.deepEqual(w.carRequests, [{ url: `${G}/ipfs/${CAR}`, range: undefined }, { url: `${G2}/ipfs/${CAR}`, range: `bytes=${n}-` }]);
+  assert.ok(w.log.includes(`${G}/ipfs/${CAR}: download dropped at ${n} bytes (terminated); retry 1/4, resuming from byte ${n}`), w.log.join('\n'));
+  assert.ok(w.log.some((l) => l === `downloaded ${G2}/ipfs/${CAR} (${file.length} bytes, root block verified)`), w.log.join('\n'));
+  assert.equal(seen.length, 1, 'the CLI ran once, on the finished file');
+  assert.ok(w.log.some((l) => l.startsWith(`archive ${w.index.cid}: CountyIndex, 3 shard(s)`)), w.log.join('\n'));
+});
+
+test('a car download dropped partway starts over from byte 0 when the gateway ignores Range and answers 200', async () => {
+  const { w, file, n, CAR, fetch } = await droppedCarWorld((_init, file) => new Response(file));
+  await verifyGroup({ ...w.group, car: CAR }, { ...w.deps, fetch, parallel: 4 });
+  assert.deepEqual(w.carRequests.map((r) => r.range), [undefined, `bytes=${n}-`]);
+  assert.ok(w.log.includes(`${G}/ipfs/${CAR}: range request from byte ${n} answered with HTTP 200; downloading from byte 0`), w.log.join('\n'));
+  assert.ok(w.log.some((l) => l === `downloaded ${G}/ipfs/${CAR} (${file.length} bytes, root block verified)`), 'the whole file, not the part appended twice: ' + w.log.join('\n'));
+});
+
+test('a car download that keeps dropping fails after DOWNLOAD_ATTEMPTS attempts', async () => {
+  const { w, file, CAR, fetch } = await droppedCarWorld(() => new Response(cutBody(file, 1)));
+  await assert.rejects(verifyGroup({ ...w.group, car: CAR }, { ...w.deps, fetch, parallel: 4 }), { message: 'terminated' });
+  assert.equal(w.carRequests.length, 5);
+});
+
+test('a shard export dropped partway is retried whole, without Range', async () => {
+  const w = await shardedWorld();
+  const path = `${w.shards[1].cid}?format=car`;
+  const bytes = new Uint8Array(await w.routes[path]().arrayBuffer());
+  const inits = [];
+  const fetch = async (url, init = {}) => {
+    if (!url.endsWith(path)) return w.fetch(url, init);
+    inits.push(init.headers);
+    return inits.length === 1 ? new Response(cutBody(bytes, 10)) : w.fetch(url, init);
+  };
+  await verifyGroup(w.group, { ...w.deps, fetch, parallel: 3 });
+  assert.equal(inits.length, 2);
+  assert.ok(inits.every((h) => !h.range && h.accept === 'application/vnd.ipld.car'), JSON.stringify(inits));
+  assert.ok(w.log.includes(`${G}/ipfs/${path}: download dropped at 10 bytes (terminated); retry 1/4 from byte 0`), w.log.join('\n'));
+  assert.ok(w.log.some((l) => l.includes('root block + 3 shard CARs')), w.log.join('\n'));
+});

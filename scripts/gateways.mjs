@@ -57,6 +57,12 @@ export async function fetchFromAny(path, { gateways = gatewayList(), fetch = glo
   throw new Error(failures.join('; '));
 }
 
+/** Whole-download attempts per CAR: a gateway can drop the body partway ("terminated", ECONNRESET). */
+export const DOWNLOAD_ATTEMPTS = 5;
+
+/** The pause before retry `attempt` (1-based) of a dropped download: 5 s, doubling, at most 60 s. */
+export const dropBackoffMs = (attempt) => Math.min(5_000 * 2 ** (attempt - 1), 60_000);
+
 /**
  * A gateway client with one deadline for a whole job. `get(path)` tries the gateways in order,
  * the one that answered last first; a 429 puts that gateway on cooldown (Retry-After, else
@@ -78,6 +84,11 @@ export function gatewayClient({ gateways = gatewayList(), fetch = globalThis.fet
       cooldown.set(gateway, now() + seconds * 1_000);
       if (preferred === gateway) preferred = undefined;
       log(`${url}: unusable response, backing off ${seconds}s`);
+    },
+    /** A body dropped partway: the next get() starts from the gateway after the one that served `url`. */
+    rotate(url) {
+      const i = gateways.findIndex((g) => url.startsWith(`${g}/`));
+      if (i >= 0) preferred = gateways[(i + 1) % gateways.length];
     },
     async get(path, { headers = {}, requestMs = 30_000 } = {}) {
       let wait = 2_000;

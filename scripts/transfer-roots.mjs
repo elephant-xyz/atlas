@@ -91,7 +91,7 @@ import { sha256 } from 'multiformats/hashes/sha2';
 import { createCarFile, openCar } from './car-file.mjs';
 import { pinStatus, rpc as filebaseRpc } from './filebase.mjs';
 import { S3Error, filebaseS3 } from './s3.mjs';
-import { fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
+import { DOWNLOAD_ATTEMPTS, dropBackoffMs, fetchFromAny, gatewayList, withGatewayToken } from './gateways.mjs';
 import { claimOrder, groupsOf, heldFor, holdConflicts, holdOf, indexAt, isOwed, latestPublished, pagesAt, pool, publishedGroup, rootsOf, sleep } from './lib.mjs';
 
 export class TransferFailed extends Error {
@@ -899,9 +899,6 @@ async function readWholeCar(file, cid) {
   if (!found) throw new Error(`the download lacks the block ${cid}`);
 }
 
-/** Whole-download attempts per exported part (a dropped body is retried from the start). */
-const DOWNLOAD_ATTEMPTS = 5;
-
 /** The blocks of the CAR `source` (bytes) that hash to their CIDs, up to where it stops decoding, added to `blocks` by CID string. */
 async function carPrefix(source, blocks = new Map()) {
   try {
@@ -1001,7 +998,7 @@ async function appendExports(root, items, writer, seen, d, label) {
             }
             d.log(`/ipfs/${path}: download dropped (${e.message}); retry ${attempt}/${DOWNLOAD_ATTEMPTS - 1}`);
             gateways.push(gateways.shift());
-            await d.sleep(Math.min(5_000 * 2 ** (attempt - 1), 60_000));
+            await d.sleep(dropBackoffMs(attempt));
           }
         }
         const append = appending.then(async () => {
