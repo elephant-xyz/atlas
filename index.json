@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "7699eb7b817d4f3f3cafe651350601f331018baa",
+  "generated_from": "65aa0024665b43212f945b639a24e15958e0a2e0",
   "counties": [
     {
       "county": "maricopa",
@@ -847,10 +847,10 @@
           "published_at": "2026-11-27T06:10:13.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerafqi3qbqwk46jrh3icd5b5ho66r33xycn26ld2eqisuxqw5vwpoaa",
+          "cid": "baguqeerajo2bub2yrvzrbaqkdyfa2p5lrs4uka57n2cxzhfucbfhufhh4bgq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeratcgfq6rrwhgkwq66joc274ounhchzk5jt326s3glcnflyk5ybzwq",
-          "published_at": "2026-11-27T06:13:00.000Z"
+          "tables": "baguqeerafliow2crt2bzjbytxvumfvdxql4brxuynlcskmifg7qr57elzm7q",
+          "published_at": "2026-11-27T12:47:15.000Z"
         }
       }
     },
@@ -885,10 +885,10 @@
           "published_at": "2026-11-27T06:09:54.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerayvitp6frt2kmzzgiszge5xhcrhtxuaxe2aoz7xcsjogmsdixirka",
+          "cid": "baguqeeraareamlbptwwgnkimlgzfmrsdhfgx6et22winflikyix7bx4jufva",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeralo25pyp3ns74ua3t2ajyp7yqlpmwpcfrmx3oydibfp2zcxjzehzq",
-          "published_at": "2026-11-27T06:09:54.000Z"
+          "tables": "baguqeera4f7wgqzzmkekxpdvyoj6owqiyw7db4zsbn3qo7mp7wp2l5eza7za",
+          "published_at": "2026-11-27T12:46:52.000Z"
         }
       }
     },
