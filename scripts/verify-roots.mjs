@@ -39,8 +39,8 @@ import { decode } from '@ipld/dag-json';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { openCar } from './car-file.mjs';
-import { gatewayClient, gatewayList, withGatewayToken } from './gateways.mjs';
-import { baseRef, changedGroups, pagesAt, readPages } from './lib.mjs';
+import { DOWNLOAD_ATTEMPTS, dropBackoffMs, gatewayClient, gatewayList, withGatewayToken } from './gateways.mjs';
+import { baseRef, changedGroups, pagesAt, readPages, sleep } from './lib.mjs';
 
 const CLI = process.env.ELEPHANT_CLI ?? 'elephant-cli';
 const CSV = process.env.ATLAS_VALIDATION_CSV ?? 'validation-errors.csv';
@@ -77,11 +77,41 @@ function require_(cond, what, msg) {
  * Stream a CAR to `file` from a gateway whose CAR actually carries the hashed root `cid`; loop until
  * one does or the deadline passes. By default the CAR is the gateway's export `<cid>?format=car`;
  * with `path` it is a file the gateway serves as-is (a page's `car`, a single-file copy).
+ * A body the gateway drops partway ("terminated", ECONNRESET) is retried up to DOWNLOAD_ATTEMPTS
+ * times, from the next gateway, with a backoff. A `path` download resumes with
+ * `Range: bytes=<bytes on disk>-` when the gateway answers 206 from exactly that byte, else starts
+ * over; an export (`?format=car`) is always retried whole. The checks below and the CLI read the
+ * finished file either way.
  */
 async function downloadCar(gw, cid, file, d, path) {
+  const pause = d.sleep ?? sleep;
+  let drops = 0;
+  let resumeFrom = 0; // bytes of `path` already on disk from a dropped download
   for (;;) {
-    const { res, url } = await gw.get(path ?? `${cid}?format=car`, { headers: path ? {} : { accept: 'application/vnd.ipld.car' }, requestMs: 60 * 60_000 });
-    await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+    const headers = path ? (resumeFrom ? { range: `bytes=${resumeFrom}-` } : {}) : { accept: 'application/vnd.ipld.car' };
+    const { res, url } = await gw.get(path ?? `${cid}?format=car`, { headers, requestMs: 60 * 60_000 });
+    const resumed = resumeFrom > 0 && res.status === 206 && Number(/^bytes (\d+)-/.exec(res.headers.get('content-range') ?? '')?.[1]) === resumeFrom;
+    if (resumeFrom && !resumed) {
+      d.log(`${url}: range request from byte ${resumeFrom} answered with HTTP ${res.status}${res.status === 206 ? ` (content-range ${res.headers.get('content-range')})` : ''}; downloading from byte 0`);
+      resumeFrom = 0;
+      // Another range than asked for: ask again for the whole file. A 200 is the whole file.
+      if (res.status === 206) {
+        await res.body?.cancel();
+        continue;
+      }
+    }
+    try {
+      await pipeline(Readable.fromWeb(res.body), createWriteStream(file, { flags: resumed ? 'a' : 'w' }));
+    } catch (e) {
+      if (++drops >= DOWNLOAD_ATTEMPTS) throw e;
+      const have = statSync(file, { throwIfNoEntry: false })?.size ?? 0;
+      resumeFrom = path ? have : 0;
+      d.log(`${url}: download dropped at ${have} bytes (${e.message}); retry ${drops}/${DOWNLOAD_ATTEMPTS - 1}${resumeFrom ? `, resuming from byte ${resumeFrom}` : ' from byte 0'}`);
+      gw.rotate(url);
+      await pause(dropBackoffMs(drops));
+      continue;
+    }
+    resumeFrom = 0;
     const size = statSync(file).size;
     let problem;
     if (!size) problem = 'empty body';

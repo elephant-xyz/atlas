@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { CarReader } from '@ipld/car';
 import * as dagJson from '@ipld/dag-json';
 import * as raw from 'multiformats/codecs/raw';
-import { pinStatus, poll, token } from '../scripts/filebase.mjs';
+import { pinStatus, pinnedBuckets, poll, token } from '../scripts/filebase.mjs';
 import { buildEntries, claimOrder, holdBack, holdConflicts, latestPublished, pool, publishedGroup } from '../scripts/lib.mjs';
 import { leftOutSummary, pinLookup, publishable, pushToMain, requireMainIndex } from '../scripts/publish-index.mjs';
 import { openIssues, pendingIssues, revertedIssue, withdraw } from '../scripts/withdraw.mjs';
@@ -420,6 +420,27 @@ test('pinStatus tells a listed pin from a missing one and from a call that faile
   assert.equal(calls, 2);
 });
 
+test('pinStatus counts a recursive pin in one of the other buckets (ATLAS_PINNED_BUCKETS), and names it', async () => {
+  const asked = [];
+  const call = async (path, opts) => (asked.push(opts?.bucket ?? 'own'), opts?.bucket === 'oracle' ? [{ Keys: { [CID_A]: { Type: 'recursive' } } }] : [{}]);
+  assert.deepEqual(await pinStatus(CID_A, { call, buckets: ['other', 'oracle'] }), { pinned: true, bucket: 'oracle' });
+  assert.deepEqual(asked, ['own', 'other', 'oracle'], 'the registry bucket first, then each other bucket in order');
+  const failing = async (path, opts) => (opts?.bucket ? [{}] : Promise.reject(new Error('pin/ls: HTTP 500')));
+  assert.deepEqual(await pinStatus(CID_A, { call: failing, buckets: ['oracle'] }), { pinned: false, why: 'pin/ls: HTTP 500' }, 'the why is the own bucket call\'s');
+  assert.deepEqual(pinnedBuckets({ ATLAS_PINNED_BUCKETS: ' a, ,b ' }), ['a', 'b']);
+  assert.deepEqual(pinnedBuckets({}), []);
+});
+
+test('ATLAS_PINNED_BUCKETS=* asks every bucket of the account but the registry\'s own, listing them once; a failed listing counts as none', async () => {
+  let lists = 0;
+  const failing = async () => (lists++, Promise.reject(new Error('HTTP 403')));
+  assert.deepEqual(await pinnedBuckets({ ATLAS_PINNED_BUCKETS: '*' }, failing), [], 'a failed listing: only the own bucket is asked');
+  const list = async () => (lists++, ['elephant-atlas', 'oracle-a', 'oracle-b']);
+  assert.deepEqual(await pinnedBuckets({ ATLAS_PINNED_BUCKETS: '*' }, list), ['oracle-a', 'oracle-b'], 'listed again after the failure');
+  assert.deepEqual(await pinnedBuckets({ ATLAS_PINNED_BUCKETS: '*' }, list), ['oracle-a', 'oracle-b']);
+  assert.equal(lists, 2, 'one failed listing, then one listing for the rest of the process');
+});
+
 test('every withdrawn group gets its issue: one that cannot be opened is retried, reported, and does not stop the rest', async () => {
   const issues = [heldGroup(LEE, page(), 'county'), heldGroup(FULTON, fulton(), 'county')].map((h) => revertedIssue(h, 'abc123', 'https://run'));
   const opened = [];
@@ -638,6 +659,8 @@ async function fixture(rpcReply) {
     [`${G}/ipfs/${index.cid}/shards/0?format=car`]: async () => new Response(await car(shard.cid, [index, shard, property])),
     [`${G}/ipfs/${tables.cid}?format=raw`]: () => new Response(tables.bytes),
     [`${G}/ipfs/${tables.cid}/tables/address/parts/0/cid?format=car`]: async () => new Response(await car(part.cid, [tables, part])),
+    [`${G}/ipfs/${shard.cid}?format=car`]: async () => new Response(await car(shard.cid, [shard, property])),
+    [`${G}/ipfs/${part.cid}?format=car`]: async () => new Response(await car(part.cid, [part])),
   };
   const fetched = [];
   const fetch = async (url) => {
@@ -1242,10 +1265,11 @@ test('a part download whose body the gateway drops midway is retried from the st
   const f = await s3Fixture();
   try {
     const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
-    let asked = 0;
-    const fetch = async (url, init) => (url === partUrl && ++asked === 1 ? dropping() : f.deps.fetch(url, init));
+    const byCid = `${f.G}/ipfs/${f.part.cid}?format=car`;
+    const asked = [];
+    const fetch = async (url, init) => ([partUrl, byCid].includes(url) && asked.push(url) === 1 ? dropping() : f.deps.fetch(url, init));
     await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch });
-    assert.equal(asked, 2, 'the part was requested again after the drop');
+    assert.deepEqual(asked, [partUrl, byCid], 'the part was requested again after the drop, by its own CID');
     assert.match(f.logs.join('\n'), new RegExp(`/ipfs/${f.tables.cid}/tables/address/parts/0/cid: download dropped \\(terminated\\); retry 1/4`));
     const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
     assert.deepEqual(blocks.sort(), [f.tables, f.part].map((b) => b.cid.toString()).sort(), 'the retried part is in the CAR once');
@@ -1255,17 +1279,49 @@ test('a part download whose body the gateway drops midway is retried from the st
   }
 });
 
-test('a part download the gateway drops every time fails after 5 attempts instead of hanging, and nothing is uploaded', async () => {
+test('a part whose export by path the gateway drops every time is taken from its export by CID, and the tables still pin', async () => {
   const f = await s3Fixture();
   try {
     const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
     let asked = 0;
     const fetch = async (url, init) => (url === partUrl ? (asked++, dropping()) : f.deps.fetch(url, init));
-    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch }), /terminated/);
-    assert.equal(asked, 5, 'DOWNLOAD_ATTEMPTS whole downloads');
-    assert.equal(f.logs.filter((l) => /download dropped/.test(l)).length, 4);
-    assert.equal(f.s3.requests.filter((r) => r.op !== 'HeadObject').length, 0, 'nothing uploaded');
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch });
+    assert.equal(asked, 1, 'the retry asked for the export by CID, not the same path again');
+    assert.match(f.logs.join('\n'), new RegExp(`fetched ${f.G}/ipfs/${f.part.cid}\\?format=car`));
+    const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
+    assert.deepEqual(blocks.sort(), [f.tables, f.part].map((b) => b.cid.toString()).sort());
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
     assert.deepEqual(readdirSync(f.tmp), []);
+  } finally {
+    await f.s3.close();
+  }
+});
+
+/** The gateway's real response for `url` with its first block's head overwritten, so the CAR does not decode. */
+const garbled = async (fetch, url, init) => {
+  const bytes = new Uint8Array(await (await fetch(url, init)).arrayBuffer());
+  const header = bytes[0] + 1; // these CARs' header length fits one varint byte
+  bytes[header + 1] = 0x0a; // after the block's length varint
+  return new Response(bytes);
+};
+
+test('a part one gateway serves unreadable every time is taken from the next gateway', async () => {
+  const f = await s3Fixture();
+  try {
+    const G2 = 'https://gw2.test';
+    const part = `/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
+    const asked = [];
+    const fetch = async (url, init) => {
+      if (![part, `/ipfs/${f.part.cid}?format=car`].some((p) => String(url).endsWith(p))) return f.deps.fetch(String(url).replace(G2, f.G), init);
+      asked.push(new URL(url).origin);
+      return String(url).startsWith(f.G) ? garbled(f.deps.fetch, url, init) : f.deps.fetch(String(url).replace(G2, f.G), init);
+    };
+    await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, gateways: [f.G, G2], tablesCar: 'parts', fetch });
+    assert.deepEqual(asked, [f.G, G2], 'the retry went to the second gateway, not the first again');
+    assert.equal(f.logs.filter((l) => /download dropped \(.+\); retry 1\/4/.test(l)).length, 1, 'one unreadable download, then the other gateway');
+    const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
+    assert.deepEqual(blocks.sort(), [f.tables, f.part].map((b) => b.cid.toString()).sort());
+    assert.ok(f.s3.pinned.has(f.tables.cid.toString()));
   } finally {
     await f.s3.close();
   }
@@ -1281,10 +1337,11 @@ test('a part download the gateway ends early without an error is read through, r
   const f = await s3Fixture();
   try {
     const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
-    let asked = 0;
-    const fetch = async (url, init) => (url === partUrl && ++asked === 1 ? truncated(f.deps.fetch, url, init) : f.deps.fetch(url, init));
+    const byCid = `${f.G}/ipfs/${f.part.cid}?format=car`;
+    const asked = [];
+    const fetch = async (url, init) => ([partUrl, byCid].includes(url) && asked.push(url) === 1 ? truncated(f.deps.fetch, url, init) : f.deps.fetch(url, init));
     await transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch });
-    assert.equal(asked, 2, 'the cut-off part was requested again');
+    assert.deepEqual(asked, [partUrl, byCid], 'the cut-off part was requested again, by its own CID');
     assert.match(f.logs.join('\n'), new RegExp(`/ipfs/${f.tables.cid}/tables/address/parts/0/cid: download dropped \\(Unexpected end of data\\); retry 1/4`));
     const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-tables-${f.tables.cid}.car`).body);
     assert.deepEqual(blocks.sort(), [f.tables, f.part].map((b) => b.cid.toString()).sort(), 'the retried part is in the CAR once');
@@ -1294,17 +1351,25 @@ test('a part download the gateway ends early without an error is read through, r
   }
 });
 
-test('a part download the gateway ends early every time fails after 5 attempts, and nothing is uploaded', async () => {
+test('a shard export Filebase serves cut off with its error trailer by path and by CID is completed from the exports of the subtrees it lacks', async () => {
   const f = await s3Fixture();
   try {
-    const partUrl = `${f.G}/ipfs/${f.tables.cid}/tables/address/parts/0/cid?format=car`;
-    let asked = 0;
-    const fetch = async (url, init) => (url === partUrl ? (asked++, truncated(f.deps.fetch, url, init)) : f.deps.fetch(url, init));
-    await assert.rejects(transferTablesViaS3(f.target('tables', f.tables.cid), { ...f.deps, tablesCar: 'parts', fetch }), /Unexpected end of data/);
-    assert.equal(asked, 5, 'DOWNLOAD_ATTEMPTS whole downloads');
-    assert.equal(f.logs.filter((l) => /download dropped/.test(l)).length, 4);
-    assert.equal(f.s3.requests.filter((r) => r.op !== 'HeadObject').length, 0, 'nothing uploaded');
-    assert.deepEqual(readdirSync(f.tmp), []);
+    const shardUrl = `${f.G}/ipfs/${f.index.cid}/shards/0?format=car`;
+    // What Filebase's cache returns: the export up to the shard block, then the error as text.
+    const head = await car(f.shard.cid, [f.index, f.shard]);
+    const poisoned = () => new Response(Buffer.concat([Buffer.from(head), Buffer.from('\n\n[Gateway Error: CAR stream truncated, response is incomplete]')]));
+    const asked = [];
+    const fetch = async (url, init) => {
+      if (url === shardUrl || url === `${f.G}/ipfs/${f.shard.cid}?format=car`) return poisoned();
+      if (url === `${f.G}/ipfs/${f.property.cid}?format=car`) return (asked.push(url), new Response(await car(f.property.cid, [f.property])));
+      return f.deps.fetch(url, init);
+    };
+    await transferArchiveViaS3(f.target('archive', f.index.cid), { ...f.deps, fetch });
+    assert.equal(f.logs.filter((l) => /download dropped \(Unexpected CID version \(10\)\)/.test(l)).length, 4, f.logs.join('\n'));
+    assert.equal(asked.length, 1, 'only the subtree the export lacked was exported again, by its own CID');
+    const { blocks } = await carOf(f.s3.objects.get(`elephant-atlas/import/FL-lee-county-${f.index.cid}.car`).body);
+    assert.deepEqual(blocks.sort(), [f.index, f.shard, f.property].map((b) => b.cid.toString()).sort(), 'every block once');
+    assert.ok(f.s3.pinned.has(f.index.cid.toString()));
   } finally {
     await f.s3.close();
   }

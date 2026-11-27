@@ -1,0 +1,19 @@
+{
+  "county": "cobb",
+  "state": "GA",
+  "fips": "13067",
+  "groups": {
+    "county": {
+      "cid": "baguqeeragaqgpeix2i3l4z7x3iockpich72gkgio5h6vc5pi435i5hws4ifa",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeeras5b2gm72vr3h6cet533co6atkc6lq5kexxtejin5i3dlmjs26h2q",
+      "car": "bafybeihvfluxltvpdlhmehentl6z5pie4fnbaxbeswc32r6l52xbbnnhve"
+    },
+    "property_improvement": {
+      "cid": "baguqeerayvwuzv3eqja7hfbnnexjq2nfdw2h6gju62yax6fa263vyvhqir4q",
+      "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+      "tables": "baguqeerafxqjgoszwbsrif6afjcy45m2btoq74erdcdhugl6r7h52miyjauq",
+      "car": "bafybeiblpynkhagz3fzrj4mmz3ezirhn5g2f72mm6wkwzfqz2wmwczhsgy"
+    }
+  }
+}

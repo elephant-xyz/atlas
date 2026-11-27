@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "034642f2468c17d83f69958936d4caa3c8af4e4d",
+  "generated_from": "65aa0024665b43212f945b639a24e15958e0a2e0",
   "counties": [
     {
       "county": "maricopa",
@@ -252,16 +252,16 @@
       "fips": "12057",
       "groups": {
         "county": {
-          "cid": "baguqeeraq25gshpemrj6tbhawx7rkcyyk75qgf7a2q5ngxtdw2dfm7ktehhq",
+          "cid": "baguqeeraw5hwr5enthvext34cmxwd3evgfbotlqtfy2qji76zffaz5o4xlca",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeera6fni47sonsehlfrbh7ys6ge7dnew4upinudijdwrgjg5qsvuh56a",
-          "published_at": "2026-11-26T14:26:54.000Z"
+          "tables": "baguqeeravqsuiqtdynsid6ciep2g5oecx5vnehun4rymqbvdkkkuvnomni7q",
+          "published_at": "2026-11-26T18:43:41.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeeraecppqg4cuuc6vu6cmrpevkogv7m6eqiq2qzwsnci44yo4xge5wmq",
+          "cid": "baguqeera2b5mqgiiwd2eetl7wz5uxfh7kvlmyu4nqxizzwm743edym6hdlxq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeraepjsen3o6giwmq5yn5ytdfwzl726a6g5vrgxwiwpfu3vkvnqldla",
-          "published_at": "2026-11-26T14:26:54.000Z"
+          "tables": "baguqeeraryfvk54x63we7qhwik4wrc4ycsetawhcswfxymqdzjrkqymkmhoa",
+          "published_at": "2026-11-26T18:43:41.000Z"
         }
       }
     },
@@ -638,6 +638,44 @@
       }
     },
     {
+      "county": "cobb",
+      "state": "GA",
+      "fips": "13067",
+      "groups": {
+        "county": {
+          "cid": "baguqeeragaqgpeix2i3l4z7x3iockpich72gkgio5h6vc5pi435i5hws4ifa",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeeras5b2gm72vr3h6cet533co6atkc6lq5kexxtejin5i3dlmjs26h2q",
+          "published_at": "2026-11-27T06:08:18.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeerayvwuzv3eqja7hfbnnexjq2nfdw2h6gju62yax6fa263vyvhqir4q",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeerafxqjgoszwbsrif6afjcy45m2btoq74erdcdhugl6r7h52miyjauq",
+          "published_at": "2026-11-27T07:49:32.000Z"
+        }
+      }
+    },
+    {
+      "county": "fulton",
+      "state": "GA",
+      "fips": "13121",
+      "groups": {
+        "county": {
+          "cid": "baguqeera7qlxnh6yjja5pvzxvhuxynp7pai6r3irfojnk3xedt3lwp4blb7q",
+          "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+          "tables": "baguqeerazmum44dlwj6jcwwcofs3n7ajbp6jdclamfwg4nqdundqb3q57z4a",
+          "published_at": "2026-11-26T22:22:17.000Z"
+        },
+        "property_improvement": {
+          "cid": "baguqeera6y2rsehwwkvcvz4c5emnsghjt2nsejxnovnwmlcswnja3koed2ua",
+          "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+          "tables": "baguqeeravedxsx7wc5v44g6was3f4kdvpeamklydqqw4dxtvcmbyvqkotq6q",
+          "published_at": "2026-11-26T22:22:17.000Z"
+        }
+      }
+    },
+    {
       "county": "gwinnett",
       "state": "GA",
       "fips": "13135",
@@ -720,10 +758,10 @@
       "fips": "37119",
       "groups": {
         "county": {
-          "cid": "baguqeeraqdcymvgfwy6rbiljjt4wtb6gduw7rwznj534nerqmezy3t663hmq",
+          "cid": "baguqeeraj2l4joz7sxbbh65b46r6iylrpjo2urv4g7fdpyjn5reyxyyywnga",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeratsgnauol25jsxwzwl34xz55ohrssa2y3dq4pvyvru2hisqwjo4kq",
-          "published_at": "2026-11-26T13:35:13.000Z"
+          "tables": "baguqeeraexcwfqen2yrecjxwomktduqwurzqd4fyjzxo452z2ptncje57xhq",
+          "published_at": "2026-11-27T06:05:21.000Z"
         },
         "property_improvement": {
           "cid": "baguqeeraajzyiype7g3jysxc7jesbsdg275x6vxyq4afc4os4g77neh4glta",
@@ -739,16 +777,16 @@
       "fips": "37183",
       "groups": {
         "county": {
-          "cid": "baguqeerarvhjtenamfz23wknirj6c2ngojynibomqltvjgv6jxctqzuvo3za",
+          "cid": "baguqeerapfiimwlf7vtdvdfdyo7avaojlbhpqpodbkh4sfgvetkkh6hmbaga",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeragynintxgjwhkkcqtasgmttxrxdhiuzkad777odf75tydz7tbsg2q",
-          "published_at": "2026-11-12T20:35:25.000Z"
+          "tables": "baguqeera3fgvrbpux2hckucq25jtfkcimifqdm67xnc76qx47c52uebmrdla",
+          "published_at": "2026-11-26T20:26:11.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerabnot7s7vgbczw6roegjigb72to3u6hr7r3g3b6rhrueumbtsvpqa",
+          "cid": "baguqeerafqrzr6za56f6r7yk4jjy3by4fdrskqbfzewvqmqqau45vbb4yldq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeradzazapyi5r7zihgoj462rfymcybzokwcxg454ot5kuhvmhqnrrxa",
-          "published_at": "2026-11-24T21:30:42.000Z"
+          "tables": "baguqeeragzzkejouh5qrn5mdyi3dksb36aogjx27ah6masah32zppbi4zvba",
+          "published_at": "2026-11-27T10:32:34.000Z"
         }
       }
     },
@@ -803,16 +841,16 @@
       "fips": "48029",
       "groups": {
         "county": {
-          "cid": "baguqeerapnsnr5xcjlhcjrwe7bqrt43fjav46ctium4edxn3f3leemcttc6q",
+          "cid": "baguqeeraqkoxejunzj6ueh6cyuosqa5t6zkc2fi4vly5py7a526tbeas75za",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeranbb744yoy4xaqkw2agcizfeaau2la5zhwcs5jvxazkiwheli4vdq",
-          "published_at": "2026-11-23T15:45:07.000Z"
+          "tables": "baguqeeraziocumubapkxljdmxjopp72clnf52cf47agw56kcdsq3hhaqyh4q",
+          "published_at": "2026-11-27T06:10:13.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerasrzynv4wkrpfjhxx4d3du7u3kixa2siqp2nhkt7gs6yzfj6nggja",
+          "cid": "baguqeerajo2bub2yrvzrbaqkdyfa2p5lrs4uka57n2cxzhfucbfhufhh4bgq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeera7swnzh6v6cujrdxz7ty7yye52xphbalqyevq6o7ig3tq433g3waa",
-          "published_at": "2026-11-24T21:30:42.000Z"
+          "tables": "baguqeerafliow2crt2bzjbytxvumfvdxql4brxuynlcskmifg7qr57elzm7q",
+          "published_at": "2026-11-27T12:47:15.000Z"
         }
       }
     },
@@ -841,16 +879,16 @@
       "fips": "48113",
       "groups": {
         "county": {
-          "cid": "baguqeeraaaalpszsuiyl6vanochcawdtktcbq4ixxewrum3j2loynrew5fwa",
+          "cid": "baguqeerar2iwbbn5alvrqrxe4poa37pnuxahrkrrjwxncn4lyvelfxncsaea",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerajr4gueco3atk44ovhegvn5mpvgfef63ufbc3h77cpmycrwvyhoaq",
-          "published_at": "2026-11-23T15:45:19.000Z"
+          "tables": "baguqeerauupvnxch7dwraxaxpr6wnw7fn75ayziwdgb5kk4qkouioujyijrq",
+          "published_at": "2026-11-27T06:09:54.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeera463sntto3duahgib3744itre2wraveehykfh36bdwtfqjnbduabq",
+          "cid": "baguqeeraareamlbptwwgnkimlgzfmrsdhfgx6et22winflikyix7bx4jufva",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeraozjlhicdicmhoxbvrwwy5757tq26tj4wgvei7s5p3gu3ifj2fvsq",
-          "published_at": "2026-11-24T21:30:42.000Z"
+          "tables": "baguqeera4f7wgqzzmkekxpdvyoj6owqiyw7db4zsbn3qo7mp7wp2l5eza7za",
+          "published_at": "2026-11-27T12:46:52.000Z"
         }
       }
     },
@@ -860,10 +898,10 @@
       "fips": "48201",
       "groups": {
         "county": {
-          "cid": "baguqeeraqy3ejljldzu4kb7u2kgfyvxe5lgngu6o63fkhmnslp22skxylcaa",
+          "cid": "baguqeera4ucrmm3d2bhfo4zqldtqqajkdwcoxssvxiq26ssqyo3kafnszbuq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeeragwqe4w6nyh4tcthsofbirtrs4cgljfggwgdtqch2rgoc66ot7w6a",
-          "published_at": "2026-11-23T15:45:19.000Z"
+          "tables": "baguqeeradgkzep5m6a4asn6mon7vamchqxsqccqwgyo2wow6inklmrzadnna",
+          "published_at": "2026-11-27T06:09:30.000Z"
         },
         "property_improvement": {
           "cid": "baguqeeraxwkyhjz7s6evjrq3cumtl4s4sv3q7y4ijvrkrc6jf5g6anyruz2a",

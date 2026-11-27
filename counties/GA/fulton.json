@@ -1,0 +1,17 @@
+{
+  "county": "fulton",
+  "state": "GA",
+  "fips": "13121",
+  "groups": {
+    "county": {
+      "cid": "baguqeera7qlxnh6yjja5pvzxvhuxynp7pai6r3irfojnk3xedt3lwp4blb7q",
+      "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
+      "tables": "baguqeerazmum44dlwj6jcwwcofs3n7ajbp6jdclamfwg4nqdundqb3q57z4a"
+    },
+    "property_improvement": {
+      "cid": "baguqeera6y2rsehwwkvcvz4c5emnsghjt2nsejxnovnwmlcswnja3koed2ua",
+      "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
+      "tables": "baguqeeravedxsx7wc5v44g6was3f4kdvpeamklydqqw4dxtvcmbyvqkotq6q"
+    }
+  }
+}
