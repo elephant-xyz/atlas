@@ -1429,14 +1429,14 @@ test('an upload whose completion the proxy drops (504) with the object stored is
   }
 });
 
-test('an error document in a 200 answer to CompleteMultipartUpload (Filebase ServiceUnavailable) is sent again, not final', async () => {
+test('an error document in a 200 answer to CompleteMultipartUpload (Filebase ServiceUnavailable) completes the same upload again, not final', async () => {
   let refused = 0;
   const body = '<Error><Code>ServiceUnavailable</Code><Message>Upload temporarily unavailable. Please retry.</Message></Error>';
   const f = await s3Fixture({ respond: ({ op }) => (op === 'CompleteMultipartUpload' && refused++ === 0 ? { status: 200, body } : undefined) });
   try {
     await transferArchiveViaS3(f.target('archive', f.index.cid), f.deps);
-    assert.equal(f.s3.requests.filter((r) => r.op === 'CreateMultipartUpload').length, 2, 'sent twice');
-    assert.match(f.logs.join('\n'), /failed \(S3 CompleteMultipartUpload: HTTP 200 ServiceUnavailable.*\); sending it again/);
+    assert.equal(f.s3.requests.filter((r) => r.op === 'CreateMultipartUpload').length, 1, 'the parts are sent once');
+    assert.equal(f.s3.requests.filter((r) => r.op === 'CompleteMultipartUpload').length, 2, 'the completion is sent twice');
     assert.ok(f.s3.pinned.has(f.index.cid.toString()));
   } finally {
     await f.s3.close();
@@ -1449,6 +1449,7 @@ test('an error document in a 200 answer every time ends after 3 uploads as an or
   try {
     await assert.rejects(transferArchiveViaS3(f.target('archive', f.index.cid), f.deps), (e) => !(e instanceof TransferFailed) && /S3 import of .* failed: S3 CompleteMultipartUpload: HTTP 200 ServiceUnavailable/.test(e.message));
     assert.equal(f.s3.requests.filter((r) => r.op === 'CreateMultipartUpload').length, 3, 'three uploads in all');
+    assert.equal(f.s3.requests.filter((r) => r.op === 'CompleteMultipartUpload').length, 3 * 8, 'each upload completed 8 times');
   } finally {
     await f.s3.close();
   }

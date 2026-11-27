@@ -48,6 +48,10 @@ export function signV4({ method, url, headers = {}, payloadHash = EMPTY_SHA256, 
   return { ...all, authorization: `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${names.join(';')}, Signature=${signature}` };
 }
 
+/** Error codes in a 200 CompleteMultipartUpload answer that mean "the server failed, send it again". */
+const RETRY_COMPLETE = new Set(['ServiceUnavailable', 'InternalError', 'SlowDown']);
+const COMPLETE_TRIES = 8;
+
 export class S3Error extends Error {
   constructor(op, status, body) {
     const code = /<Code>([^<]+)<\/Code>/.exec(body ?? '')?.[1];
@@ -175,10 +179,21 @@ export function s3Client({ endpoint = DEFAULT_ENDPOINT, region = 'us-east-1', ac
           throw e;
         }
         const xml = `<CompleteMultipartUpload>${etags.map((etag, i) => `<Part><PartNumber>${i + 1}</PartNumber><ETag>${etag}</ETag></Part>`).join('')}</CompleteMultipartUpload>`;
-        const res = await send('CompleteMultipartUpload', 'POST', objectUrl(bucket, key, `uploadId=${encode(uploadId)}`), { headers: { 'content-type': 'application/xml' }, body: Buffer.from(xml), timeoutMs: completeTimeoutMs, signal }).catch((e) => Promise.reject(ending(e)));
-        // S3 may answer 200 with an error document once it has started streaming the response.
-        if (/<Error>/.test(res.text)) throw ending(new S3Error('CompleteMultipartUpload', 200, res.text));
-        return { parts: count, size };
+        // S3 may answer 200 with an error document once it has started streaming the response. A
+        // server-side one (Filebase's "ServiceUnavailable: Upload temporarily unavailable. Please
+        // retry.") is sent again with the same UploadId and parts, as S3 documents: up to
+        // COMPLETE_TRIES times (about 6.5 min of backoff) within completeTimeoutMs. Re-sending every
+        // part instead costs hours on a large CAR.
+        const until = Date.now() + completeTimeoutMs;
+        for (let attempt = 1; ; attempt++) {
+          const res = await send('CompleteMultipartUpload', 'POST', objectUrl(bucket, key, `uploadId=${encode(uploadId)}`), { headers: { 'content-type': 'application/xml' }, body: Buffer.from(xml), timeoutMs: Math.max(1, until - Date.now()), signal }).catch((e) => Promise.reject(ending(e)));
+          if (!/<Error>/.test(res.text)) return { parts: count, size };
+          const e = ending(new S3Error('CompleteMultipartUpload', 200, res.text));
+          const wait = Math.min(120_000, 5_000 * 2 ** (attempt - 1));
+          if (!RETRY_COMPLETE.has(e.code) || attempt >= COMPLETE_TRIES || Date.now() + wait >= until || signal?.aborted) throw e;
+          log(`CompleteMultipartUpload of ${key} attempt ${attempt}: ${e.message}; sending it again with the same upload in ${wait / 1000} s`);
+          await sleep(wait);
+        }
       } finally {
         await handle.close();
       }

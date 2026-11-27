@@ -92,6 +92,32 @@ test('the request that ends an upload is marked, so a caller can tell a dropped 
   }
 });
 
+test('a 200 ServiceUnavailable at CompleteMultipartUpload is sent again with the same upload, not by re-sending the parts; other codes are final', async () => {
+  let busy = 2;
+  const unavailable = '<?xml version="1.0"?><Error><Code>ServiceUnavailable</Code><Message>Upload temporarily unavailable. Please retry.</Message></Error>';
+  const s3 = await fakeS3({ respond: ({ op }) => (op === 'CompleteMultipartUpload' && busy-- > 0 ? { status: 200, body: unavailable } : undefined) });
+  try {
+    const logs = [];
+    const client = s3Client({ endpoint: s3.url, accessKey: 'AK', secretKey: 'SK', sleep: fast, log: (m) => logs.push(m) });
+    const file = await tempFile(Buffer.alloc(250, 4));
+    assert.deepEqual(await client.uploadFile('b', 'k', file, { partBytes: 100, parallel: 1 }), { parts: 3, size: 250 });
+    assert.deepEqual(s3.requests.map((r) => r.op), ['CreateMultipartUpload', 'UploadPart', 'UploadPart', 'UploadPart', 'CompleteMultipartUpload', 'CompleteMultipartUpload', 'CompleteMultipartUpload']);
+    assert.equal(new Set(s3.requests.filter((r) => r.op === 'CompleteMultipartUpload').map((r) => r.query)).size, 1, 'one UploadId throughout');
+    assert.deepEqual(s3.objects.get('b/k').body, readFileSync(file));
+    assert.equal(logs.filter((m) => /CompleteMultipartUpload of k attempt/.test(m)).length, 2);
+  } finally {
+    await s3.close();
+  }
+  const s3b = await fakeS3({ respond: ({ op }) => (op === 'CompleteMultipartUpload' ? { status: 200, body: '<Error><Code>InvalidPart</Code></Error>' } : undefined) });
+  try {
+    const client = s3Client({ endpoint: s3b.url, accessKey: 'AK', secretKey: 'SK', sleep: fast });
+    await assert.rejects(client.uploadFile('b', 'k', await tempFile(Buffer.alloc(250, 5)), { partBytes: 100 }), (e) => e.phase === 'complete' && e.status === 200 && e.code === 'InvalidPart');
+    assert.equal(s3b.requests.filter((r) => r.op === 'CompleteMultipartUpload').length, 1);
+  } finally {
+    await s3b.close();
+  }
+});
+
 test('filebaseS3 takes the workflow\'s Filebase keys and s3.filebase.com unless told otherwise', () => {
   assert.throws(() => filebaseS3({}), /access key and secret are required/);
   assert.ok(filebaseS3({ FILEBASE_ACCESS_KEY: 'a', FILEBASE_SECRET_KEY: 'b' }).uploadFile);
