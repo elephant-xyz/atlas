@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "2cc0aa8b18df20aa5c4b82dc3f5d949f9b5765bc",
+  "generated_from": "93929994eee64ca123d01ad170df8560853e08fb",
   "counties": [
     {
       "county": "maricopa",
@@ -8,10 +8,10 @@
       "fips": "04013",
       "groups": {
         "county": {
-          "cid": "baguqeera35bnyblmb2bp4wmza4xi2nwpfygtpfejlylmflldteks5iuuqmqq",
+          "cid": "baguqeerarhxkffc2hzsz5dr6v7ucmnukmlxsue2mq656xca3e3b5fcy4f7rq",
           "schema": "bafkreia6tjziby3upxmidymud5iusd32urrztslgrudkwysc7ydmxoekuq",
-          "tables": "baguqeerarry37bj253ycerqi2dlx7sfyavj3s6avu77btd55sj7ztd2r4x6a",
-          "published_at": "2026-11-25T21:50:06.000Z"
+          "tables": "baguqeera7qpsxuotooz22p3ydxmmzv6pyzdhyoajgfjaxbbnqwg4xcnetina",
+          "published_at": "2026-11-27T23:32:41.000Z"
         },
         "property_improvement": {
           "cid": "baguqeeravbfjdjm4mxipl47od5dt6y2e45talldkplrfi7tjsu7pmubbhmaa",
