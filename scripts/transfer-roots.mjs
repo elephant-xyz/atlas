@@ -725,9 +725,10 @@ export async function runTransfers(pages, index, options, { transfer, down, log 
   return held;
 }
 
-/** Copy one target, unless an earlier run already pinned it (a re-run after a later root failed). */
+/** Copy one target, unless it is already pinned: by an earlier run (a re-run after a later root failed), or in one of ATLAS_PINNED_BUCKETS. */
 async function transferOne(t, via = process.env.ATLAS_PIN_VIA || 's3') {
-  if ((await pinStatus(t.cid)).pinned) return console.log(`already pinned ${t.cid}; skipped`);
+  const pin = await pinStatus(t.cid);
+  if (pin.pinned) return console.log(`already pinned ${t.cid}${pin.bucket ? ` in ${pin.bucket}` : ''}; skipped`);
   if (via === 'rpc') {
     if (t.kind === 'tables') await transferTables(t.cid);
     else if (t.car) await transferArchiveFromCar(t.cid, t.car);
@@ -898,10 +899,69 @@ async function readWholeCar(file, cid) {
   if (!found) throw new Error(`the download lacks the block ${cid}`);
 }
 
+/** The blocks of the CAR `source` (bytes) that hash to their CIDs, up to where it stops decoding, added to `blocks` by CID string. */
+async function carPrefix(source, blocks = new Map()) {
+  try {
+    for await (const { cid, bytes } of await CarBlockIterator.fromIterable(source)) if (await blockHashes(cid, bytes)) blocks.set(cid.toString(), { cid, bytes });
+  } catch {
+    // What is missing is fetched by fillSubtree.
+  }
+  return blocks;
+}
+
+/**
+ * The subtree under `top` as [{ cid, bytes }]: the blocks `blocks` holds, and for every other block
+ * it reaches the export of that block's own subtree (?format=car, as much of it as decodes), or the
+ * block alone (?format=raw) when that export lacks it, `d.parallel` at a time; every block hashed.
+ * A block another export already wrote (`seen`) is not walked again. Filebase's gateway caches a CAR
+ * export that failed midway, with "[Gateway Error: CAR stream truncated, response is incomplete]"
+ * as the last bytes of a 200 (cache-control immutable), and serves it on every request after that
+ * (GA/fulton, NC/wake, 2026-11-27); the exports of the subtrees under it are separate cache entries.
+ * Subtree exports, not single blocks: Filebase answers HTTP 429 at a few requests a second.
+ */
+async function fillSubtree(root, top, blocks, seen, d) {
+  const out = [];
+  const visited = new Set([top]);
+  let frontier = [CID.parse(top)];
+  let fetched = 0;
+  while (frontier.length) {
+    const need = frontier.filter((c) => !blocks.has(c.toString()));
+    await pool(
+      need.map((cid) => async (signal) => {
+        const k = cid.toString();
+        if (blocks.has(k)) return; // an export of a sibling's subtree carried it
+        const res = await gatewayGet(root, `${k}?format=car`, 'application/vnd.ipld.car', { ...d, signal });
+        const before = blocks.size;
+        await carPrefix(Readable.fromWeb(res.body), blocks);
+        fetched += blocks.size - before;
+        if (!blocks.has(k)) (blocks.set(k, { cid, bytes: await rawBlock(root, k, { ...d, signal }) }), fetched++);
+      }),
+      d.parallel,
+    );
+    const next = [];
+    for (const cid of frontier) {
+      const b = blocks.get(cid.toString());
+      out.push(b);
+      if (cid.code === RAW) continue;
+      if (cid.code !== DAG_JSON) throw new Error(`block ${cid} has codec 0x${cid.code.toString(16)}, which the block-by-block fetch does not walk`);
+      for (const l of linksOf(decodeBlock(root, `block ${cid}`, b.bytes))) {
+        const s = l.toString();
+        if (visited.has(s) || seen.has(cidKey(l))) continue;
+        visited.add(s);
+        next.push(l);
+      }
+    }
+    frontier = next;
+  }
+  d.log(`/ipfs/${top}: ${out.length} block(s), ${fetched} of them from the exports of the subtrees it lacked`);
+  return out;
+}
+
 /**
  * Export each `item` ({ path, cid }) as CAR from the gateways, `d.parallel` at a time, each to a
  * temp file first (a slow gateway must not hold the others' writes), then append it to `writer`;
- * an export that lacks its own root block is TransferFailed.
+ * an export that lacks its own root block is TransferFailed. An export no attempt read whole is
+ * completed from the exports of the subtrees it lacks (see fillSubtree).
  */
 async function appendExports(root, items, writer, seen, d, label) {
   d.tmp ??= await mkdtemp(join(tmpdir(), 'atlas-transfer-'));
@@ -914,10 +974,15 @@ async function appendExports(root, items, writer, seen, d, label) {
         // A gateway can drop the connection partway through the body ("terminated", ECONNRESET);
         // gatewayGet only retries getting a response, so the whole download is retried here.
         // One gateway can also send the same unreadable body for a path every time while another
-        // serves it whole, so each retry starts from the next gateway in the list.
+        // serves it whole, so each retry starts from the next gateway in the list. Filebase caches an
+        // export that failed midway as immutable and serves it on every request for that URL (see
+        // fillSubtree), so the retries alternate with the export of the same DAG by its own CID, a
+        // URL of its own in that cache.
         const gateways = [...d.gateways];
+        let filled;
         for (let attempt = 1; ; attempt++) {
-          const res = await gatewayGet(root, `${item.path}?format=car`, 'application/vnd.ipld.car', { ...d, gateways, signal });
+          const path = attempt % 2 ? item.path : item.cid;
+          const res = await gatewayGet(root, `${path}?format=car`, 'application/vnd.ipld.car', { ...d, gateways, signal });
           try {
             await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
             // A gateway can also end the body early without an error; the CAR then stops mid-block.
@@ -926,13 +991,21 @@ async function appendExports(root, items, writer, seen, d, label) {
             break;
           } catch (e) {
             signal?.throwIfAborted();
-            if (attempt >= DOWNLOAD_ATTEMPTS) throw e;
-            d.log(`/ipfs/${item.path}: download dropped (${e.message}); retry ${attempt}/${DOWNLOAD_ATTEMPTS - 1}`);
+            if (attempt >= DOWNLOAD_ATTEMPTS) {
+              d.log(`/ipfs/${path}: no download read whole (${e.message}); fetching the subtrees it lacks`);
+              filled = await fillSubtree(root, item.cid, await carPrefix(createReadStream(file)), seen, { ...d, signal });
+              break;
+            }
+            d.log(`/ipfs/${path}: download dropped (${e.message}); retry ${attempt}/${DOWNLOAD_ATTEMPTS - 1}`);
             gateways.push(gateways.shift());
             await d.sleep(dropBackoffMs(attempt));
           }
         }
         const append = appending.then(async () => {
+          if (filled) {
+            for (const { cid, bytes } of filled) if (!seen.has(cidKey(cid))) (seen.add(cidKey(cid)), writer.put(cid, bytes));
+            return;
+          }
           const found = await appendCar(root, `/ipfs/${item.path}`, createReadStream(file), writer, seen, [item.cid]);
           if (!found.has(item.cid)) throw new TransferFailed(root, `/ipfs/${item.path}?format=car lacks the block ${item.cid}`);
         });

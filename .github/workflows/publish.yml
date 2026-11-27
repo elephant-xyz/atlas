@@ -35,6 +35,10 @@ env:
   FILEBASE_ACCESS_KEY: ${{ secrets.ELEPHANT_FILEBASE_ACCESS_KEY }}
   FILEBASE_SECRET_KEY: ${{ secrets.ELEPHANT_FILEBASE_SECRET_KEY }}
   FILEBASE_BUCKET: elephant-atlas
+  # Other buckets of the same account, comma-separated, or `*` for all of them, whose recursive pins
+  # count as published: a root pinned there (e.g. where Oracle uploaded it) is not copied into
+  # elephant-atlas, and the index lists it. Empty: every root is copied.
+  ATLAS_PINNED_BUCKETS: ${{ vars.ATLAS_PINNED_BUCKETS }}
   # Filebase's S3 endpoint, for the import=car uploads (same keys as the RPC; SigV4).
   FILEBASE_S3_ENDPOINT: ${{ vars.FILEBASE_S3_ENDPOINT || 'https://s3.filebase.com' }}
   # Optional private gateway(s), comma-separated, tried before the public ones; masked in logs.
