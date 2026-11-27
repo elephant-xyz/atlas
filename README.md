@@ -73,6 +73,13 @@ root the registry cannot serve:
    which on 2026-11-13 left roots with no pin at all. Pinning by CID (`pin/add`) is not used: Filebase does
    not serve a bucket's inner blocks to nodes outside the owning account, its own pinning
    cluster included, so a `pin/add` of another account's root sits in `pinning` forever.
+   A root already pinned recursively in one of the buckets named in the repository variable
+   `ATLAS_PINNED_BUCKETS` (comma-separated, or `*` for every bucket of the account, listed once
+   per run; same Filebase account and keys, e.g. the bucket Oracle uploads to) is not copied: it counts as published where it is, for the transfer, the
+   index and the outage check alike. An export a gateway serves cut off is retried by the
+   subtree's own CID (Filebase caches a cut-off export, `[Gateway Error: CAR stream truncated…]`
+   as its last bytes, for every later request of that URL), and as a last resort completed from
+   the exports of the subtrees it lacks.
 2. A group whose root no gateway can serve through the retry policy, or whose root another
    group already holds, is taken off `main` by the actions bot (put back to what was last
    published, not a `git revert`) and an issue titled `Publication reverted: <county> <root>`

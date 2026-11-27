@@ -103,6 +103,12 @@ export function s3Client({ endpoint = DEFAULT_ENDPOINT, region = 'us-east-1', ac
   const metaHeaders = (metadata = {}) => Object.fromEntries(Object.entries(metadata).map(([k, v]) => [`x-amz-meta-${k.toLowerCase()}`, String(v)]));
 
   return {
+    /** The names of every bucket the key pair's account has (ListBuckets). */
+    async listBuckets({ timeoutMs = 60_000, signal } = {}) {
+      const { text } = await retried('ListBuckets', () => send('ListBuckets', 'GET', `${base}/`, { timeoutMs, signal }));
+      return [...text.matchAll(/<Name>([^<]+)<\/Name>/g)].map((m) => m[1]);
+    },
+
     /** { size, metadata } of an object (metadata keys lower-cased), or undefined when there is none. */
     async headObject(bucket, key, { timeoutMs = 60_000, signal } = {}) {
       try {
