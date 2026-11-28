@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "afe3a06d4ad4208fdcf755d6b75d49ca369315f9",
+  "generated_from": "34f2fe6099d7e2b2085d5a3fe450c2483635b3f4",
   "counties": [
     {
       "county": "maricopa",
@@ -649,10 +649,10 @@
           "published_at": "2026-11-27T06:08:18.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerayvwuzv3eqja7hfbnnexjq2nfdw2h6gju62yax6fa263vyvhqir4q",
+          "cid": "baguqeeranjeqy7ukeatslmr3gg2inq4crb4ouu3pplzu2xr42dziahwokwnq",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeerafxqjgoszwbsrif6afjcy45m2btoq74erdcdhugl6r7h52miyjauq",
-          "published_at": "2026-11-27T07:49:32.000Z"
+          "tables": "baguqeerapflin2ol56a4hr5bgxt2ye2tpdnpe663d26r3xxzyddi2hzkwmzq",
+          "published_at": "2026-11-28T16:51:00.000Z"
         }
       }
     },
@@ -668,10 +668,10 @@
           "published_at": "2026-11-26T22:22:17.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeera6y2rsehwwkvcvz4c5emnsghjt2nsejxnovnwmlcswnja3koed2ua",
+          "cid": "baguqeerajfign2ievx6ajh2oruq45yttpht3clapps4zj2gsfpvvcppxl53a",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeeravedxsx7wc5v44g6was3f4kdvpeamklydqqw4dxtvcmbyvqkotq6q",
-          "published_at": "2026-11-26T22:22:17.000Z"
+          "tables": "baguqeerak7h3knutxan7vfeqt5do4yvpjkvyzc7cxlvkznt5keiors4ftjmq",
+          "published_at": "2026-11-28T16:34:32.000Z"
         }
       }
     },
@@ -942,10 +942,10 @@
           "published_at": "2026-11-23T15:45:07.000Z"
         },
         "property_improvement": {
-          "cid": "baguqeerahcobnmca44etjkstsisykasevkbn2uvdsmito6aow4qysxjipsua",
+          "cid": "baguqeerauyztzy3dbtg4k7sod62q4rfiege3dct7fwvwk7kvt5z4askk6j7a",
           "schema": "bafkreicyzywzwhmguojpi2otgrwsyi37le3u4lnavljbxu76cnrudxaxfu",
-          "tables": "baguqeera5zgstnxyvwiwxxn7sr3hnpnejqeczg7qpt7arfxk3x5thlbvgfwq",
-          "published_at": "2026-11-24T21:30:59.000Z"
+          "tables": "baguqeerauoppjlivpmjmk7wwecpodohfxmns6gx5mkipbt35x6yybuy4dgzq",
+          "published_at": "2026-11-28T16:42:45.000Z"
         }
       }
     },
