@@ -286,7 +286,9 @@ jobs:
   # set. It runs only after the IPNS name serves the new index, in its own job so the OIDC token
   # (id-token: write) and the role it assumes never reach the transfer or the deploy key. It
   # uploads main's index.json only when its UnixFS CID is the one publish-index published, so
-  # the object is those exact bytes. A failure here leaves the IPFS publication as it is (the
+  # the object is those exact bytes. With ATLAS_PERSIST_PARTS_PREFIX set it first puts the index's
+  # Parquet parts into Persist's part cache (upload-parts-s3.mjs), and uploads index.json only
+  # once every part is there. A failure here leaves the IPFS publication as it is (the
   # run shows red); re-run the failed job, or the whole workflow, and it puts the same bytes.
   index-s3:
     needs: publish
@@ -316,6 +318,28 @@ jobs:
           cache: npm
       - run: npm ci
       - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ATLAS_INDEX_S3_ROLE_ARN }}
+          aws-region: ${{ vars.ATLAS_INDEX_S3_REGION || 'us-east-1' }}
+          role-session-name: atlas-index-s3-${{ github.run_id }}
+      # Put every Parquet part the index lists into Persist's part cache (the same bucket, under
+      # ATLAS_PERSIST_PARTS_PREFIX), fetched from the private gateway only and uploaded only when
+      # its UnixFS CID and size are the ones its table list declares, so Persist's sync finds them
+      # there instead of downloading them through public gateways. Off unless the variable is set.
+      # Parts already there at their size are skipped; a part that cannot be put in place fails
+      # the step, and index.json is then not uploaded (re-run the job: it sends only what is left).
+      - name: Copy the index's Parquet parts into Persist's part cache
+        if: ${{ vars.ATLAS_PERSIST_PARTS_PREFIX != '' }}
+        timeout-minutes: 240
+        env:
+          ATLAS_GATEWAYS: ${{ secrets.ATLAS_GATEWAYS }}
+          ATLAS_GATEWAY_TOKEN: ${{ secrets.ATLAS_GATEWAY_TOKEN }}
+          ATLAS_PARTS_S3_PREFIX: ${{ vars.ATLAS_PERSIST_PARTS_PREFIX }}
+          ATLAS_PARTS_PARALLEL: ${{ vars.ATLAS_PERSIST_PARTS_PARALLEL || '4' }}
+        run: node scripts/upload-parts-s3.mjs index.json
+      # The role's sessions last an hour; a long parts step may outlive the first one.
+      - if: ${{ vars.ATLAS_PERSIST_PARTS_PREFIX != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.ATLAS_INDEX_S3_ROLE_ARN }}
           aws-region: ${{ vars.ATLAS_INDEX_S3_REGION || 'us-east-1' }}

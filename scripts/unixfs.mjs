@@ -30,17 +30,50 @@ function parent(children) {
   return { cid: sha256Cid(DAG_PB, block), fileBytes, dagBytes: block.length + children.reduce((t, c) => t + c.dagBytes, 0) };
 }
 
+/**
+ * The same CID computed over a stream: `update(bytes)` as the pieces arrive (any sizes), then
+ * `digest()` once. Only the current chunk and one CID per chunk are held, so a 1 GiB Parquet part
+ * is hashed in a few hundred KiB.
+ */
+export function unixfsHasher() {
+  const pending = Buffer.alloc(CHUNK_BYTES);
+  let fill = 0;
+  let size = 0;
+  const leaves = [];
+  const leaf = (chunk) => leaves.push({ cid: sha256Cid(raw.code, chunk), fileBytes: chunk.length, dagBytes: chunk.length });
+  return {
+    get size() {
+      return size;
+    },
+    update(bytes) {
+      size += bytes.length;
+      for (let at = 0; at < bytes.length; ) {
+        const take = Math.min(CHUNK_BYTES - fill, bytes.length - at);
+        pending.set(bytes.subarray(at, at + take), fill);
+        fill += take;
+        at += take;
+        if (fill === CHUNK_BYTES) {
+          leaf(pending);
+          fill = 0;
+        }
+      }
+      return this;
+    },
+    digest() {
+      // An empty file is one empty raw block; a file of whole chunks has no empty trailing chunk.
+      if (fill > 0 || leaves.length === 0) leaf(pending.subarray(0, fill));
+      let nodes = leaves;
+      while (nodes.length > 1) {
+        const next = [];
+        for (let i = 0; i < nodes.length; i += LINKS_PER_NODE) next.push(parent(nodes.slice(i, i + LINKS_PER_NODE)));
+        nodes = next;
+      }
+      return nodes[0].cid.toString();
+    },
+  };
+}
+
 /** Kubo's `add --cid-version=1 --raw-leaves` CID of `bytes`, as base32 text. */
 export function unixfsCid(bytes) {
-  let nodes = [];
-  for (let at = 0; at < bytes.length || at === 0; at += CHUNK_BYTES) {
-    const chunk = bytes.subarray(at, at + CHUNK_BYTES);
-    nodes.push({ cid: sha256Cid(raw.code, chunk), fileBytes: chunk.length, dagBytes: chunk.length });
-  }
-  while (nodes.length > 1) {
-    const next = [];
-    for (let i = 0; i < nodes.length; i += LINKS_PER_NODE) next.push(parent(nodes.slice(i, i + LINKS_PER_NODE)));
-    nodes = next;
-  }
-  return nodes[0].cid.toString();
+  return unixfsHasher().update(bytes).digest();
 }
