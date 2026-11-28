@@ -133,6 +133,20 @@ The role trusts `token.actions.githubusercontent.com` with `aud` `sts.amazonaws.
 SSE-KMS). Only the `index-s3` job gets `id-token: write`. Point the Persist registration's
 `index_uri` at the same `s3://<bucket>/<key>`.
 
+#### Parts into Persist's cache (optional)
+
+With the `ATLAS_PERSIST_PARTS_PREFIX` repository variable set (to Persist's `partsPrefixOf`, e.g.
+`persist-registered-ipfs-indexes/elephant_atlas/parts/`), the job first runs
+`scripts/upload-parts-s3.mjs`: it reads every table list the index names from the private
+gateway (`ATLAS_GATEWAYS`, never the public ones), lists the prefix once, and for each part not
+already at `<prefix><cid>.parquet` with its declared byte count (Persist's rule for a cached
+part) streams it from the private gateway, computes its UnixFS CID, and uploads it only when
+the CID and size match. `ATLAS_PERSIST_PARTS_PARALLEL` parts at a time (default 4). Any part
+that cannot be put in place fails the step, and `index.json` is then not uploaded; re-running
+the job sends only what is still missing. Persist's sync then finds every part in its own
+bucket instead of downloading it through public gateways. The role then also needs
+`s3:ListBucket` on the bucket for that prefix and `s3:PutObject` on `<prefix>*`.
+
 Withdrawn roots are not unpinned yet. `docs/ipns-names-removed-2026-09-21.json` records the IPNS
 names removed from the account on 2026-09-21 to free quota for `elephant-atlas`.
 
@@ -155,6 +169,7 @@ atlas/
 │   ├── car-file.mjs                index a CAR file on disk; write one block by block
 │   ├── publish-index.mjs           commit index.json, add it, point the IPNS name at it
 │   ├── upload-index-s3.mjs         optional: copy the published index.json to S3, held to its CID
+│   ├── upload-parts-s3.mjs         optional: put the index's Parquet parts into Persist's part cache, each held to its CID
 │   ├── unixfs.mjs                  the CID Kubo gives a file (add --cid-version=1 --raw-leaves)
 │   ├── withdraw.mjs                take a group that could not be published off main, open an issue
 │   └── filebase.mjs                token, Kubo RPC, poll loop
